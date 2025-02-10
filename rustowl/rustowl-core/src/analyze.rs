@@ -107,9 +107,7 @@ where
                 .borrow_set
                 .local_map
                 .iter()
-                .map(|(local, borrow_idc)| {
-                    (*local, borrow_idc.iter().map(|v| v.clone()).collect())
-                }),
+                .map(|(local, borrow_idc)| (*local, borrow_idc.iter().copied().collect())),
         );
         let mut borrow_locals = HashMap::new();
         for (local, borrow_idc) in local_borrows.iter() {
@@ -163,14 +161,13 @@ where
         })
     }
 
-    fn sort_locs(v: &mut Vec<(BasicBlock, usize)>) {
+    fn sort_locs(v: &mut [(BasicBlock, usize)]) {
         v.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
     }
     fn stmt_location_to_range(&self, bb: BasicBlock, stmt_index: usize) -> Option<Range> {
         self.bb_map
             .get(&bb)
-            .map(|bb| bb.statements.get(stmt_index))
-            .flatten()
+            .and_then(|bb| bb.statements.get(stmt_index))
             .map(|stmt| range_from_span(&self.source, stmt.source_info.span, self.offset))
     }
     fn rich_locations_to_ranges(&self, locations: &[RichLocation]) -> Vec<Range> {
@@ -266,7 +263,7 @@ where
                         local_index,
                         fn_id: self.fn_id.local_def_index.as_u32(),
                         name,
-                        span: Range::from(span),
+                        span,
                         ty,
                         lives,
                         must_live_at,
@@ -319,25 +316,19 @@ where
                                 let (place, rval) = &**v;
                                 let target_local_index = place.local.as_u32();
                                 let rv = match rval {
-                                    Rvalue::Use(usage) => match usage {
-                                        Operand::Move(p) => {
-                                            let local = p.local;
-                                            Some(MirRval::Move {
-                                                target_local_index: local.as_u32(),
-                                                range: range_from_span(
-                                                    source,
-                                                    statement.source_info.span,
-                                                    offset,
-                                                ),
-                                            })
-                                        }
-                                        _ => None,
-                                    },
+                                    Rvalue::Use(Operand::Move(p)) => {
+                                        let local = p.local;
+                                        Some(MirRval::Move {
+                                            target_local_index: local.as_u32(),
+                                            range: range_from_span(
+                                                source,
+                                                statement.source_info.span,
+                                                offset,
+                                            ),
+                                        })
+                                    }
                                     Rvalue::Ref(_region, kind, place) => {
-                                        let mutable = match kind {
-                                            BorrowKind::Mut { .. } => true,
-                                            _ => false,
-                                        };
+                                        let mutable = matches!(kind, BorrowKind::Mut { .. });
                                         let local = place.local;
                                         let outlive = None;
                                         Some(MirRval::Borrow {
@@ -400,15 +391,13 @@ where
         while i < len {
             let mut j = i + 1;
             while j < len {
-                if !erase_subset
+                let cond_j_i = !erase_subset
                     && ((ranges[j].from <= ranges[i].from && ranges[i].until < ranges[j].until)
-                        || (ranges[j].from < ranges[i].from && ranges[i].until <= ranges[j].until))
-                {
-                    ranges.remove(j);
-                } else if erase_subset
+                        || (ranges[j].from < ranges[i].from && ranges[i].until <= ranges[j].until));
+                let cond_i_j = erase_subset
                     && ((ranges[i].from <= ranges[j].from && ranges[j].until < ranges[i].until)
-                        || (ranges[i].from < ranges[j].from && ranges[j].until <= ranges[i].until))
-                {
+                        || (ranges[i].from < ranges[j].from && ranges[j].until <= ranges[i].until));
+                if cond_j_i || cond_i_j {
                     ranges.remove(j);
                 } else {
                     j += 1;
@@ -488,8 +477,7 @@ where
                 };
                 insert.push(
                     self.location_table
-                        .to_location(location_idx.as_usize().into())
-                        .clone(),
+                        .to_location(location_idx.as_usize().into()),
                 );
                 region_locations_idc.append(region_idx, *location_idx);
             }
@@ -516,8 +504,7 @@ where
                 };
                 insert.push(
                     self.location_table
-                        .to_location(location_idx.as_usize().into())
-                        .clone(),
+                        .to_location(location_idx.as_usize().into()),
                 );
             }
         }
@@ -528,7 +515,7 @@ where
                 Self::erase_superset(
                     self.rich_locations_to_ranges(
                         &regions
-                            .into_iter()
+                            .iter()
                             .filter_map(|v| region_locations.get(v).cloned())
                             .flatten()
                             .collect::<Vec<_>>(),
@@ -545,7 +532,7 @@ where
                 return true;
             }
         }
-        return false;
+        false
     }
 
     /// analyze MIR to get JSON-serializable, TypeScript friendly representation

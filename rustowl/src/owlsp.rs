@@ -4,7 +4,7 @@ mod utils;
 use mktemp::Temp;
 use models::*;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -238,22 +238,20 @@ impl SelectLocal {
 }
 impl utils::MirVisitor for SelectLocal {
     fn visit_decl(&mut self, decl: &MirDecl) {
-        match decl {
-            MirDecl::User {
-                local_index,
-                fn_id,
-                span,
-                ..
-            } => {
-                self.current_fn_id = *fn_id;
-                self.select(*local_index, *span);
-            }
-            _ => {}
+        if let MirDecl::User {
+            local_index,
+            fn_id,
+            span,
+            ..
+        } = decl
+        {
+            self.current_fn_id = *fn_id;
+            self.select(*local_index, *span);
         }
     }
     fn visit_stmt(&mut self, stmt: &MirStatement) {
-        match stmt {
-            MirStatement::Assign { rval, .. } => match rval {
+        if let MirStatement::Assign { rval, .. } = stmt {
+            match rval {
                 Some(MirRval::Move {
                     target_local_index,
                     range,
@@ -268,19 +266,16 @@ impl utils::MirVisitor for SelectLocal {
                     self.select(*target_local_index, *range);
                 }
                 _ => {}
-            },
-            _ => {}
+            }
         }
     }
     fn visit_term(&mut self, term: &MirTerminator) {
-        match term {
-            MirTerminator::Call {
-                destination_local_index,
-                fn_span,
-            } => {
-                self.select(*destination_local_index, *fn_span);
-            }
-            _ => {}
+        if let MirTerminator::Call {
+            destination_local_index,
+            fn_span,
+        } = term
+        {
+            self.select(*destination_local_index, *fn_span);
         }
     }
 }
@@ -453,48 +448,46 @@ impl CalcDecos {
 }
 impl utils::MirVisitor for CalcDecos {
     fn visit_decl(&mut self, decl: &MirDecl) {
-        match decl {
-            MirDecl::User {
-                local_index,
-                fn_id,
-                lives,
-                drop_range,
-                must_live_at,
-                name,
-                ..
-            } => {
-                self.current_fn_id = *fn_id;
-                let local = Local::new(*local_index, *fn_id);
-                if self.locals.contains(&local) {
-                    // merge Drop object lives
-                    let mut drop_copy_live = lives.clone();
-                    drop_copy_live.extend_from_slice(&drop_range);
-                    drop_copy_live = utils::eliminated_ranges(drop_copy_live.clone());
-                    for range in &drop_copy_live {
-                        self.decorations.push(Deco::Lifetime {
-                            local,
-                            range: *range,
-                            hover_text: format!("lifetime of variable `{}`", name),
-                            is_display: true,
-                        });
-                    }
-                    let outlive = utils::exclude_ranges(must_live_at.clone(), drop_copy_live);
-                    for range in outlive {
-                        self.decorations.push(Deco::Outlive {
-                            local,
-                            range,
-                            hover_text: format!("variable `{}` is required to live here", name),
-                            is_display: true,
-                        });
-                    }
+        if let MirDecl::User {
+            local_index,
+            fn_id,
+            lives,
+            drop_range,
+            must_live_at,
+            name,
+            ..
+        } = decl
+        {
+            self.current_fn_id = *fn_id;
+            let local = Local::new(*local_index, *fn_id);
+            if self.locals.contains(&local) {
+                // merge Drop object lives
+                let mut drop_copy_live = lives.clone();
+                drop_copy_live.extend_from_slice(drop_range);
+                drop_copy_live = utils::eliminated_ranges(drop_copy_live.clone());
+                for range in &drop_copy_live {
+                    self.decorations.push(Deco::Lifetime {
+                        local,
+                        range: *range,
+                        hover_text: format!("lifetime of variable `{}`", name),
+                        is_display: true,
+                    });
+                }
+                let outlive = utils::exclude_ranges(must_live_at.clone(), drop_copy_live);
+                for range in outlive {
+                    self.decorations.push(Deco::Outlive {
+                        local,
+                        range,
+                        hover_text: format!("variable `{}` is required to live here", name),
+                        is_display: true,
+                    });
                 }
             }
-            _ => {}
         }
     }
     fn visit_stmt(&mut self, stmt: &MirStatement) {
-        match stmt {
-            MirStatement::Assign { rval, .. } => match rval {
+        if let MirStatement::Assign { rval, .. } = stmt {
+            match rval {
                 Some(MirRval::Move {
                     target_local_index,
                     range,
@@ -504,7 +497,7 @@ impl utils::MirVisitor for CalcDecos {
                         self.decorations.push(Deco::Move {
                             local,
                             range: *range,
-                            hover_text: format!("variable moved"),
+                            hover_text: "variable moved".to_string(),
                             is_display: true,
                         });
                     }
@@ -521,65 +514,59 @@ impl utils::MirVisitor for CalcDecos {
                             self.decorations.push(Deco::MutBorrow {
                                 local,
                                 range: *range,
-                                hover_text: format!("mutable borrow"),
+                                hover_text: "mutable borrow".to_string(),
                                 is_display: true,
                             });
                         } else {
                             self.decorations.push(Deco::ImmBorrow {
                                 local,
                                 range: *range,
-                                hover_text: format!("immutable borrow"),
+                                hover_text: "immutable borrow".to_string(),
                                 is_display: true,
                             });
                         }
                     }
                 }
                 _ => {}
-            },
-            _ => {}
+            }
         }
     }
     fn visit_term(&mut self, term: &MirTerminator) {
-        match term {
-            MirTerminator::Call {
-                destination_local_index,
-                fn_span,
-            } => {
-                let local = Local::new(*destination_local_index, self.current_fn_id);
-                if self.locals.contains(&local) {
-                    let mut i = 0;
-                    for deco in &self.decorations {
-                        match deco {
-                            Deco::Call { range, .. } => {
-                                if utils::is_super_range(*fn_span, *range) {
-                                    return;
-                                }
-                            }
-                            _ => {}
+        if let MirTerminator::Call {
+            destination_local_index,
+            fn_span,
+        } = term
+        {
+            let local = Local::new(*destination_local_index, self.current_fn_id);
+            if self.locals.contains(&local) {
+                let mut i = 0;
+                for deco in &self.decorations {
+                    if let Deco::Call { range, .. } = deco {
+                        if utils::is_super_range(*fn_span, *range) {
+                            return;
                         }
                     }
-                    while i < self.decorations.len() {
-                        let range = match &self.decorations[i] {
-                            Deco::Call { range, .. } => Some(range),
-                            _ => None,
-                        };
-                        if let Some(range) = range {
-                            if utils::is_super_range(*range, *fn_span) {
-                                self.decorations.remove(i);
-                                continue;
-                            }
-                        }
-                        i += 1;
-                    }
-                    self.decorations.push(Deco::Call {
-                        local,
-                        range: *fn_span,
-                        hover_text: format!("function call"),
-                        is_display: true,
-                    });
                 }
+                while i < self.decorations.len() {
+                    let range = match &self.decorations[i] {
+                        Deco::Call { range, .. } => Some(range),
+                        _ => None,
+                    };
+                    if let Some(range) = range {
+                        if utils::is_super_range(*range, *fn_span) {
+                            self.decorations.remove(i);
+                            continue;
+                        }
+                    }
+                    i += 1;
+                }
+                self.decorations.push(Deco::Call {
+                    local,
+                    range: *fn_span,
+                    hover_text: "function call".to_string(),
+                    is_display: true,
+                });
             }
-            _ => {}
         }
     }
 }
@@ -682,7 +669,7 @@ impl Backend {
         }
     }
 
-    async fn decos(&self, filepath: &PathBuf, position: Loc) -> Vec<Deco> {
+    async fn decos(&self, filepath: &Path, position: Loc) -> Vec<Deco> {
         let mut selected = SelectLocal::new(position);
         if let Some(analyzed) = &*self.analyzed.read().await {
             for (mir_filename, file) in analyzed.0.iter() {
@@ -726,11 +713,11 @@ impl Backend {
                 });
             }
         }
-        return Ok(Decorations {
+        Ok(Decorations {
             is_analyzed,
             path: None,
             decorations: Vec::new(),
-        });
+        })
     }
 }
 
@@ -745,18 +732,27 @@ impl LanguageServer for Backend {
                 self.set_roots(&ws.uri).await;
             }
         }
-        let mut init_res = lsp_types::InitializeResult::default();
-        let mut sync_option = lsp_types::TextDocumentSyncOptions::default();
-        sync_option.save = Some(lsp_types::TextDocumentSyncSaveOptions::Supported(true));
-        sync_option.change = Some(lsp_types::TextDocumentSyncKind::INCREMENTAL);
-        init_res.capabilities.text_document_sync =
-            Some(lsp_types::TextDocumentSyncCapability::Options(sync_option));
-        let mut workspace_cap = lsp_types::WorkspaceServerCapabilities::default();
-        workspace_cap.workspace_folders = Some(lsp_types::WorkspaceFoldersServerCapabilities {
-            supported: Some(true),
-            change_notifications: Some(lsp_types::OneOf::Left(true)),
-        });
-        init_res.capabilities.workspace = Some(workspace_cap);
+        let sync_options = lsp_types::TextDocumentSyncOptions {
+            save: Some(lsp_types::TextDocumentSyncSaveOptions::Supported(true)),
+            change: Some(lsp_types::TextDocumentSyncKind::INCREMENTAL),
+            ..Default::default()
+        };
+        let workspace_cap = lsp_types::WorkspaceServerCapabilities {
+            workspace_folders: Some(lsp_types::WorkspaceFoldersServerCapabilities {
+                supported: Some(true),
+                change_notifications: Some(lsp_types::OneOf::Left(true)),
+            }),
+            ..Default::default()
+        };
+        let server_cap = lsp_types::ServerCapabilities {
+            text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Options(sync_options)),
+            workspace: Some(workspace_cap),
+            ..Default::default()
+        };
+        let init_res = lsp_types::InitializeResult {
+            capabilities: server_cap,
+            ..Default::default()
+        };
         Ok(init_res)
     }
     async fn initialized(&self, _p: lsp_types::InitializedParams) {
@@ -792,7 +788,7 @@ async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::build(|client| Backend::new(client))
+    let (service, socket) = LspService::build(Backend::new)
         .custom_method("rustowl/cursor", Backend::cursor)
         .finish();
     Server::new(stdin, stdout, socket).serve(service).await;

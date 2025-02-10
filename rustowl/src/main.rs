@@ -10,7 +10,7 @@ use toolchain_version::TOOLCHAIN_VERSION;
 fn main() {
     simple_logger::init().unwrap();
 
-    let self_path = PathBuf::from(env::args().nth(0).unwrap());
+    let self_path = PathBuf::from(env::args().next().unwrap());
     let root_dir = PathBuf::from(env::args().nth(2).unwrap_or(".".to_owned()));
     let target_dir = PathBuf::from(env::args().nth(3).unwrap_or("./target".to_owned()));
 
@@ -35,7 +35,7 @@ fn main() {
                 .into(),
         );
         unsafe {
-            env::set_var("Path", &env::join_paths(paths).unwrap());
+            env::set_var("Path", env::join_paths(paths).unwrap());
         }
     }
 

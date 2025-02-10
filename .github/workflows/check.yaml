@@ -21,11 +21,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - run: rustup component add rustfmt
+      - run: rustup component add rustfmt clippy
         working-directory: ./rustowl
       - run: cargo fmt --check
         working-directory: ./rustowl
       - run: cargo check
+        working-directory: ./rustowl
+      - run: cargo clippy
         working-directory: ./rustowl
 
   vscode:

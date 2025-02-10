@@ -26,11 +26,7 @@ impl Local {
 pub struct Loc(pub u32);
 impl Loc {
     pub fn new(source: &str, byte_pos: u32, offset: u32) -> Self {
-        let byte_pos = if byte_pos < offset {
-            0
-        } else {
-            byte_pos - offset
-        };
+        let byte_pos = byte_pos.saturating_sub(offset);
         for (i, (byte, _)) in source.char_indices().enumerate() {
             if byte_pos <= byte as u32 {
                 return Self(i as u32);
@@ -89,6 +85,11 @@ pub enum MirVariable {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(transparent)]
 pub struct MirVariables(HashMap<u32, MirVariable>);
+impl Default for MirVariables {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl MirVariables {
     pub fn new() -> Self {
         Self(HashMap::new())
@@ -96,12 +97,12 @@ impl MirVariables {
     pub fn push(&mut self, var: MirVariable) {
         match &var {
             MirVariable::User { index, .. } => {
-                if self.0.get(index).is_none() {
+                if !self.0.contains_key(index) {
                     self.0.insert(*index, var);
                 }
             }
             MirVariable::Other { index, .. } => {
-                if self.0.get(index).is_none() {
+                if !self.0.contains_key(index) {
                     self.0.insert(*index, var);
                 }
             }

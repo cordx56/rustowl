@@ -17,7 +17,7 @@ pub fn common_range(r1: Range, r2: Range) -> Option<Range> {
 }
 
 pub fn merge_ranges(r1: Range, r2: Range) -> Option<Range> {
-    if let Some(_) = common_range(r1, r2) {
+    if common_range(r1, r2).is_some() {
         let from = r1.from.min(r2.from);
         let until = r1.until.max(r2.until);
         Some(Range { from, until })

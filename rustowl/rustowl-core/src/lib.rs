@@ -55,10 +55,16 @@ static ANALYZED: LazyLock<Mutex<Vec<LocalDefId>>> = LazyLock::new(|| Mutex::new(
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
 }
-fn mir_borrowck<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> ProvidedValue<'tcx> {
+#[allow(clippy::await_holding_lock)]
+fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
     log::info!("start borrowck of {def_id:?}");
 
-    let analyzer = MirAnalyzer::new(unsafe { std::mem::transmute(tcx) }, def_id);
+    let analyzer = MirAnalyzer::new(
+        unsafe {
+            std::mem::transmute::<rustc_middle::ty::TyCtxt<'_>, rustc_middle::ty::TyCtxt<'_>>(tcx)
+        },
+        def_id,
+    );
     {
         let mut locked = TASKS.lock().unwrap();
         locked.spawn_on(analyzer, &HANDLE);
@@ -119,12 +125,12 @@ pub fn run_compiler() -> i32 {
     for arg in args {
         if arg == "-vV" || arg.starts_with("--print") {
             let mut callback = RustcCallback;
-            let runner = RunCompiler::new(&args, &mut callback);
+            let runner = RunCompiler::new(args, &mut callback);
             return rustc_driver::catch_with_exit_code(|| runner.run());
         }
     }
     let mut callback = AnalyzerCallback;
-    let mut runner = RunCompiler::new(&args, &mut callback);
+    let mut runner = RunCompiler::new(args, &mut callback);
     runner.set_make_codegen_backend(None);
     rustc_driver::catch_with_exit_code(|| {
         runner
