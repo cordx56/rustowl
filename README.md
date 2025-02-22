@@ -49,10 +49,27 @@ For Windows, please clone this repository and build RustOwl manually.
 
 ### Install RustOwl
 
+#### From pre-compiled release binary
+
 To install RustOwl command, run the command below.
 
 ```bash
 curl -L "https://github.com/cordx56/rustowl/releases/download/v0.1.4/install.sh" | sh
+```
+
+#### From crates.io
+
+Ensure your environment is set up:
+
+```bash
+rustup install nightly
+rustup component add rust-src rustc-dev llvm-tools-preview --toolchain nightly
+```
+
+Install using the nightly toolchain:
+
+```bash
+cargo +nightly install rustowl
 ```
 
 ### VSCode
@@ -91,7 +108,6 @@ keymap(
 )
 ```
 
-
 ### Emacs
 
 Elpaca example:
@@ -108,7 +124,6 @@ Elpaca example:
 
 There is a [third-party repository](https://github.com/siketyan/intellij-rustowl) that supports IntelliJ IDEs.
 
-
 ## Build manually
 
 Here, we describe manual install instructions from source code.
@@ -118,8 +133,8 @@ Here, we describe manual install instructions from source code.
 #### Prerequisite
 
 - `rustup` and `cargo` installed
-    - You can install `rustup` from [this link](https://rustup.rs/).
-    - You need to set up the `PATH` environment variable. To do this, follow the instructions provided by the `rustup` installer. For example, in bash, run `export PATH=$HOME/.cargo/bin:$PATH`.
+  - You can install `rustup` from [this link](https://rustup.rs/).
+  - You need to set up the `PATH` environment variable. To do this, follow the instructions provided by the `rustup` installer. For example, in bash, run `export PATH=$HOME/.cargo/bin:$PATH`.
 
 RustOwl has been tested on macOS Sequoia 15.2 on arm64 architecture with `rustup` 1.27.1.
 We have not tested the installation of dependencies from other package repositories, such as Homebrew.
@@ -138,16 +153,15 @@ cargo install --path . --locked
 cargo owlsp
 ```
 
-
 ### VSCode extension
 
 #### Prerequisite
 
 - VSCode installed
-    - You can install VSCode from [this link](https://code.visualstudio.com/).
+  - You can install VSCode from [this link](https://code.visualstudio.com/).
 - Node.js installed
 - `yarn` installed
-    - After installing Node.js, You can install `yarn` by running `npm install -g yarn`.
+  - After installing Node.js, You can install `yarn` by running `npm install -g yarn`.
 
 VSCode extension has been tested on macOS Sequoia 15.2 on arm64 architecture with Visual Studio Code 1.96.4, Node.js v20.16.0, and `yarn` 1.22.22.
 Other dependencies are locked in the configuration files and will be installed automatically.
@@ -172,7 +186,6 @@ A new VSCode window with the extension enabled will appear.
 Open cargo workspace directory in the new VSCode window.
 
 When you save Rust files, decoration indicating the movement of ownership and lifetimes will appear in the editor.
-
 
 ## Note
 
