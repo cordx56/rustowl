@@ -1,0 +1,5 @@
+# Nix stuff can be ignored, see https://github.com/cordx56/rustowl/issues/59
+flake.nix
+flake.lock
+result*
+.envrc

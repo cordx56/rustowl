@@ -4,7 +4,7 @@ local state = {
   augroup = nil,
 }
 
-local function is_enabled()
+function M.is_enabled()
   return state.augroup ~= nil
 end
 
@@ -19,10 +19,14 @@ function M.enable_on_lsp_attach()
   })
 end
 
---- Enable RustOwl
+--- Enable RustOwl highlighting
 ---@param bufnr? number
 function M.enable(bufnr)
-  local idle_time_ms = assert(require('rustowl').get_options().idle_time)
+  local lsp = require('rustowl.lsp')
+  if #lsp.get_rustowl_clients() == 0 then
+    lsp.start()
+  end
+  local idle_time_ms = assert(require('rustowl.config').idle_time)
 
   local timer = nil
 
@@ -42,7 +46,7 @@ function M.enable(bufnr)
 
     timer:start(idle_time_ms, 0, vim.schedule_wrap(function()
       local line, col = unpack(vim.api.nvim_win_get_cursor(0))
-      require('rustowl.highlight').enable(bufnr, line, col)
+      require('rustowl.highlight').enable(line, col, bufnr)
     end))
   end
 
@@ -66,22 +70,22 @@ function M.enable(bufnr)
   start_timer()
 end
 
---- Disable RustOwl
+--- Disable RustOwl highlighting
 ---@param bufnr? number
 function M.disable(bufnr)
   require('rustowl.highlight').disable(bufnr)
 
-  if is_enabled() then
+  if M.is_enabled() then
     vim.api.nvim_del_augroup_by_id(state.augroup)
   end
 
   state.augroup = nil
 end
 
---- Toggle RustOwl on or off
+--- Toggle RustOwl highlighting on or off
 ---@param bufnr? number
 function M.toggle(bufnr)
-  local action = is_enabled() and M.disable or M.enable
+  local action = M.is_enabled() and M.disable or M.enable
   action(bufnr)
 end
 

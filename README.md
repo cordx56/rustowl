@@ -73,7 +73,6 @@ Minimal setup with [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   'cordx56/rustowl',
-  dependencies = { 'neovim/nvim-lspconfig' },
   build = 'cd rustowl && cargo install --path . --locked',
   opts = {},
 }
@@ -85,11 +84,9 @@ Minimal setup with [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   'cordx56/rustowl',
-  dependencies = { 'neovim/nvim-lspconfig' },
   build = 'cd rustowl && cargo install --path . --locked',
-  ft = 'rust', -- Lazy loading
+  lazy = false, -- This plugin is already lazy
   opts = {
-    auto_enable = false,
     client = {
       on_attach = function(_, buffer)
         vim.keymap.set('n', '<leader>o', function()
@@ -107,11 +104,28 @@ Default options:
 
 ```lua
 {
-  auto_enable = true, -- Enable RustOwl immediately
+  auto_attach = true, -- Auto attach the RustOwl LSP client when opening a Rust file
+  auto_enable = false, -- Enable RustOwl immediately when attaching the LSP client
   idle_time = 500, -- Time in milliseconds to hover with the cursor before triggering RustOwl
-  client = {}, -- LSP client configuration that gets passed to `require('lspconfig').rustowlsp.setup()`
+  client = {}, -- LSP client configuration that gets passed to `vim.lsp.start`
 }
 ```
+
+When opening a Rust file, the Neovim plugin creates the `Rustowl` user command:
+
+```vim
+:RustOwl {subcommand}
+```
+
+where `{subcommand}` can be one of:
+
+- `start_client`: Start the rustowl LSP client.
+- `stop_client`: Stop the rustowl LSP client.
+- `restart_client`: Restart the rustowl LSP client.
+- `enable`: Enable rustowl highlights.
+- `disable`: Disable rustowl highlights.
+- `toggle`: Toggle rustowl highlights.
+
 
 ### Emacs
 
