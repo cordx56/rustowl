@@ -17,8 +17,7 @@ export function activate(context: vscode.ExtensionContext) {
   console.log("rustowl activated");
 
   const lspExec: Executable = {
-    command: "cargo",
-    args: ["owlsp"],
+    command: "rustowl",
     transport: TransportKind.stdio,
   };
   const serverOptions: ServerOptions = lspExec;
