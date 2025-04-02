@@ -1,6 +1,6 @@
 [package]
 name = "rustowl"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2024"
 authors = ["cordx56 <cordx56@cordx.cx>"]
 description = "Visualize Ownership and Lifetimes in Rust"
@@ -10,7 +10,7 @@ repository = "https://github.com/cordx56/rustowl"
 license = "MPL-2.0"
 keywords = ["visualization", "ownership", "lifetime", "lsp"]
 categories = ["development-tools", "visualization"]
-default-run = "cargo-owl"
+default-run = "rustowl"
 
 [dependencies]
 serde = { version = "1.0.210", features = ["derive"] }

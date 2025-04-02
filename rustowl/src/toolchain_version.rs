@@ -1,1 +1,1 @@
-pub const TOOLCHAIN_VERSION: &str = "nightly-2025-02-22";
+pub const TOOLCHAIN_VERSION: &str = env!("RUSTOWL_TOOLCHAIN");

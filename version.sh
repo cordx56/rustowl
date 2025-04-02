@@ -1,6 +1,6 @@
 #!/bin/bash -x
 
-VERSION="0.1.4"
+VERSION="0.2.0"
 
 SED=$(which gsed || echo "sed")
 SED_SUBSTITUTE="[0-9]\+\.[0-9]\+\.[0-9]\+/$VERSION"
