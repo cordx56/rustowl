@@ -2,12 +2,17 @@
 ## [Unreleased]
 
 ### 🐞 Bug Fixes
-- pr permission for changelog
+- use target name in cp command
+
+### 🚀 Features
+- aur packages ([#105](https://github.com/cordx56/rustowl/issues/105))
+- aur packages
 
 
 <a name="v0.3.1-alpha.1"></a>
 ## [v0.3.1-alpha.1] - 2025-05-04
 ### 🎨 Chores
+- update changelog ([#104](https://github.com/cordx56/rustowl/issues/104))
 - add comments to cargo.toml on next release changes
 - added build time env var description
 - update changelog
@@ -15,15 +20,18 @@
 - update changelog
 
 ### 🐞 Bug Fixes
+- pr permission for changelog
 - **binstall:** use archives instead of binaries
 - **reqwest:** dont depend on openssl-sys, use rustls for lower system deps
 
 ### 🚀 Features
+- automatic updates with dependabot
 - use zip instead of tar in windows
 - auto release changelogs, changelog generation
 - **archive:** implement zipping for windows
 
 ### Pull Requests
+- Merge pull request [#103](https://github.com/cordx56/rustowl/issues/103) from MuntasirSZN/feat/dependabot
 - Merge pull request [#101](https://github.com/cordx56/rustowl/issues/101) from MuntasirSZN/feat/zig-linker
 - Merge pull request [#96](https://github.com/cordx56/rustowl/issues/96) from MuntasirSZN/main
 - Merge pull request [#97](https://github.com/cordx56/rustowl/issues/97) from MuntasirSZN/fix/binstall
