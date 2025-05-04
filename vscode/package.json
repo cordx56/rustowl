@@ -93,7 +93,7 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.9",
-    "@types/node": "^22.12.0",
+    "@types/node": "^22.15.3",
     "@types/vscode": "^1.95.0",
     "@typescript-eslint/eslint-plugin": "^8.10.0",
     "@typescript-eslint/parser": "^8.31.1",
@@ -108,6 +108,6 @@
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1",
-    "zod": "^3.23.8"
+    "zod": "^3.24.3"
   }
 }
