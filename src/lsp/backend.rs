@@ -1,4 +1,4 @@
-use crate::{lsp::*, models::*, utils};
+use crate::{lsp::*, models::*, toolchain, utils};
 use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -152,7 +152,7 @@ impl Backend {
                 )
             };
 
-            let sysroot = crate::toolchain::get_sysroot().await;
+            let sysroot = toolchain::get_sysroot().await;
             let mut command = if let Ok(cargo_path) = &env::var("CARGO") {
                 log::info!("using toolchain cargo: {}", cargo_path);
                 process::Command::new(cargo_path)
@@ -176,7 +176,7 @@ impl Backend {
 
             // set rustowlc & library path
             let rustowlc_path = {
-                let under_sysroot = sysroot.join("rustowlc");
+                let under_sysroot = toolchain::get_runtime_dir().await.join("rustowlc");
                 if under_sysroot.is_file() {
                     under_sysroot.to_string_lossy().to_string()
                 } else {

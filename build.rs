@@ -12,13 +12,8 @@ fn main() -> Result<(), Error> {
         println!("cargo::rustc-env=RUSTOWL_TOOLCHAIN={toolchain}");
     }
 
-    let config_sysroot = if let Ok(runtime_dir) = env::var("RUSTOWL_RUNTIME_DIRS") {
-        Some(runtime_dir)
-    } else {
-        env::var("RUSTOWL_SYSROOTS").ok()
-    };
-    if let Some(sysroot) = config_sysroot {
-        println!("cargo::rustc-env=RUSTOWL_SYSROOTS={}", sysroot);
+    if let Ok(sysroot) = env::var("RUSTOWL_RUNTIME_DIRS") {
+        println!("cargo::rustc-env=RUSTOWL_RUNTIME_DIRS={}", sysroot);
     }
 
     #[cfg(not(windows))]
