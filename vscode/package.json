@@ -99,15 +99,15 @@
     "@typescript-eslint/parser": "^8.31.1",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^3.2.1",
-    "esbuild": "^0.24.0",
-    "eslint": "^9.13.0",
+    "@vscode/vsce": "^3.3.2",
+    "esbuild": "^0.25.3",
+    "eslint": "^9.26.0",
     "npm-run-all": "^4.1.5",
     "prettier": "^3.3.3",
-    "typescript": "^5.6.3"
+    "typescript": "^5.8.3"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1",
-    "zod": "^3.24.3"
+    "zod": "^3.24.4"
   }
 }

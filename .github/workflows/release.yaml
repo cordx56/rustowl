@@ -110,7 +110,7 @@ jobs:
           cd runtime
 
           if [[ "${{ env.is_windows }}" == "true" ]]; then
-            powershell -c 'Compress-Archive -Path README.md, LICENSE, "rustowl${{ env.exec_ext }}", "rustowlc${{ env.exec_ext }}", completions, man, (Get-ChildItem -Recurse -Include "*.rlib","*.dll" | ForEach-Object { $_.FullName }) -DestinationPath "../${{ env.archive_name }}" -Force'
+            powershell -c 'tar.exe -a -cf "..\${{ env.archive_name }}" README.md LICENSE "rustowl${{ env.exec_ext }}" "rustowlc${{ env.exec_ext }}" completions man (Get-ChildItem -Recurse -File | Where-Object { $_.Extension -match "\.(rlib|dll)$"  } | Select-Object -ExpandProperty FullName)'
           else
             ls | \
               xargs -I % find % -type f | \
@@ -179,7 +179,7 @@ jobs:
           draft: true
           generate_release_notes: true
       - name: AUR Release
-        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
         with:
           pkgname: rustowl-bin
           pkgbuild: ./aur/PKGBUILD

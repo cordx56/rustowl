@@ -1,17 +1,11 @@
 <a name="unreleased"></a>
 ## [Unreleased]
 
-### 🐞 Bug Fixes
-- use target name in cp command
-
-### 🚀 Features
-- aur packages ([#105](https://github.com/cordx56/rustowl/issues/105))
-- aur packages
-
 
 <a name="v0.3.1-alpha.1"></a>
-## [v0.3.1-alpha.1] - 2025-05-04
+## [v0.3.1-alpha.1] - 2025-05-05
 ### 🎨 Chores
+- update changelog ([#112](https://github.com/cordx56/rustowl/issues/112))
 - update changelog ([#104](https://github.com/cordx56/rustowl/issues/104))
 - add comments to cargo.toml on next release changes
 - added build time env var description
@@ -20,17 +14,26 @@
 - update changelog
 
 ### 🐞 Bug Fixes
+- add release on top of cp
+- use target name in cp command
 - pr permission for changelog
 - **binstall:** use archives instead of binaries
+- **ci:** use powershell in windoes ci
 - **reqwest:** dont depend on openssl-sys, use rustls for lower system deps
 
 ### 🚀 Features
+- aur packages ([#105](https://github.com/cordx56/rustowl/issues/105))
+- aur packages
 - automatic updates with dependabot
 - use zip instead of tar in windows
 - auto release changelogs, changelog generation
 - **archive:** implement zipping for windows
 
 ### Pull Requests
+- Merge pull request [#115](https://github.com/cordx56/rustowl/issues/115) from MuntasirSZN/main
+- Merge pull request [#114](https://github.com/cordx56/rustowl/issues/114) from MuntasirSZN/main
+- Merge pull request [#113](https://github.com/cordx56/rustowl/issues/113) from MuntasirSZN/main
+- Merge pull request [#111](https://github.com/cordx56/rustowl/issues/111) from MuntasirSZN/fix/archive-ci
 - Merge pull request [#103](https://github.com/cordx56/rustowl/issues/103) from MuntasirSZN/feat/dependabot
 - Merge pull request [#101](https://github.com/cordx56/rustowl/issues/101) from MuntasirSZN/feat/zig-linker
 - Merge pull request [#96](https://github.com/cordx56/rustowl/issues/96) from MuntasirSZN/main
