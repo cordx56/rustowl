@@ -16,7 +16,7 @@ use tar::Archive;
 #[cfg(windows)]
 use zip::ZipArchive;
 
-pub const TOOLCHAIN_VERSION: &str = env!("RUSTOWL_TOOLCHAIN");
+pub const TOOLCHAIN: &str = env!("RUSTOWL_TOOLCHAIN");
 const BUILD_RUNTIME_DIRS: Option<&str> = option_env!("RUSTOWL_RUNTIME_DIRS");
 
 static FALLBACK_RUNTIME: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -69,7 +69,7 @@ pub async fn get_runtime_dir() -> PathBuf {
 }
 pub async fn get_sysroot() -> PathBuf {
     if let Some(runtime) = get_configured_runtime_dir() {
-        let sysroot = runtime.join("sysroot").join(TOOLCHAIN_VERSION);
+        let sysroot = runtime.join("sysroot").join(TOOLCHAIN);
         if sysroot.is_dir() {
             log::info!(
                 "select sysroot from configured runtime dir: {}",
@@ -81,7 +81,7 @@ pub async fn get_sysroot() -> PathBuf {
     if let Some(sysroot) = RUSTUP_SYSROOT
         .get_or_init(|| async {
             if let Ok(mut child) = Command::new("rustup")
-                .args(["run", TOOLCHAIN_VERSION, "rustc", "--print=sysroot"])
+                .args(["run", TOOLCHAIN, "rustc", "--print=sysroot"])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
@@ -103,7 +103,7 @@ pub async fn get_sysroot() -> PathBuf {
         log::info!("select sysroot from rustup: {}", sysroot.display());
         return sysroot.to_owned();
     }
-    let sysroot = FALLBACK_RUNTIME.join("sysroot").join(TOOLCHAIN_VERSION);
+    let sysroot = FALLBACK_RUNTIME.join("sysroot").join(TOOLCHAIN);
     if !sysroot.is_dir() {
         log::info!("sysroot not found; start setup toolchain");
         if setup_toolchain().await.is_err() {

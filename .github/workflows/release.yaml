@@ -56,9 +56,10 @@ jobs:
           rustup install --profile minimal
           rustup component add rust-src rustc-dev llvm-tools
 
-      - name: check host tuple
+      - name: setup env
         run: |
           echo "host_tuple=$(rustc --print=host-tuple)" >> $GITHUB_ENV
+          rustup show active-toolchain | awk '{ print "active_toolchain=" $1 }' >> $GITHUB_ENV
           ([[ "$(rustc --print=host-tuple)" == *msvc* ]] && echo "exec_ext=.exe" || echo "exec_ext=") >> $GITHUB_ENV
           ([[ "$(rustc --print=host-tuple)" == *windows* ]] && echo "is_windows=true" || echo "is_windows=false") >> $GITHUB_ENV
           ([[ "$(rustc --print=host-tuple)" == *linux* ]] && echo "is_linux=true" || echo "is_linux=false") >> $GITHUB_ENV
@@ -89,7 +90,11 @@ jobs:
       - name: Setup archive artifacts
         run: |
           rm -rf runtime
-          cp -r "$(rustc --print=sysroot)" runtime
+
+          mkdir -p runtime/sysroot
+          cp -r "$(rustc --print=sysroot)" runtime/sysroot/${{ env.active_toolchain }}
+          find runtime/sysroot -type f | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf
+          find runtime/sysroot -depth -type d -empty -exec rm -rf {} \;
 
           if [[ "${{ env.is_linux }}" == "true"  ]]; then
             cp target/${{ env.host_tuple }}/release/rustowl${{ env.exec_ext }} ./runtime
@@ -110,12 +115,9 @@ jobs:
           cd runtime
 
           if [[ "${{ env.is_windows }}" == "true" ]]; then
-            powershell -c 'tar.exe -a -cf "..\${{ env.archive_name }}" README.md LICENSE "rustowl${{ env.exec_ext }}" "rustowlc${{ env.exec_ext }}" completions man (Get-ChildItem -Recurse -File | Where-Object { $_.Extension -match "\.(rlib|dll)$"  } | Select-Object -ExpandProperty FullName)'
+            powershell -c 'tar.exe -a -cf "..\${{ env.archive_name }}" README.md LICENSE "rustowl${{ env.exec_ext }}" "rustowlc${{ env.exec_ext }}" sysroot completions man'
           else
-            ls | \
-              xargs -I % find % -type f | \
-              grep -E '\.(rlib|so|dylib)$' | \
-              xargs tar -czvf ../${{ env.archive_name }} README.md LICENSE rustowl${{ env.exec_ext }} rustowlc${{ env.exec_ext }} completions/ man/
+            tar -czvf ../${{ env.archive_name }} README.md LICENSE rustowl${{ env.exec_ext }} rustowlc${{ env.exec_ext }} sysroot/ completions/ man/
           fi
 
           cp ./rustowl${{ env.exec_ext }} ../rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
@@ -178,6 +180,7 @@ jobs:
           files: artifacts/**/*
           draft: true
           generate_release_notes: true
+
       - name: AUR Release
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
         with:
