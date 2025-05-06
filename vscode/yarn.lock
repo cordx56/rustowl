@@ -454,24 +454,16 @@
     natural-compare "^1.4.0"
     ts-api-utils "^2.1.0"
 
-"@typescript-eslint/parser@^8.31.1":
-  version "8.31.1"
-  resolved "https://registry.yarnpkg.com/@typescript-eslint/parser/-/parser-8.31.1.tgz#e9b0ccf30d37dde724ee4d15f4dbc195995cce1b"
-  integrity sha512-oU/OtYVydhXnumd0BobL9rkJg7wFJ9bFFPmSmB/bf/XWN85hlViji59ko6bSKBXyseT9V8l+CN1nwmlbiN0G7Q==
+"@typescript-eslint/parser@^8.32.0":
+  version "8.32.0"
+  resolved "https://registry.yarnpkg.com/@typescript-eslint/parser/-/parser-8.32.0.tgz#fe840ecb2726a82fa9f5562837ec40503ae71caf"
+  integrity sha512-B2MdzyWxCE2+SqiZHAjPphft+/2x2FlO9YBx7eKE1BCb+rqBlQdhtAEhzIEdozHd55DXPmxBdpMygFJjfjjA9A==
   dependencies:
-    "@typescript-eslint/scope-manager" "8.31.1"
-    "@typescript-eslint/types" "8.31.1"
-    "@typescript-eslint/typescript-estree" "8.31.1"
-    "@typescript-eslint/visitor-keys" "8.31.1"
+    "@typescript-eslint/scope-manager" "8.32.0"
+    "@typescript-eslint/types" "8.32.0"
+    "@typescript-eslint/typescript-estree" "8.32.0"
+    "@typescript-eslint/visitor-keys" "8.32.0"
     debug "^4.3.4"
-
-"@typescript-eslint/scope-manager@8.31.1":
-  version "8.31.1"
-  resolved "https://registry.yarnpkg.com/@typescript-eslint/scope-manager/-/scope-manager-8.31.1.tgz#1eb52e76878f545e4add142e0d8e3e97e7aa443b"
-  integrity sha512-BMNLOElPxrtNQMIsFHE+3P0Yf1z0dJqV9zLdDxN/xLlWMlXK/ApEsVEKzpizg9oal8bAT5Sc7+ocal7AC1HCVw==
-  dependencies:
-    "@typescript-eslint/types" "8.31.1"
-    "@typescript-eslint/visitor-keys" "8.31.1"
 
 "@typescript-eslint/scope-manager@8.32.0":
   version "8.32.0"
@@ -491,29 +483,10 @@
     debug "^4.3.4"
     ts-api-utils "^2.1.0"
 
-"@typescript-eslint/types@8.31.1":
-  version "8.31.1"
-  resolved "https://registry.yarnpkg.com/@typescript-eslint/types/-/types-8.31.1.tgz#478ed6f7e8aee1be7b63a60212b6bffe1423b5d4"
-  integrity sha512-SfepaEFUDQYRoA70DD9GtytljBePSj17qPxFHA/h3eg6lPTqGJ5mWOtbXCk1YrVU1cTJRd14nhaXWFu0l2troQ==
-
 "@typescript-eslint/types@8.32.0":
   version "8.32.0"
   resolved "https://registry.yarnpkg.com/@typescript-eslint/types/-/types-8.32.0.tgz#a4a66b8876b8391970cf069b49572e43f1fc957a"
   integrity sha512-O5Id6tGadAZEMThM6L9HmVf5hQUXNSxLVKeGJYWNhhVseps/0LddMkp7//VDkzwJ69lPL0UmZdcZwggj9akJaA==
-
-"@typescript-eslint/typescript-estree@8.31.1":
-  version "8.31.1"
-  resolved "https://registry.yarnpkg.com/@typescript-eslint/typescript-estree/-/typescript-estree-8.31.1.tgz#37792fe7ef4d3021c7580067c8f1ae66daabacdf"
-  integrity sha512-kaA0ueLe2v7KunYOyWYtlf/QhhZb7+qh4Yw6Ni5kgukMIG+iP773tjgBiLWIXYumWCwEq3nLW+TUywEp8uEeag==
-  dependencies:
-    "@typescript-eslint/types" "8.31.1"
-    "@typescript-eslint/visitor-keys" "8.31.1"
-    debug "^4.3.4"
-    fast-glob "^3.3.2"
-    is-glob "^4.0.3"
-    minimatch "^9.0.4"
-    semver "^7.6.0"
-    ts-api-utils "^2.0.1"
 
 "@typescript-eslint/typescript-estree@8.32.0":
   version "8.32.0"
@@ -538,14 +511,6 @@
     "@typescript-eslint/scope-manager" "8.32.0"
     "@typescript-eslint/types" "8.32.0"
     "@typescript-eslint/typescript-estree" "8.32.0"
-
-"@typescript-eslint/visitor-keys@8.31.1":
-  version "8.31.1"
-  resolved "https://registry.yarnpkg.com/@typescript-eslint/visitor-keys/-/visitor-keys-8.31.1.tgz#6742b0e3ba1e0c1e35bdaf78c03e759eb8dd8e75"
-  integrity sha512-I+/rgqOVBn6f0o7NDTmAPWWC6NuqhV174lfYvAm9fUaWeiefLdux9/YI3/nLugEn9L8fcSi0XmpKi/r5u0nmpw==
-  dependencies:
-    "@typescript-eslint/types" "8.31.1"
-    eslint-visitor-keys "^4.2.0"
 
 "@typescript-eslint/visitor-keys@8.32.0":
   version "8.32.0"
@@ -3880,7 +3845,7 @@ toidentifier@1.0.1:
   resolved "https://registry.yarnpkg.com/toidentifier/-/toidentifier-1.0.1.tgz#3be34321a88a820ed1bd80dfaa33e479fbb8dd35"
   integrity sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==
 
-ts-api-utils@^2.0.1, ts-api-utils@^2.1.0:
+ts-api-utils@^2.1.0:
   version "2.1.0"
   resolved "https://registry.yarnpkg.com/ts-api-utils/-/ts-api-utils-2.1.0.tgz#595f7094e46eed364c13fd23e75f9513d29baf91"
   integrity sha512-CUgTZL1irw8u29bzrOD/nH85jqyc74D6SshFgujOIA7osm2Rz7dYH77agkx7H4FBNxDq7Cjf+IjaX/8zwFW+ZQ==
