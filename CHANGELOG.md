@@ -1,35 +1,8 @@
 <a name="unreleased"></a>
 ## [Unreleased]
 
-### 🐞 Bug Fixes
-- email
-- **aur:** add cd lines as it errors
-- **windows:** unzip
-
-
-<a name="v0.3.1-alpha.3"></a>
-## [v0.3.1-alpha.3] - 2025-05-06
-### 🐞 Bug Fixes
-- rustowlc ext for Windows
-
-
-<a name="v0.3.1-alpha.2"></a>
-## [v0.3.1-alpha.2] - 2025-05-06
-### 🐞 Bug Fixes
-- dont use tar, use Compress-Archive instead
-
-### 🚀 Features
-- add a pr template
-- add a code of conduct and security file
-
-### Pull Requests
-- Merge pull request [#129](https://github.com/cordx56/rustowl/issues/129) from MuntasirSZN/feat/community-standards
-- Merge pull request [#128](https://github.com/cordx56/rustowl/issues/128) from MuntasirSZN/main
-
-
-<a name="v0.3.1-alpha.1"></a>
-## [v0.3.1-alpha.1] - 2025-05-05
 ### 🎨 Chores
+- update changelog
 - update changelog
 - update changelog ([#116](https://github.com/cordx56/rustowl/issues/116))
 - update changelog ([#112](https://github.com/cordx56/rustowl/issues/112))
@@ -41,15 +14,22 @@
 - update changelog
 
 ### 🐞 Bug Fixes
+- email
+- dont use tar, use Compress-Archive instead
 - change compress script to use sysroot dir ([#125](https://github.com/cordx56/rustowl/issues/125))
 - add release on top of cp
 - use target name in cp command
 - pr permission for changelog
+- **aur:** add cd lines as it errors
 - **binstall:** use archives instead of binaries
+- **changelogen:** only add normal releases, not alpha and others
 - **ci:** use powershell in windoes ci
 - **reqwest:** dont depend on openssl-sys, use rustls for lower system deps
+- **windows:** unzip
 
 ### 🚀 Features
+- add a pr template
+- add a code of conduct and security file
 - aur packages ([#105](https://github.com/cordx56/rustowl/issues/105))
 - aur packages
 - automatic updates with dependabot
@@ -57,42 +37,9 @@
 - auto release changelogs, changelog generation
 - **archive:** implement zipping for windows
 
-### Pull Requests
-- Merge pull request [#126](https://github.com/cordx56/rustowl/issues/126) from cordx56/create-pull-request/autogenerate-changelog
-- Merge pull request [#124](https://github.com/cordx56/rustowl/issues/124) from MuntasirSZN/main
-- Merge pull request [#123](https://github.com/cordx56/rustowl/issues/123) from MuntasirSZN/main
-- Merge pull request [#115](https://github.com/cordx56/rustowl/issues/115) from MuntasirSZN/main
-- Merge pull request [#114](https://github.com/cordx56/rustowl/issues/114) from MuntasirSZN/main
-- Merge pull request [#113](https://github.com/cordx56/rustowl/issues/113) from MuntasirSZN/main
-- Merge pull request [#111](https://github.com/cordx56/rustowl/issues/111) from MuntasirSZN/fix/archive-ci
-- Merge pull request [#103](https://github.com/cordx56/rustowl/issues/103) from MuntasirSZN/feat/dependabot
-- Merge pull request [#101](https://github.com/cordx56/rustowl/issues/101) from MuntasirSZN/feat/zig-linker
-- Merge pull request [#96](https://github.com/cordx56/rustowl/issues/96) from MuntasirSZN/main
-- Merge pull request [#97](https://github.com/cordx56/rustowl/issues/97) from MuntasirSZN/fix/binstall
-- Merge pull request [#99](https://github.com/cordx56/rustowl/issues/99) from Alex-Grimes/enhancment/78_Add-highlight-style-config-option
-- Merge pull request [#98](https://github.com/cordx56/rustowl/issues/98) from cordx56/fix/ci-changelogen
-- Merge pull request [#92](https://github.com/cordx56/rustowl/issues/92) from MuntasirSZN/main
-- Merge pull request [#94](https://github.com/cordx56/rustowl/issues/94) from mrcjkb/mj/push-mpkursvmrosw
-- Merge pull request [#91](https://github.com/cordx56/rustowl/issues/91) from MuntasirSZN/main
-
 
 <a name="v0.3.0"></a>
 ## [v0.3.0] - 2025-04-30
-
-<a name="v0.3.0-alpha.2"></a>
-## [v0.3.0-alpha.2] - 2025-04-30
-### Pull Requests
-- Merge pull request [#88](https://github.com/cordx56/rustowl/issues/88) from yasuo-ozu/fix_build_canonical
-
-
-<a name="v0.3.0-alpha.1"></a>
-## [v0.3.0-alpha.1] - 2025-04-27
-
-<a name="v0.2.3-alpha.1"></a>
-## [v0.2.3-alpha.1] - 2025-04-25
-
-<a name="v0.2.3pre"></a>
-## [v0.2.3pre] - 2025-04-25
 ### 🚀 Features
 - shell completions and man pages
 
@@ -100,18 +47,13 @@
 - test workflow
 
 ### Pull Requests
+- Merge pull request [#88](https://github.com/cordx56/rustowl/issues/88) from yasuo-ozu/fix_build_canonical
 - Merge pull request [#85](https://github.com/cordx56/rustowl/issues/85) from MuntasirSZN/main
 - Merge pull request [#80](https://github.com/cordx56/rustowl/issues/80) from siketyan/ci/more-platform
 
 
 <a name="v0.2.2"></a>
 ## [v0.2.2] - 2025-04-18
-
-<a name="v0.2.2pre2"></a>
-## [v0.2.2pre2] - 2025-04-18
-
-<a name="v0.2.2pre"></a>
-## [v0.2.2pre] - 2025-04-18
 ### ♻️ Code Refactoring
 - streamline toolchain detection and correct cargo path
 
@@ -224,38 +166,18 @@
 ## [v0.0.3] - 2025-01-30
 ### Pull Requests
 - Merge pull request [#6](https://github.com/cordx56/rustowl/issues/6) from Jayllyz/build/enable-lto-codegen
-
-
-<a name="v0.0.3pre"></a>
-## [v0.0.3pre] - 2025-01-26
-### Pull Requests
 - Merge pull request [#5](https://github.com/cordx56/rustowl/issues/5) from mu001999-contrib/main
 
 
 <a name="v0.0.2"></a>
 ## [v0.0.2] - 2025-01-23
 
-<a name="v0.0.2pre"></a>
-## [v0.0.2pre] - 2025-01-23
-
 <a name="v0.0.1"></a>
-## [v0.0.1] - 2024-11-13
+## v0.0.1 - 2024-11-13
 
-<a name="vpre"></a>
-## vpre - 2024-11-11
-
-[Unreleased]: https://github.com/cordx56/rustowl/compare/v0.3.1-alpha.3...HEAD
-[v0.3.1-alpha.3]: https://github.com/cordx56/rustowl/compare/v0.3.1-alpha.2...v0.3.1-alpha.3
-[v0.3.1-alpha.2]: https://github.com/cordx56/rustowl/compare/v0.3.1-alpha.1...v0.3.1-alpha.2
-[v0.3.1-alpha.1]: https://github.com/cordx56/rustowl/compare/v0.3.0...v0.3.1-alpha.1
-[v0.3.0]: https://github.com/cordx56/rustowl/compare/v0.3.0-alpha.2...v0.3.0
-[v0.3.0-alpha.2]: https://github.com/cordx56/rustowl/compare/v0.3.0-alpha.1...v0.3.0-alpha.2
-[v0.3.0-alpha.1]: https://github.com/cordx56/rustowl/compare/v0.2.3-alpha.1...v0.3.0-alpha.1
-[v0.2.3-alpha.1]: https://github.com/cordx56/rustowl/compare/v0.2.3pre...v0.2.3-alpha.1
-[v0.2.3pre]: https://github.com/cordx56/rustowl/compare/v0.2.2...v0.2.3pre
-[v0.2.2]: https://github.com/cordx56/rustowl/compare/v0.2.2pre2...v0.2.2
-[v0.2.2pre2]: https://github.com/cordx56/rustowl/compare/v0.2.2pre...v0.2.2pre2
-[v0.2.2pre]: https://github.com/cordx56/rustowl/compare/v0.2.1...v0.2.2pre
+[Unreleased]: https://github.com/cordx56/rustowl/compare/v0.3.0...HEAD
+[v0.3.0]: https://github.com/cordx56/rustowl/compare/v0.2.2...v0.3.0
+[v0.2.2]: https://github.com/cordx56/rustowl/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/cordx56/rustowl/compare/v0.2.0...v0.2.1
 [v0.2.0]: https://github.com/cordx56/rustowl/compare/v0.1.4...v0.2.0
 [v0.1.4]: https://github.com/cordx56/rustowl/compare/v0.1.3...v0.1.4
@@ -265,8 +187,5 @@
 [v0.1.0]: https://github.com/cordx56/rustowl/compare/v0.0.5...v0.1.0
 [v0.0.5]: https://github.com/cordx56/rustowl/compare/v0.0.4...v0.0.5
 [v0.0.4]: https://github.com/cordx56/rustowl/compare/v0.0.3...v0.0.4
-[v0.0.3]: https://github.com/cordx56/rustowl/compare/v0.0.3pre...v0.0.3
-[v0.0.3pre]: https://github.com/cordx56/rustowl/compare/v0.0.2...v0.0.3pre
-[v0.0.2]: https://github.com/cordx56/rustowl/compare/v0.0.2pre...v0.0.2
-[v0.0.2pre]: https://github.com/cordx56/rustowl/compare/v0.0.1...v0.0.2pre
-[v0.0.1]: https://github.com/cordx56/rustowl/compare/vpre...v0.0.1
+[v0.0.3]: https://github.com/cordx56/rustowl/compare/v0.0.2...v0.0.3
+[v0.0.2]: https://github.com/cordx56/rustowl/compare/v0.0.1...v0.0.2
