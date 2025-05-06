@@ -16,7 +16,7 @@ serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.135"
 log = "0.4.22"
 simple_logger = { version = "5.0.0", features = ["stderr"] }
-tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "process", "fs"] }
+tokio = { version = "1.45.0", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "process", "fs"] }
 tower-lsp = "0.20.0"
 process_alive = "0.1.1"
 cargo_metadata = "0.19.2"
