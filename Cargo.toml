@@ -26,12 +26,12 @@ tar = "0.4.44"
 flate2 = "1.1.1"
 reqwest = { version = "0.12.15", features = ["rustls-tls"] }
 clap_complete_nushell = "4.5.5"
-clap_complete = "4.5.47"
+clap_complete = "4.5.49"
 zip = "2.6.1"
 
 [build-dependencies]
 clap_complete_nushell = "4.5.5"
-clap_complete = "4.5.47"
+clap_complete = "4.5.49"
 clap_mangen = "0.2.26"
 clap = { version = "4.5.35", features = ["cargo"]  }
 
