@@ -25,7 +25,8 @@ fn main() -> Result<(), Error> {
     let sysroot = get_sysroot().unwrap();
     set_rustc_driver_path(&sysroot);
 
-    let out_dir = Path::new(&env::var("OUT_DIR").unwrap()).join("rustowl-build-time-out");
+    let out_dir = Path::new(&env::var("OUT_DIR").expect("OUT_DIR unset. Expected path."))
+        .join("rustowl-build-time-out");
     let mut cmd = cli();
     let completion_out_dir = out_dir.join("completions");
     fs::create_dir_all(&completion_out_dir)?;
@@ -46,10 +47,10 @@ fn main() -> Result<(), Error> {
 
 // get toolchain
 fn get_toolchain() -> String {
-    env::var("RUSTUP_TOOLCHAIN").unwrap()
+    env::var("RUSTUP_TOOLCHAIN").expect("RUSTUP_TOOLCHAIN unset. Expected version.")
 }
 fn get_host_tuple() -> Option<String> {
-    match Command::new(env::var("RUSTC").unwrap())
+    match Command::new(env::var("RUSTC").expect("RUSTC unset. Expected rustc path."))
         .arg("--print=host-tuple")
         .output()
     {
@@ -59,7 +60,7 @@ fn get_host_tuple() -> Option<String> {
 }
 // output rustc_driver path
 fn get_sysroot() -> Option<String> {
-    match Command::new(env::var("RUSTC").unwrap())
+    match Command::new(env::var("RUSTC").expect("RUSTC unset. Expected rustc path."))
         .arg("--print=sysroot")
         .output()
     {
