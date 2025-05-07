@@ -149,13 +149,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
       - name: Install dependencies
         run: yarn install --frozen-locked
         working-directory: ./vscode
+
       - name: Create VSIX
         run: yarn build
         working-directory: ./vscode
@@ -165,7 +168,6 @@ jobs:
         with:
           name: rustowl-vscode
           path: vscode/**/*.vsix
-
 
   release:
     runs-on: ubuntu-latest
@@ -179,18 +181,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: rustowl-*
           merge-multiple: true
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
       - name: Generate Release Notes
-        run: npx changelogithub@latest --output release.md
+        run: |
+          npx changelogithub@latest --contributors --output release.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
