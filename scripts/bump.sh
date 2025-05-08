@@ -15,11 +15,20 @@ VERSION_WITHOUT_V="${VERSION#v}"
 
 echo "Updating to version: $VERSION"
 
-# 1. Update Cargo.toml in root directory
+# Check if version contains alpha, beta, rc, dev, or other pre-release identifiers
+if echo "$VERSION_WITHOUT_V" | grep -q -E 'alpha|beta|rc|dev|pre|snapshot'; then
+	IS_PRERELEASE=true
+	echo "Pre-release version detected ($VERSION_WITHOUT_V). PKGBUILD will not be updated."
+else
+	IS_PRERELEASE=false
+	echo "Stable version detected ($VERSION_WITHOUT_V)."
+fi
+
+# 1. Update Cargo.toml in root directory (only the first version field)
 if [ -f Cargo.toml ]; then
 	echo "Updating Cargo.toml..."
-	# Use sed to replace the version line
-	sed -i "s/^version = .*/version = \"$VERSION_WITHOUT_V\"/" Cargo.toml
+	# Use sed to replace only the first occurrence of the version line
+	sed -i '0,/^version = .*/{s/^version = .*/version = "'$VERSION_WITHOUT_V'"/}' Cargo.toml
 else
 	echo "Error: Cargo.toml not found in current directory"
 	exit 1
@@ -34,11 +43,13 @@ else
 	echo "Warning: vscode/package.json not found"
 fi
 
-# 3. Update aur/PKGBUILD
-if [ -f aur/PKGBUILD ]; then
+# 3. Update aur/PKGBUILD only for stable releases
+if [ "$IS_PRERELEASE" = false ] && [ -f aur/PKGBUILD ]; then
 	echo "Updating aur/PKGBUILD..."
 	# Use sed to replace the pkgver line
 	sed -i "s/^pkgver=.*/pkgver=$VERSION_WITHOUT_V/" aur/PKGBUILD
+elif [ -f aur/PKGBUILD ]; then
+	echo "Skipping aur/PKGBUILD update for pre-release version"
 else
 	echo "Warning: aur/PKGBUILD not found"
 fi
