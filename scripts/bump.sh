@@ -10,6 +10,8 @@ if [ $# -ne 1 ]; then
   exit 1
 fi
 
+[[ $(which gsed > /dev/null 2>&1; echo $?) = 0 ]] && sed="gsed" || sed="sed"
+
 VERSION=$1
 VERSION_WITHOUT_V="${VERSION#v}"
 
@@ -28,7 +30,7 @@ fi
 if [ -f Cargo.toml ]; then
   echo "Updating Cargo.toml..."
   # Use sed to replace only the first occurrence of the version line
-  sed -i '0,/^version = .*/{s/^version = .*/version = "'$VERSION_WITHOUT_V'"/}' Cargo.toml
+  $sed -i '0,/^version = .*/{s/^version = .*/version = "'$VERSION_WITHOUT_V'"/}' Cargo.toml
 else
   echo "Error: Cargo.toml not found in current directory"
   exit 1
@@ -38,7 +40,7 @@ fi
 if [ -f vscode/package.json ]; then
   echo "Updating vscode/package.json..."
   # Use sed to replace the "version": "x.x.x" line
-  sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION_WITHOUT_V\"/" vscode/package.json
+  $sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION_WITHOUT_V\"/" vscode/package.json
 else
   echo "Warning: vscode/package.json not found"
 fi
@@ -47,7 +49,7 @@ fi
 if [ "$IS_PRERELEASE" = false ] && [ -f aur/PKGBUILD ]; then
   echo "Updating aur/PKGBUILD..."
   # Use sed to replace the pkgver line
-  sed -i "s/^pkgver=.*/pkgver=$VERSION_WITHOUT_V/" aur/PKGBUILD
+  $sed -i "s/^pkgver=.*/pkgver=$VERSION_WITHOUT_V/" aur/PKGBUILD
 elif [ -f aur/PKGBUILD ]; then
   echo "Skipping aur/PKGBUILD update for pre-release version"
 else
