@@ -10,10 +10,6 @@ include!("src/shells.rs");
 fn main() -> Result<(), Error> {
     println!("cargo::rustc-env=RUSTOWL_TOOLCHAIN={}", get_toolchain());
 
-    if let Ok(sysroot) = env::var("RUSTOWL_RUNTIME_DIRS") {
-        println!("cargo::rustc-env=RUSTOWL_RUNTIME_DIRS={}", sysroot);
-    }
-
     #[cfg(not(windows))]
     let tarball_name = format!("rustowl-{}.tar.gz", get_host_tuple().unwrap());
 

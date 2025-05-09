@@ -1,8 +1,12 @@
 use std::env;
 use std::fs::read_dir;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::LazyLock;
-use tokio::fs::{create_dir_all, remove_dir_all};
+use tokio::{
+    fs::{create_dir_all, remove_dir_all},
+    process,
+};
 
 #[cfg(not(windows))]
 use flate2::read::GzDecoder;
@@ -12,22 +16,28 @@ use tar::Archive;
 use zip::ZipArchive;
 
 pub const TOOLCHAIN: &str = env!("RUSTOWL_TOOLCHAIN");
-const BUILD_RUNTIME_DIRS: Option<&str> = option_env!("RUSTOWL_RUNTIME_DIRS");
 
 static FALLBACK_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
     let exec_dir = env::current_exe().unwrap().parent().unwrap().to_path_buf();
     vec![exec_dir.join("rustowl-runtime"), exec_dir]
 });
 
+const BUILD_RUNTIME_DIRS: Option<&str> = option_env!("RUSTOWL_RUNTIME_DIRS");
 static CONFIG_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
     BUILD_RUNTIME_DIRS
+        .map(|v| env::split_paths(v).collect())
+        .unwrap_or_default()
+});
+const BUILD_SYSROOT_DIRS: Option<&str> = option_env!("RUSTOWL_SYSROOT_DIRS");
+static CONFIG_SYSROOT_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
+    BUILD_SYSROOT_DIRS
         .map(|v| env::split_paths(v).collect())
         .unwrap_or_default()
 });
 
 const ARCHIVE_NAME: &str = env!("RUSTOWL_ARCHIVE_NAME");
 
-pub const RUSTC_DRIVER_NAME: &str = env!("RUSTC_DRIVER_NAME");
+const RUSTC_DRIVER_NAME: &str = env!("RUSTC_DRIVER_NAME");
 fn recursive_read_dir(path: impl AsRef<Path>) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if path.as_ref().is_dir() {
@@ -55,21 +65,21 @@ pub fn rustc_driver_path(sysroot: impl AsRef<Path>) -> Option<PathBuf> {
 fn sysroot_from_runtime(runtime: impl AsRef<Path>) -> PathBuf {
     runtime.as_ref().join("sysroot").join(TOOLCHAIN)
 }
-fn is_valid_runtime_dir(runtime: impl AsRef<Path>) -> bool {
-    rustc_driver_path(sysroot_from_runtime(runtime)).is_some()
+fn is_valid_sysroot_dir(sysroot: impl AsRef<Path>) -> bool {
+    rustc_driver_path(sysroot).is_some()
 }
-pub fn get_configured_runtime_dir() -> Option<PathBuf> {
+fn get_configured_runtime_dir() -> Option<PathBuf> {
     let env_var = env::var("RUSTOWL_RUNTIME_DIRS").unwrap_or_default();
 
     for runtime in env::split_paths(&env_var) {
-        if is_valid_runtime_dir(&runtime) {
+        if is_valid_sysroot_dir(sysroot_from_runtime(&runtime)) {
             log::info!("select runtime dir from env var: {}", runtime.display());
             return Some(runtime);
         }
     }
 
     for runtime in &*CONFIG_RUNTIME_DIRS {
-        if is_valid_runtime_dir(runtime) {
+        if is_valid_sysroot_dir(sysroot_from_runtime(runtime)) {
             log::info!(
                 "select runtime dir from build time env var: {}",
                 runtime.display()
@@ -81,14 +91,14 @@ pub fn get_configured_runtime_dir() -> Option<PathBuf> {
 }
 pub fn check_fallback_dir() -> Option<PathBuf> {
     for fallback in &*FALLBACK_RUNTIME_DIRS {
-        if is_valid_runtime_dir(fallback) {
+        if is_valid_sysroot_dir(sysroot_from_runtime(fallback)) {
             log::info!("select runtime from fallback: {}", fallback.display());
             return Some(fallback.clone());
         }
     }
     None
 }
-pub async fn get_runtime_dir() -> PathBuf {
+async fn get_runtime_dir() -> PathBuf {
     if let Some(runtime) = get_configured_runtime_dir() {
         return runtime;
     }
@@ -105,7 +115,54 @@ pub async fn get_runtime_dir() -> PathBuf {
         }
     }
 }
+fn get_configured_sysroot_dir() -> Option<PathBuf> {
+    let env_var = env::var("RUSTOWL_SYSROOT_DIRS").unwrap_or_default();
+
+    for sysroot in env::split_paths(&env_var) {
+        if is_valid_sysroot_dir(&sysroot) {
+            log::info!("select sysroot dir from env var: {}", sysroot.display());
+            return Some(sysroot);
+        }
+    }
+
+    for sysroot in &*CONFIG_SYSROOT_DIRS {
+        if is_valid_sysroot_dir(sysroot) {
+            log::info!(
+                "select sysroot dir from build time env var: {}",
+                sysroot.display(),
+            );
+            return Some(sysroot.clone());
+        }
+    }
+    None
+}
 pub async fn get_sysroot() -> PathBuf {
+    if let Some(sysroot) = get_configured_sysroot_dir() {
+        return sysroot;
+    }
+
+    // get sysroot from rustup
+    if let Ok(child) = process::Command::new("rustup")
+        .args(["run", TOOLCHAIN, "rustc", "--print=sysroot"])
+        .stdout(Stdio::piped())
+        .spawn()
+    {
+        if let Ok(sysroot) = child
+            .wait_with_output()
+            .await
+            .map(|v| PathBuf::from(String::from_utf8_lossy(&v.stdout).trim()))
+        {
+            if is_valid_sysroot_dir(&sysroot) {
+                log::info!(
+                    "select sysroot dir from rustup installed: {}",
+                    sysroot.display(),
+                );
+                return sysroot;
+            }
+        }
+    }
+
+    // fallback sysroot
     sysroot_from_runtime(get_runtime_dir().await)
 }
 
@@ -248,7 +305,13 @@ pub async fn get_rustowlc_path() -> String {
     #[cfg(windows)]
     current_rustowlc.set_file_name("rustowlc.exe");
     if current_rustowlc.is_file() {
+        log::info!("rustowlc is selected in the same directory as rustowl executable");
         return current_rustowlc.to_string_lossy().to_string();
+    }
+
+    if process::Command::new("rustowlc").spawn().is_ok() {
+        log::info!("rustowlc is selected in PATH");
+        return "rustowlc".to_owned();
     }
 
     let runtime_dir = get_runtime_dir().await;
@@ -259,6 +322,7 @@ pub async fn get_rustowlc_path() -> String {
     if rustowlc.is_file() {
         rustowlc.to_string_lossy().to_string()
     } else {
+        log::warn!("rustowlc not found; fallback");
         "rustowlc".to_owned()
     }
 }
