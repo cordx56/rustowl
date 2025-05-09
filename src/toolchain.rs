@@ -28,9 +28,9 @@ static CONFIG_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
         .map(|v| env::split_paths(v).collect())
         .unwrap_or_default()
 });
-const BUILD_SYSROOT_DIRS: Option<&str> = option_env!("RUSTOWL_SYSROOT_DIRS");
-static CONFIG_SYSROOT_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
-    BUILD_SYSROOT_DIRS
+const BUILD_SYSROOTS: Option<&str> = option_env!("RUSTOWL_SYSROOTS");
+static CONFIG_SYSROOTS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
+    BUILD_SYSROOTS
         .map(|v| env::split_paths(v).collect())
         .unwrap_or_default()
 });
@@ -65,21 +65,21 @@ pub fn rustc_driver_path(sysroot: impl AsRef<Path>) -> Option<PathBuf> {
 fn sysroot_from_runtime(runtime: impl AsRef<Path>) -> PathBuf {
     runtime.as_ref().join("sysroot").join(TOOLCHAIN)
 }
-fn is_valid_sysroot_dir(sysroot: impl AsRef<Path>) -> bool {
+fn is_valid_sysroot(sysroot: impl AsRef<Path>) -> bool {
     rustc_driver_path(sysroot).is_some()
 }
 fn get_configured_runtime_dir() -> Option<PathBuf> {
     let env_var = env::var("RUSTOWL_RUNTIME_DIRS").unwrap_or_default();
 
     for runtime in env::split_paths(&env_var) {
-        if is_valid_sysroot_dir(sysroot_from_runtime(&runtime)) {
+        if is_valid_sysroot(sysroot_from_runtime(&runtime)) {
             log::info!("select runtime dir from env var: {}", runtime.display());
             return Some(runtime);
         }
     }
 
     for runtime in &*CONFIG_RUNTIME_DIRS {
-        if is_valid_sysroot_dir(sysroot_from_runtime(runtime)) {
+        if is_valid_sysroot(sysroot_from_runtime(runtime)) {
             log::info!(
                 "select runtime dir from build time env var: {}",
                 runtime.display()
@@ -91,7 +91,7 @@ fn get_configured_runtime_dir() -> Option<PathBuf> {
 }
 pub fn check_fallback_dir() -> Option<PathBuf> {
     for fallback in &*FALLBACK_RUNTIME_DIRS {
-        if is_valid_sysroot_dir(sysroot_from_runtime(fallback)) {
+        if is_valid_sysroot(sysroot_from_runtime(fallback)) {
             log::info!("select runtime from fallback: {}", fallback.display());
             return Some(fallback.clone());
         }
@@ -115,18 +115,18 @@ async fn get_runtime_dir() -> PathBuf {
         }
     }
 }
-fn get_configured_sysroot_dir() -> Option<PathBuf> {
-    let env_var = env::var("RUSTOWL_SYSROOT_DIRS").unwrap_or_default();
+fn get_configured_sysroot() -> Option<PathBuf> {
+    let env_var = env::var("RUSTOWL_SYSROOTS").unwrap_or_default();
 
     for sysroot in env::split_paths(&env_var) {
-        if is_valid_sysroot_dir(&sysroot) {
+        if is_valid_sysroot(&sysroot) {
             log::info!("select sysroot dir from env var: {}", sysroot.display());
             return Some(sysroot);
         }
     }
 
-    for sysroot in &*CONFIG_SYSROOT_DIRS {
-        if is_valid_sysroot_dir(sysroot) {
+    for sysroot in &*CONFIG_SYSROOTS {
+        if is_valid_sysroot(sysroot) {
             log::info!(
                 "select sysroot dir from build time env var: {}",
                 sysroot.display(),
@@ -137,7 +137,7 @@ fn get_configured_sysroot_dir() -> Option<PathBuf> {
     None
 }
 pub async fn get_sysroot() -> PathBuf {
-    if let Some(sysroot) = get_configured_sysroot_dir() {
+    if let Some(sysroot) = get_configured_sysroot() {
         return sysroot;
     }
 
@@ -152,7 +152,7 @@ pub async fn get_sysroot() -> PathBuf {
             .await
             .map(|v| PathBuf::from(String::from_utf8_lossy(&v.stdout).trim()))
         {
-            if is_valid_sysroot_dir(&sysroot) {
+            if is_valid_sysroot(&sysroot) {
                 log::info!(
                     "select sysroot dir from rustup installed: {}",
                     sysroot.display(),
