@@ -2,7 +2,7 @@
 # Maintainer: cordx56 <cordx56@cordx.cx>
 
 pkgname=rustowl-bin
-pkgver=0.3.2-alpha.1
+pkgver=0.3.2
 pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'

@@ -2,7 +2,7 @@
   "name": "rustowl-vscode",
   "displayName": "RustOwl VSCode",
   "description": "Visualize ownership and lifetimes in Rust",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": "cordx56 <cordx56@cordx.cx>",
   "publisher": "cordx56",
   "engines": {
