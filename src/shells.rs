@@ -5,14 +5,14 @@ use std::path::Path;
 use std::str::FromStr;
 
 use clap::ValueEnum;
-use clap::builder::PossibleValue;
 
 use clap_complete::Generator;
 use clap_complete::shells;
 
 /// Shell with auto-generated completion script available.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, ValueEnum)]
 #[non_exhaustive]
+#[value(rename_all = "lower")]
 pub enum Shell {
     /// Bourne Again `SHell` (bash)
     Bash,
@@ -47,31 +47,6 @@ impl FromStr for Shell {
             }
         }
         Err(format!("invalid variant: {s}"))
-    }
-}
-
-// Hand-rolled so it can work even when `derive` feature is disabled
-impl ValueEnum for Shell {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[
-            Shell::Bash,
-            Shell::Elvish,
-            Shell::Fish,
-            Shell::PowerShell,
-            Shell::Zsh,
-            Shell::Nushell,
-        ]
-    }
-
-    fn to_possible_value(&self) -> Option<PossibleValue> {
-        Some(match self {
-            Shell::Bash => PossibleValue::new("bash"),
-            Shell::Elvish => PossibleValue::new("elvish"),
-            Shell::Fish => PossibleValue::new("fish"),
-            Shell::PowerShell => PossibleValue::new("powershell"),
-            Shell::Zsh => PossibleValue::new("zsh"),
-            Shell::Nushell => PossibleValue::new("nushell"),
-        })
     }
 }
 

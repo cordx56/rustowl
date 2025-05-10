@@ -21,7 +21,7 @@ tower-lsp = "0.20.0"
 process_alive = "0.1.1"
 cargo_metadata = "0.19.2"
 uuid = { version = "1", features = ["v4"] }
-clap = { version = "4.5.35", features = ["cargo"] }
+clap = { version = "4.5.35", features = ["cargo", "derive"] }
 tar = "0.4.44"
 flate2 = "1.1.1"
 reqwest = { version = "0.12.15", default-features = false, features = ["http2", "rustls-tls"] }
@@ -33,7 +33,7 @@ zip = "2.6.1"
 clap_complete_nushell = "4.5.5"
 clap_complete = "4.5.50"
 clap_mangen = "0.2.26"
-clap = { version = "4.5.35", features = ["cargo"]  }
+clap = { version = "4.5.35", features = ["derive"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.169"

@@ -2,14 +2,14 @@
 //!
 //! An LSP server for visualizing ownership and lifetimes in Rust, designed for debugging and optimization.
 
+use clap::{CommandFactory, Parser};
 use clap_complete::generate;
-use rustowl::cli::cli;
-use rustowl::shells::Shell;
 use rustowl::*;
 use std::env;
 use std::io;
-use std::path::PathBuf;
 use tower_lsp::{LspService, Server};
+
+use crate::cli::{Cli, Commands, ToolchainCommands};
 
 fn set_log_level(default: log::LevelFilter) {
     log::set_max_level(
@@ -28,14 +28,11 @@ async fn main() {
         .unwrap();
     set_log_level("info".parse().unwrap());
 
-    let matches = cli().get_matches();
-    if let Some(arg) = matches.subcommand() {
+    let matches = Cli::parse();
+    if let Some(arg) = matches.command {
         match arg {
-            ("check", matches) => {
-                let path = matches
-                    .get_one::<String>("path")
-                    .map(PathBuf::from)
-                    .unwrap_or(env::current_dir().unwrap());
+            Commands::Check(matches) => {
+                let path = matches.path.unwrap_or(env::current_dir().unwrap());
                 if Backend::check(&path).await {
                     log::info!("Successfully analyzed");
                     std::process::exit(0);
@@ -44,36 +41,36 @@ async fn main() {
                     std::process::exit(1);
                 }
             }
-            ("clean", _) => {
+            Commands::Clean => {
                 if let Ok(meta) = cargo_metadata::MetadataCommand::new().exec() {
                     let target = meta.target_directory.join("owl");
                     tokio::fs::remove_dir_all(&target).await.ok();
                 }
             }
-            ("toolchain", matches) => match matches.subcommand() {
-                Some(("install", _)) => {
-                    if toolchain::check_fallback_dir().is_none()
-                        && rustowl::toolchain::setup_toolchain().await.is_err()
-                    {
-                        std::process::exit(1);
+            Commands::Toolchain(matches) => {
+                if let Some(arg) = matches.command {
+                    match arg {
+                        ToolchainCommands::Install => {
+                            if toolchain::check_fallback_dir().is_none()
+                                && rustowl::toolchain::setup_toolchain().await.is_err()
+                            {
+                                std::process::exit(1);
+                            }
+                        }
+                        ToolchainCommands::Uninstall => {
+                            rustowl::toolchain::uninstall_toolchain().await;
+                        }
                     }
                 }
-                Some(("uninstall", _)) => {
-                    rustowl::toolchain::uninstall_toolchain().await;
-                }
-                _ => {}
-            },
-            ("completions", matches) => {
-                set_log_level("off".parse().unwrap());
-                let shell = matches
-                    .get_one::<Shell>("shell")
-                    .expect("shell is required by clap");
-                generate(*shell, &mut cli(), "rustowl", &mut io::stdout());
             }
-            _ => {}
+            Commands::Completions(matches) => {
+                set_log_level("off".parse().unwrap());
+                let shell = matches.shell;
+                generate(shell, &mut Cli::command(), "rustowl", &mut io::stdout());
+            }
         }
-    } else if matches.get_flag("version") {
-        if matches.get_count("quiet") == 0 {
+    } else if matches.version {
+        if matches.quiet == 0 {
             print!("RustOwl ");
         }
         println!("v{}", clap::crate_version!());
