@@ -1,45 +1,53 @@
-pub fn cli() -> clap::Command {
-    clap::Command::new("RustOwl")
-        .author(clap::crate_authors!())
-        .arg(
-            clap::Arg::new("version")
-                .short('V')
-                .long("version")
-                .required(false)
-                .action(clap::ArgAction::SetTrue),
-        )
-        .arg(
-            clap::Arg::new("quiet")
-                .short('q')
-                .long("quiet")
-                .required(false)
-                .action(clap::ArgAction::Count),
-        )
-        .arg(
-            clap::Arg::new("io")
-                .long("stdio")
-                .required(false)
-                .action(clap::ArgAction::SetTrue),
-        )
-        .subcommand_required(false)
-        .subcommand(
-            clap::Command::new("check")
-                .arg(clap::Arg::new("path").required(false).value_name("path")),
-        )
-        .subcommand(clap::Command::new("clean"))
-        .subcommand(
-            clap::Command::new("toolchain")
-                .subcommand(clap::Command::new("install"))
-                .subcommand(clap::Command::new("uninstall")),
-        )
-        .subcommand(
-            clap::Command::new("completions")
-                .about("Generate shell completions")
-                .arg(
-                    clap::Arg::new("shell")
-                        .help("The shell to generate completions for")
-                        .required(true)
-                        .value_parser(clap::value_parser!(crate::shells::Shell)),
-                ),
-        )
+use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
+
+#[derive(Debug, Parser)]
+#[command(author)]
+pub struct Cli {
+    /// Print version.
+    #[arg(short('V'), long)]
+    pub version: bool,
+
+    #[arg(short, long, action(ArgAction::Count))]
+    pub quiet: u8,
+
+    #[arg(long)]
+    pub stdio: bool,
+
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Commands {
+    Check(Check),
+    Clean,
+    Toolchain(ToolchainArgs),
+
+    /// Generate shell completions.
+    Completions(Completions),
+}
+
+#[derive(Args, Debug)]
+pub struct Check {
+    #[arg(value_name("path"), value_hint(ValueHint::AnyPath))]
+    pub path: Option<std::path::PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct ToolchainArgs {
+    #[command(subcommand)]
+    pub command: Option<ToolchainCommands>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ToolchainCommands {
+    Install,
+    Uninstall,
+}
+
+#[derive(Args, Debug)]
+pub struct Completions {
+    /// The shell to generate completions for.
+    #[arg(value_enum)]
+    pub shell: crate::shells::Shell,
 }

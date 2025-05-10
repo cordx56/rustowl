@@ -1,3 +1,4 @@
+use clap::CommandFactory;
 use clap_complete::generate_to;
 use std::env;
 use std::fs;
@@ -23,7 +24,7 @@ fn main() -> Result<(), Error> {
 
     let out_dir = Path::new(&env::var("OUT_DIR").expect("OUT_DIR unset. Expected path."))
         .join("rustowl-build-time-out");
-    let mut cmd = cli();
+    let mut cmd = Cli::command();
     let completion_out_dir = out_dir.join("completions");
     fs::create_dir_all(&completion_out_dir)?;
 
