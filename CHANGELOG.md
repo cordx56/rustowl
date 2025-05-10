@@ -1,7 +1,32 @@
 <a name="unreleased"></a>
 ## [Unreleased]
 
+
+<a name="v0.3.2"></a>
+## [v0.3.2] - 2025-05-09
+### 🐞 Bug Fixes
+- support gsed (macOS)
+- version.sh removed and use ./scripts/bump.sh
+- specify pkg-fmt for binstall
+- restore current newest version
+
+### 🚀 Features
+- v0.3.2 release
+- support RUSTOWL_SYSROOT_DIRS
+- add a bump.sh for bumping ([#148](https://github.com/cordx56/rustowl/issues/148))
+- documented binstall method
+- support single .rs file analyze and VS Code download progress
+
+### Pull Requests
+- Merge pull request [#146](https://github.com/cordx56/rustowl/issues/146) from cordx56/dependabot/npm_and_yarn/vscode/types/node-22.15.14
+
+
+<a name="v0.3.1"></a>
+## [v0.3.1] - 2025-05-07
 ### 🎨 Chores
+- Release v0.3.1
+- Don't check every main push
+- update changelog
 - update changelog
 - update changelog
 - update changelog ([#116](https://github.com/cordx56/rustowl/issues/116))
@@ -15,11 +40,16 @@
 
 ### 🐞 Bug Fixes
 - email
-- dont use tar, use Compress-Archive instead
-- change compress script to use sysroot dir ([#125](https://github.com/cordx56/rustowl/issues/125))
-- add release on top of cp
 - use target name in cp command
+- VS Code version check returns null
 - pr permission for changelog
+- dont use tar, use Compress-Archive instead
+- check before release and profile dir
+- add release on top of cp
+- change compress script to use sysroot dir ([#125](https://github.com/cordx56/rustowl/issues/125))
+- arm Windows build
+- avoid failure to find sysroot
+- rustowlc ext for Windows
 - **aur:** add cd lines as it errors
 - **binstall:** use archives instead of binaries
 - **changelogen:** only add normal releases, not alpha and others
@@ -28,6 +58,10 @@
 - **windows:** unzip
 
 ### 🚀 Features
+- better-release-notes
+- support multiple fallbacks
+- remove redundant rustc_driver
+- RustOwl version check for VS Code extension
 - add a pr template
 - add a code of conduct and security file
 - aur packages ([#105](https://github.com/cordx56/rustowl/issues/105))
@@ -36,6 +70,34 @@
 - use zip instead of tar in windows
 - auto release changelogs, changelog generation
 - **archive:** implement zipping for windows
+
+### Reverts
+- move CONTRIBUTING.md
+
+### Pull Requests
+- Merge pull request [#142](https://github.com/cordx56/rustowl/issues/142) from cordx56/feat/better-release-notes
+- Merge pull request [#140](https://github.com/cordx56/rustowl/issues/140) from MuntasirSZN/fix/changelogen
+- Merge pull request [#132](https://github.com/cordx56/rustowl/issues/132) from cordx56/create-pull-request/autogenerate-changelog
+- Merge pull request [#131](https://github.com/cordx56/rustowl/issues/131) from MuntasirSZN/fix/windows-unzip
+- Merge pull request [#130](https://github.com/cordx56/rustowl/issues/130) from MuntasirSZN/fix/pkgbuild-git
+- Merge pull request [#129](https://github.com/cordx56/rustowl/issues/129) from MuntasirSZN/feat/community-standards
+- Merge pull request [#128](https://github.com/cordx56/rustowl/issues/128) from MuntasirSZN/main
+- Merge pull request [#126](https://github.com/cordx56/rustowl/issues/126) from cordx56/create-pull-request/autogenerate-changelog
+- Merge pull request [#124](https://github.com/cordx56/rustowl/issues/124) from MuntasirSZN/main
+- Merge pull request [#123](https://github.com/cordx56/rustowl/issues/123) from MuntasirSZN/main
+- Merge pull request [#115](https://github.com/cordx56/rustowl/issues/115) from MuntasirSZN/main
+- Merge pull request [#114](https://github.com/cordx56/rustowl/issues/114) from MuntasirSZN/main
+- Merge pull request [#113](https://github.com/cordx56/rustowl/issues/113) from MuntasirSZN/main
+- Merge pull request [#111](https://github.com/cordx56/rustowl/issues/111) from MuntasirSZN/fix/archive-ci
+- Merge pull request [#103](https://github.com/cordx56/rustowl/issues/103) from MuntasirSZN/feat/dependabot
+- Merge pull request [#101](https://github.com/cordx56/rustowl/issues/101) from MuntasirSZN/feat/zig-linker
+- Merge pull request [#96](https://github.com/cordx56/rustowl/issues/96) from MuntasirSZN/main
+- Merge pull request [#97](https://github.com/cordx56/rustowl/issues/97) from MuntasirSZN/fix/binstall
+- Merge pull request [#99](https://github.com/cordx56/rustowl/issues/99) from Alex-Grimes/enhancment/78_Add-highlight-style-config-option
+- Merge pull request [#98](https://github.com/cordx56/rustowl/issues/98) from cordx56/fix/ci-changelogen
+- Merge pull request [#92](https://github.com/cordx56/rustowl/issues/92) from MuntasirSZN/main
+- Merge pull request [#94](https://github.com/cordx56/rustowl/issues/94) from mrcjkb/mj/push-mpkursvmrosw
+- Merge pull request [#91](https://github.com/cordx56/rustowl/issues/91) from MuntasirSZN/main
 
 
 <a name="v0.3.0"></a>
@@ -175,7 +237,9 @@
 <a name="v0.0.1"></a>
 ## v0.0.1 - 2024-11-13
 
-[Unreleased]: https://github.com/cordx56/rustowl/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/cordx56/rustowl/compare/v0.3.2...HEAD
+[v0.3.2]: https://github.com/cordx56/rustowl/compare/v0.3.1...v0.3.2
+[v0.3.1]: https://github.com/cordx56/rustowl/compare/v0.3.0...v0.3.1
 [v0.3.0]: https://github.com/cordx56/rustowl/compare/v0.2.2...v0.3.0
 [v0.2.2]: https://github.com/cordx56/rustowl/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/cordx56/rustowl/compare/v0.2.0...v0.2.1
