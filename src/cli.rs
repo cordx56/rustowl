@@ -7,9 +7,11 @@ pub struct Cli {
     #[arg(short('V'), long)]
     pub version: bool,
 
+    /// Suppress output.
     #[arg(short, long, action(ArgAction::Count))]
     pub quiet: u8,
 
+    /// Use stdio to communicate with the LSP server.
     #[arg(long)]
     pub stdio: bool,
 
@@ -19,8 +21,13 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
+    /// Check availability.
     Check(Check),
+
+    /// Remove artifacts from the target directory.
     Clean,
+
+    /// Install or uninstall the toolchain.
     Toolchain(ToolchainArgs),
 
     /// Generate shell completions.
@@ -29,6 +36,7 @@ pub enum Commands {
 
 #[derive(Args, Debug)]
 pub struct Check {
+    /// The path of a file or directory to check availability.
     #[arg(value_name("path"), value_hint(ValueHint::AnyPath))]
     pub path: Option<std::path::PathBuf>,
 }
@@ -41,7 +49,10 @@ pub struct ToolchainArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum ToolchainCommands {
+    /// Install the toolchain.
     Install,
+
+    /// Uninstall the toolchain.
     Uninstall,
 }
 
