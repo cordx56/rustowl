@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
-makedepends=('cargo' 'zig=0.13.0')
+makedepends=('rustup' 'zig=0.13.0')
 depends=()
 conflicts=('rustowl-git')
 arch=('any')
