@@ -101,9 +101,9 @@ jobs:
 
           mkdir -p runtime/sysroot
           cp -r "$(rustc --print=sysroot)" runtime/sysroot/${{ env.active_toolchain }}
-          find runtime/sysroot -type f | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf
+          find runtime/sysroot -type f | grep -v "libLLVM" | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf
+          find runtime/sysroot/lib -maxdepth 1 -mindepth 1 -type f | xargs rm
           find runtime/sysroot -depth -type d -empty -exec rm -rf {} \;
-          find runtime/sysroot -type f | grep 'rustc_driver-' | tail +2 | xargs rm -rf
 
           if [[ "${{ env.is_linux }}" == "true"  ]]; then
             cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime

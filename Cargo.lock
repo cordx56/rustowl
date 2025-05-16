@@ -1506,7 +1506,7 @@ dependencies = [
 
 [[package]]
 name = "rustowl"
-version = "0.3.2"
+version = "0.3.3-rc.1"
 dependencies = [
  "cargo_metadata",
  "clap",
