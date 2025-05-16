@@ -227,7 +227,7 @@ jobs:
         run: yarn vsce publish
         working-directory: ./vscode
         env:
-          VSCE_PAT: ${{ secret.VSCE_PAT }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: AUR Release
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
