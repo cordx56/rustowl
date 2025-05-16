@@ -229,6 +229,12 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
+      - name: Release crates.io
+        if: env.pre_release != 'true'
+        run: |
+          echo '${{ secrets.CRATES_IO_API_TOKEN }}' | cargo login
+          cargo publish
+
       - name: AUR Release
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
         with:
