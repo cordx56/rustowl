@@ -182,6 +182,12 @@ jobs:
       contents: write
 
     steps:
+      - name: Check pre-release
+        run: |
+          if [[ ! "${{ github.ref_name }}" =~ "^v[0-9]+\.[0-9]+\.[0-9]+$" ]]; then
+            echo "pre_release=true" >> $GITHUB_ENV
+          fi
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -210,6 +216,18 @@ jobs:
           files: artifacts/**/*
           draft: true
           body_path: release.md
+          prerelease: ${{ env.pre_release == 'true' }}
+
+      - name: Install VS Code dependencies
+        if: env.pre_release != 'true'
+        run: yarn install --frozen-locked
+        working-directory: ./vscode
+      - name: Release vsce
+        if: env.pre_release != 'true'
+        run: yarn vsce publish
+        working-directory: ./vscode
+        env:
+          VSCE_PAT: ${{ secret.VSCE_PAT }}
 
       - name: AUR Release
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
