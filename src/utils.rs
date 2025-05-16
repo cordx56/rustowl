@@ -107,7 +107,8 @@ pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
 pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
     let mut line = 0;
     let mut col = 0;
-    for (i, c) in s.chars().enumerate() {
+    // it seems that the compiler is ignoring CR
+    for (i, c) in s.replace("\r", "").chars().enumerate() {
         if idx == Loc::from(i as u32) {
             return (line, col);
         }
@@ -122,7 +123,8 @@ pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
 }
 pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
     let mut col = 0;
-    for (i, c) in s.chars().enumerate() {
+    // it seems that the compiler is ignoring CR
+    for (i, c) in s.replace("\r", "").chars().enumerate() {
         if line == 0 && col == char {
             return i as u32;
         }

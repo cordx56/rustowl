@@ -21,7 +21,8 @@ pub struct Loc(pub u32);
 impl Loc {
     pub fn new(source: &str, byte_pos: u32, offset: u32) -> Self {
         let byte_pos = byte_pos.saturating_sub(offset);
-        for (i, (byte, _)) in source.char_indices().enumerate() {
+        // it seems that the compiler is ignoring CR
+        for (i, (byte, _)) in source.replace("\r", "").char_indices().enumerate() {
             if byte_pos <= byte as u32 {
                 return Self(i as u32);
             }
