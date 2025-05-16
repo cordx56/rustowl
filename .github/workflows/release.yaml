@@ -97,13 +97,17 @@ jobs:
 
       - name: Setup archive artifacts
         run: |
-          rm -rf runtime
+          SYSROOT_PATH=sysroot/${{ env.active_toolchain }}
+          rm -rf runtime && mkdir -p runtime/$SYSROOT_PATH
 
-          mkdir -p runtime/sysroot
-          cp -r "$(rustc --print=sysroot)" runtime/sysroot/${{ env.active_toolchain }}
-          find runtime/sysroot -type f | grep -v "libLLVM" | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf
-          find runtime/sysroot -maxdepth 3 -mindepth 3 -type f | xargs rm
-          find runtime/sysroot -depth -type d -empty -exec rm -rf {} \;
+          rm -rf tmp && mkdir tmp
+          RUSTC_NAME="rustc-${{ env.active_toolchain }}"
+          STD_NAME="rust-std-${{ env.active_toolchain }}"
+          curl -L "http://static.rust-lang.org/dist/${RUSTC_NAME}.tar.gz" | tar xzvf - -C tmp/
+          curl -L "http://static.rust-lang.org/dist/${STD_NAME}.tar.gz" | tar xzvf - -C tmp/
+
+          ./tmp/${RUSTC_NAME}/install.sh --destdir=runtime/$SYSROOT_PATH --prefix=
+          ./tmp/${STD_NAME}/install.sh --destdir=runtime/$SYSROOT_PATH --prefix=
 
           if [[ "${{ env.is_linux }}" == "true"  ]]; then
             cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime

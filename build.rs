@@ -47,7 +47,7 @@ fn get_toolchain() -> String {
     env::var("RUSTUP_TOOLCHAIN").expect("RUSTUP_TOOLCHAIN unset. Expected version.")
 }
 fn get_host_tuple() -> Option<String> {
-    match Command::new(env::var("RUSTC").expect("RUSTC unset. Expected rustc path."))
+    match Command::new(env::var("RUSTC").unwrap_or("rustc".to_string()))
         .arg("--print=host-tuple")
         .output()
     {
