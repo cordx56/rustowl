@@ -6,7 +6,7 @@
   "author": "cordx56 <cordx56@cordx.cx>",
   "publisher": "cordx56",
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.100.0"
   },
   "repository": {
     "type": "git",
