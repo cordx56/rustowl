@@ -28,8 +28,8 @@ jobs:
       run:
         shell: bash
     env:
-      RUSTUP_TOOLCHAIN: 1.86.0
-      RUSTC_BOOTSTRAP: 1
+      RUSTUP_TOOLCHAIN: 1.87.0
+      RUSTC_BOOTSTRAP: rustowlc
 
     steps:
       - name: Checkout
