@@ -2,6 +2,32 @@
 ## [Unreleased]
 
 
+<a name="v0.3.3"></a>
+## [v0.3.3] - 2025-05-17
+### ♻️ Code Refactoring
+- split build action from release action
+
+### 🎨 Chores
+- fix pre-release if statement
+- fix release case
+- regex in bash should not quoted
+- automate cargo publish
+- vsce auto publish
+- use official toolchain
+- Rewrite CLI using Derive API ([#153](https://github.com/cordx56/rustowl/issues/153))
+- update changelog ([#154](https://github.com/cordx56/rustowl/issues/154))
+- **cli:** Add help messages to options ([#159](https://github.com/cordx56/rustowl/issues/159))
+
+### 🐞 Bug Fixes
+- support CRLF
+- GitHub Actions typo
+- use native ca certs by enabling native roots feature of reqwest ([#162](https://github.com/cordx56/rustowl/issues/162))
+- **pkgbuild:** use rustup instead of cargo ([#156](https://github.com/cordx56/rustowl/issues/156))
+
+### 🚀 Features
+- update rustc to 1.87.0
+
+
 <a name="v0.3.2"></a>
 ## [v0.3.2] - 2025-05-09
 ### 🐞 Bug Fixes
@@ -237,7 +263,8 @@
 <a name="v0.0.1"></a>
 ## v0.0.1 - 2024-11-13
 
-[Unreleased]: https://github.com/cordx56/rustowl/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/cordx56/rustowl/compare/v0.3.3...HEAD
+[v0.3.3]: https://github.com/cordx56/rustowl/compare/v0.3.2...v0.3.3
 [v0.3.2]: https://github.com/cordx56/rustowl/compare/v0.3.1...v0.3.2
 [v0.3.1]: https://github.com/cordx56/rustowl/compare/v0.3.0...v0.3.1
 [v0.3.0]: https://github.com/cordx56/rustowl/compare/v0.2.2...v0.3.0
