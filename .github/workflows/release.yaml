@@ -16,7 +16,7 @@ jobs:
   meta:
     runs-on: ubuntu-latest
     outputs:
-      pre-release: ${{ steps.pre-release.outputs.pre-release }}
+      pre_release: ${{ steps.pre-release.outputs.pre_release }}
     steps:
       - name: Check pre-release
         id: pre-release
