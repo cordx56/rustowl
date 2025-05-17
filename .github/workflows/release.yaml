@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Release crates.io
-        if: needs.meta.outputs.pre_release == 'true'
+        if: needs.meta.outputs.pre_release != 'true'
         run: |
           echo '${{ secrets.CRATES_IO_API_TOKEN }}' | cargo login
           cargo publish
@@ -52,7 +52,7 @@ jobs:
         with:
           node-version: 20
       - name: Release vsce
-        if: needs.meta.outputs.pre_release == 'true'
+        if: needs.meta.outputs.pre_release != 'true'
         run: |
           yarn install --frozen-locked
           yarn vsce publish
@@ -70,7 +70,7 @@ jobs:
         uses: actions/checkout@v4
       - name: AUR Release
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
-        if: needs.meta.outputs.pre_release == 'true'
+        if: needs.meta.outputs.pre_release != 'true'
         with:
           pkgname: rustowl-bin
           pkgbuild: ./aur/PKGBUILD
