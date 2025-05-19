@@ -800,10 +800,10 @@
     "@vscode/vsce-sign-win32-arm64" "2.0.2"
     "@vscode/vsce-sign-win32-x64" "2.0.2"
 
-"@vscode/vsce@^3.4.0":
-  version "3.4.0"
-  resolved "https://registry.yarnpkg.com/@vscode/vsce/-/vsce-3.4.0.tgz#f623718c68bc9cd2bb321cf5d6791470166b94d9"
-  integrity sha512-vKyQxFSipqO4e1vUM3iDzOzMSXIKVhrJlWuGgYv/GF1ihAM/zzs2MVSGFC4CfdhF1ep+5AoLn1aRFn96CGhEWA==
+"@vscode/vsce@^3.4.1":
+  version "3.4.1"
+  resolved "https://registry.yarnpkg.com/@vscode/vsce/-/vsce-3.4.1.tgz#b28447f6483949a9c749864a8411adbb39107a28"
+  integrity sha512-fDxgoGTQZ42+GdVWrOsxioXfS8VkDwjWNgaXqMNV2GCUmPmr45Rqs97PROqF7h+gKgrKOHmtQCBjeD4Wd/sRCQ==
   dependencies:
     "@azure/identity" "^4.1.0"
     "@secretlint/node" "^9.3.2"
