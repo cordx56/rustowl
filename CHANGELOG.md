@@ -1,6 +1,9 @@
 <a name="unreleased"></a>
 ## [Unreleased]
 
+### 🎨 Chores
+- update changelog ([#168](https://github.com/cordx56/rustowl/issues/168))
+
 
 <a name="v0.3.3"></a>
 ## [v0.3.3] - 2025-05-17
