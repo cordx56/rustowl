@@ -519,7 +519,7 @@ impl CalcDecos {
 }
 impl utils::MirVisitor for CalcDecos {
     fn visit_decl(&mut self, decl: &MirDecl) {
-        let (local, lives, shared_borrow, mutable_borrow, drop_range, must_live_at, name) =
+        let (local, lives, shared_borrow, mutable_borrow, drop_range, must_live_at, name, drop) =
             match decl {
                 MirDecl::User {
                     local,
@@ -529,6 +529,7 @@ impl utils::MirVisitor for CalcDecos {
                     mutable_borrow,
                     drop_range,
                     must_live_at,
+                    drop,
                     ..
                 } => (
                     *local,
@@ -538,6 +539,7 @@ impl utils::MirVisitor for CalcDecos {
                     drop_range,
                     must_live_at,
                     Some(name),
+                    drop,
                 ),
                 MirDecl::Other {
                     local,
@@ -546,6 +548,7 @@ impl utils::MirVisitor for CalcDecos {
                     mutable_borrow,
                     drop_range,
                     must_live_at,
+                    drop,
                     ..
                 } => (
                     *local,
@@ -555,6 +558,7 @@ impl utils::MirVisitor for CalcDecos {
                     drop_range,
                     must_live_at,
                     None,
+                    drop,
                 ),
             };
         self.current_fn_id = local.fn_id;
@@ -563,9 +567,11 @@ impl utils::MirVisitor for CalcDecos {
                 .map(|v| format!("variable `{v}`"))
                 .unwrap_or("anonymous variable".to_owned());
             // merge Drop object lives
-            let mut drop_copy_live = lives.clone();
-            drop_copy_live.extend_from_slice(drop_range);
-            drop_copy_live = utils::eliminated_ranges(drop_copy_live.clone());
+            let drop_copy_live = if *drop {
+                utils::eliminated_ranges(drop_range.clone())
+            } else {
+                utils::eliminated_ranges(lives.clone())
+            };
             for range in &drop_copy_live {
                 self.decorations.push(Deco::Lifetime {
                     local,
