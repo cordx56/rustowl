@@ -19,7 +19,7 @@ simple_logger = { version = "5.0.0", features = ["stderr"] }
 tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "process", "fs"] }
 tower-lsp = "0.20.0"
 process_alive = "0.1.1"
-cargo_metadata = "0.19.2"
+cargo_metadata = "0.20.0"
 uuid = { version = "1", features = ["v4"] }
 clap = { version = "4.5.39", features = ["cargo", "derive"] }
 tar = "0.4.44"
