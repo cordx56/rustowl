@@ -56,7 +56,7 @@ package() {
     install -Dm0755 -t "$pkgdir/usr/bin/" "target/$(rustc --print=host-tuple)/release/rustowl"
     install -Dm0755 -t "$pkgdir/usr/bin/" "target/$(rustc --print=host-tuple)/release/rustowlc"
     install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/rustowl/LICENSE"
-    install -Dm644 rustowl-build-time-out/man/rustowl.1 "$pkgdir/usr/share/man/man1/rustowl.1"
+    install -Dm644 rustowl-build-time-out/man/*.1 "$pkgdir/usr/share/man/man1/"
     install -Dm644 "rustowl-build-time-out/completions/rustowl.bash" "${pkgdir}/usr/share/bash-completion/completions/rustowl"
     install -Dm644 "rustowl-build-time-out/completions/_rustowl" "${pkgdir}/usr/share/zsh/site-functions/_rustowl"
     install -Dm644 "rustowl-build-time-out/completions/rustowl.fish" "${pkgdir}/usr/share/fish/vendor_completions.d/rustowl.fish"
