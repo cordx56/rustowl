@@ -93,11 +93,11 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.9",
-    "@types/node": "^22.15.23",
+    "@types/node": "^22.15.27",
     "@types/vscode": "^1.100.0",
-    "@typescript-eslint/eslint-plugin": "^8.32.1",
+    "@typescript-eslint/eslint-plugin": "^8.33.0",
     "@typescript-eslint/parser": "^8.33.0",
-    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.4.2",
     "esbuild": "^0.25.5",
@@ -109,6 +109,6 @@
   "dependencies": {
     "semver-parser": "^4.1.8",
     "vscode-languageclient": "^9.0.1",
-    "zod": "^3.25.32"
+    "zod": "^3.25.42"
   }
 }
