@@ -55,11 +55,36 @@ yarn install
 
 Before submitting PR, you have to check below:
 
-### Rust code
+### Rust code correctness and formatting
 
 - Correctly formatted by `cargo fmt`
 - Linted using Clippy by `cargo clippy`
 
-### VS Code extension
+### VS Code extension Style
 
 - Correctly formatted by `yarn fmt`
+
+### Performance Testing
+
+Use the performance testing script to validate that your changes don't introduce regressions:
+
+```bash
+./scripts/perf-tests.sh
+```
+
+The script compares your current changes against a baseline version, measuring execution time, memory usage, and binary size.
+
+#### Basic Usage
+
+- `./scripts/perf-tests.sh` - Full automated test
+- `./scripts/perf-tests.sh --cold` - Clear caches for consistent results
+- `./scripts/perf-tests.sh --help` - See all options
+
+#### Performance Considerations
+
+System caches can significantly affect measurements. Use `--cold` to clear caches between tests for reliable comparisons, especially when validating performance improvements.
+
+**Requirements:** `git`, `cargo`, `bc`  
+**Optional:** `hyperfine`, `valgrind`, `nm` for enhanced analysis
+
+See the man page (`man ./docs/perf-tests.1`) for detailed documentation.
