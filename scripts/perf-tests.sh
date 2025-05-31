@@ -110,8 +110,8 @@ enable_all_metrics() {
 }
 
 reset_default_metrics() {
-    METRIC_SIZE=0
-    METRIC_TIME=0
+    METRIC_SIZE=1
+    METRIC_TIME=1
 }
 
 # Parse command line arguments
@@ -519,7 +519,7 @@ measure_time_and_resources() {
             # Use manual timing for clean output, /usr/bin/time for system metrics
             if [ $METRIC_TIME -eq 1 ]; then
                 local start_time=$(date +%s.%N)
-                "$BINARY_PATH" check >/dev/null 2>&1
+                "$BINARY_PATH" check >/dev/null 2>&1 || true
                 local end_time=$(date +%s.%N)
                 local real_time=$(echo "scale=2; $end_time - $start_time" | bc -l)
                 TIME_RESULTS+=("$real_time")
@@ -533,7 +533,7 @@ measure_time_and_resources() {
                 local cmd_output=$(mktemp)
                 
                 # Run with time and separate outputs properly
-                /usr/bin/time -l "$BINARY_PATH" check >"$cmd_output" 2>"$time_stderr"
+                /usr/bin/time -l "$BINARY_PATH" check >"$cmd_output" 2>"$time_stderr" || true
                 
                 local time_output=$(cat "$time_stderr")
                 rm -f "$time_stderr" "$cmd_output"
@@ -563,7 +563,7 @@ measure_time_and_resources() {
         Linux)
             if [ $METRIC_TIME -eq 1 ]; then
                 local start_time=$(date +%s.%N)
-                "$BINARY_PATH" check >/dev/null 2>&1
+                "$BINARY_PATH" check >/dev/null 2>&1 || true
                 local end_time=$(date +%s.%N)
                 local real_time=$(echo "scale=2; $end_time - $start_time" | bc -l)
                 TIME_RESULTS+=("$real_time")
@@ -571,7 +571,7 @@ measure_time_and_resources() {
             fi
             
             if [ $METRIC_MEMORY -eq 1 ] || [ $METRIC_PAGE_FAULTS -eq 1 ] || [ $METRIC_CONTEXT_SWITCHES -eq 1 ]; then
-                local time_output=$(/usr/bin/time -v "$BINARY_PATH" check >/dev/null 2>&1)
+                local time_output=$(/usr/bin/time -v "$BINARY_PATH" check >/dev/null 2>&1 || true)
                 
                 if [ $METRIC_MEMORY -eq 1 ]; then
                     local memory_kb=$(echo "$time_output" | grep "Maximum resident set size" | awk '{print $NF}')
