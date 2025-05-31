@@ -1,81 +1,121 @@
 .\" Man page for perf-tests.sh
-.TH PERF-TESTS 1 "2024" "RustOwl" "RustOwl Performance Testing"
+.TH PERF-TESTS 1 "2025" "RustOwl" "RustOwl Performance Testing"
 .SH NAME
-perf-tests.sh \- Performance testing and regression analysis for RustOwl
+perf-tests.sh \- Performance testing and analysis for RustOwl
 .SH SYNOPSIS
 .B perf-tests.sh
 [\fIOPTION\fR]...
 .SH DESCRIPTION
-The \fBperf-tests.sh\fR script provides comprehensive performance testing and regression analysis for RustOwl. It compares the current code changes against a baseline version by automatically managing git stashes, building both versions, and measuring various performance metrics.
+The \fBperf-tests.sh\fR script provides comprehensive performance testing and analysis for RustOwl. It measures various performance metrics of the current code state, including binary size, execution time, memory usage, symbol counts, and advanced analysis features.
 
-The script is designed to help developers validate that their changes don't introduce performance regressions while also detecting genuine performance improvements.
+The script is designed to help developers understand and validate the performance characteristics of their code with flexible metric selection, configurable test runs, and multiple output formats.
 
 .SH OPTIONS
+.SS Modes
 .TP
 .B \-h, \-\-help
 Display help information and exit
 .TP
 .B \-\-verify
-Check the testing environment without running performance tests. Shows git status, existing binaries, and system information.
+Check the testing environment without running performance tests. Shows system information, tool availability, and enabled metrics.
 .TP
 .B \-\-prepare
-Build both baseline and current versions separately without running performance comparisons. Useful for pre-building binaries.
+Build the project without running tests. Ensures the binary is ready for testing.
 .TP
-.B \-\-compare
-Run performance comparisons on pre-built binaries. Requires that \fB\-\-prepare\fR has been run first.
+.B \-\-test
+Run performance tests (default mode). Measures selected metrics and displays results.
+
+.SS Test Configuration
 .TP
-.B \-\-stability
-Run multiple iterations of performance tests to check measurement consistency and detect unstable results.
+.B \-\-runs N
+Number of test runs to perform (default: 3). Results are averaged across multiple runs for better accuracy.
 .TP
-.B \-\-force
-Force rebuild of existing binaries even if they already exist.
+.B \-\-warm
+Skip cache clearing between runs. Tests performance with system caches intact.
 .TP
 .B \-\-cold
-Clear system caches before each performance test. This provides more consistent and realistic measurements by eliminating cache effects.
+Clear caches between runs (default). Provides consistent measurements by eliminating cache effects.
+.TP
+.B \-\-force
+Force rebuild even if binary exists. Ensures fresh compilation.
+
+.SS Metrics Selection
+By default, only size and time metrics are enabled. Specifying any metric flag disables defaults and enables only the requested metrics.
+.TP
+.B \-\-full
+Enable all available metrics
+.TP
+.B \-\-size
+Binary size analysis
+.TP
+.B \-\-time
+Execution time measurement
+.TP
+.B \-\-symbols
+Symbol count analysis (requires nm)
+.TP
+.B \-\-strip
+Strip analysis showing debug symbol overhead
+.TP
+.B \-\-memory
+Memory usage measurement
+.TP
+.B \-\-page-faults
+Page fault counting
+.TP
+.B \-\-context-switches
+Context switch measurement
+.TP
+.B \-\-static
+Static analysis metrics
+.TP
+.B \-\-profile-memory
+Memory profiling with valgrind (Linux only)
+.TP
+.B \-\-profile-cpu
+CPU profiling recommendations
+
+.SS Output Options
+.TP
+.B \-\-markdown FILE
+Save results to markdown file instead of stdout
+.TP
+.B \-\-compare FILE
+Compare current results with previous markdown results file
 
 .SH TESTING MODES
-.SS Default Mode
-When run without arguments, the script performs a complete automated test:
+.SS Default Mode (--test)
+When run without mode arguments, performs performance testing:
 .IP 1. 4
-Verifies git repository state
+Builds the project using specific Rust toolchain
 .IP 2. 4
-Stashes current changes (if any)
+Runs performance measurements for selected metrics
 .IP 3. 4
-Builds baseline version
+Averages results across multiple runs
 .IP 4. 4
-Restores changes and builds current version
-.IP 5. 4
-Runs performance comparisons
-.IP 6. 4
-Cleans up temporary files
+Displays summary and optionally saves to markdown
 
-.SS Stepwise Testing
-For more control, use the stepwise testing options:
-
-.B \-\-verify
-to check environment setup
-
-.B \-\-prepare
-to build both versions
-
-.B \-\-compare
-to run performance tests
-
-.B \-\-stability
-to validate result consistency
-
+.SS System Verification (--verify)
+Check environment readiness:
+.IP 1. 4
+Verify required tools are available
+.IP 2. 4
+Show optional tool availability
+.IP 3. 4
+Display enabled metrics configuration
+.IP 4. 4
 .SH MEASUREMENTS
 The script provides comprehensive analysis across multiple dimensions:
 
 .SS Binary Analysis
 .IP \(bu 4
-Binary size comparison with percentage differences
+Binary size measurement with human-readable formatting
 .IP \(bu 4
 Symbol count analysis (requires \fBnm\fR)
 .IP \(bu 4
 Strip analysis showing debug symbol overhead
 .IP \(bu 4
-SHA256 hash verification to ensure different binaries
+Static analysis including binary entropy and dependencies
 
 .SS Performance Metrics
 .IP \(bu 4
@@ -94,156 +134,129 @@ Statistical benchmarking with confidence intervals (\fBhyperfine\fR)
 .IP \(bu 4
 Memory profiling with heap analysis (\fBvalgrind\fR on Linux)
 .IP \(bu 4
-CPU profiling recommendations
+CPU profiling recommendations for platform-specific tools
 
-.SS Verification Features
-.IP \(bu 4
-Git workflow validation (stash/unstash operations)
-.IP \(bu 4
-Binary functionality testing before measurement
-.IP \(bu 4
-Environment sanity checks
+.SH BUILD SYSTEM
+The script uses a specific Rust build configuration:
+
+.SS Build Command
+.B RUSTC_BOOTSTRAP=1 rustup run 1.86.0 cargo build --release
+
+This ensures consistent compilation with Rust 1.86.0 stable compiler while enabling nightly features through RUSTC_BOOTSTRAP.
+
+.SS Binary Location
+Tests are performed directly on the binary in \fB./target/release/rustowl\fR without copying or moving files.
 
 .SH CACHE MANAGEMENT
-Performance measurements can be significantly affected by various system caches. The \fB\-\-cold\fR option addresses this by clearing:
+Performance measurements can be significantly affected by various system caches. The script provides cache management options:
 
-.SS Filesystem Caches
+.SS Cache Types
 .IP \(bu 4
-macOS: Uses \fBpurge\fR command
+Filesystem caches (page cache) - Most significant impact
 .IP \(bu 4
-Linux: Drops page cache via \fB/proc/sys/vm/drop_caches\fR
+Rust incremental compilation cache
+.IP \(bu 4
+CPU caches (L1/L2/L3 and branch prediction)
 
-.SS Build Caches
+.SS Cache Clearing Methods
 .IP \(bu 4
-Cargo incremental compilation cache
+macOS: \fBpurge\fR command (may require sudo)
 .IP \(bu 4
-Rust compilation artifacts
+Linux: \fB/proc/sys/vm/drop_caches\fR (requires sudo)
+.IP \(bu 4
+Rust: \fBcargo clean\fR for incremental cache
 
-.SS CPU Caches
-.IP \(bu 4
-L1/L2/L3 instruction and data caches
-.IP \(bu 4
-Branch prediction tables
-
-.PP
-\fBNote:\fR Cache clearing may require sudo privileges on some systems.
+Use \fB--cold\fR (default) for consistent measurements or \fB--warm\fR for realistic cached performance.
 
 .SH DEPENDENCIES
-.SS Required
+.SS Required Tools
 .IP \(bu 4
-\fBgit\fR \- Version control operations
+\fBgit\fR - Version control operations
 .IP \(bu 4
-\fBcargo\fR \- Rust build system
+\fBcargo\fR - Rust build system
 .IP \(bu 4
-\fBbc\fR \- Mathematical calculations
+\fBbc\fR - Mathematical calculations
+.IP \(bu 4
+\fBrustup\fR - Rust toolchain management
 
-.SS Optional (Enhanced Features)
+.SS Optional Tools (Enhanced Features)
 .IP \(bu 4
-\fBhyperfine\fR \- Statistical benchmarking with confidence intervals
+\fBhyperfine\fR - Statistical benchmarking
 .IP \(bu 4
-\fBvalgrind\fR \- Memory profiling (Linux only)
+\fBvalgrind\fR - Memory profiling (Linux only)
 .IP \(bu 4
-\fBnm\fR \- Symbol analysis
+\fBperf\fR - CPU profiling (Linux only)
 .IP \(bu 4
-\fBpurge\fR \- Cache clearing (macOS)
+\fBnm\fR - Symbol analysis
+.IP \(bu 4
+\fBinstruments\fR - CPU profiling (macOS with Xcode)
 
 .SH EXAMPLES
+.SS Basic Testing
 .TP
-.B perf-tests.sh
-Run complete automated performance test
+.B perf-tests.sh --test
+Run basic performance test with default metrics (size + time)
 .TP
-.B perf-tests.sh \-\-cold
-Run test with cache clearing for consistent results
+.B perf-tests.sh --verify
+Check system readiness and tool availability
 .TP
-.B perf-tests.sh \-\-verify
-Check environment and show current state
-.TP
-.B perf-tests.sh \-\-prepare && perf-tests.sh \-\-compare
-Build versions separately, then test
-.TP
-.B perf-tests.sh \-\-stability
-Run multiple iterations to check measurement consistency
+.B perf-tests.sh --test --full
+Run comprehensive test with all available metrics
 
-.SH INTERPRETING RESULTS
-.SS Binary Size Changes
-.IP \(bu 4
-Positive percentage: Binary grew (potential concern)
-.IP \(bu 4
-Negative percentage: Binary shrunk (potential improvement)
-.IP \(bu 4
-Identical sizes with different code: Investigation needed
+.SS Focused Testing
+.TP
+.B perf-tests.sh --test --memory --symbols --runs 5
+Test memory usage and symbol counts with 5 runs for accuracy
+.TP
+.B perf-tests.sh --test --warm --time
+Test execution time with warm caches (realistic performance)
 
-.SS Performance Changes
-.IP \(bu 4
-Execution time: Lower is better
-.IP \(bu 4
-Memory usage: Lower is generally better
-.IP \(bu 4
-Page faults: Lower indicates better memory efficiency
-.IP \(bu 4
-Context switches: Lower may indicate better CPU utilization
+.SS Output and Comparison
+.TP
+.B perf-tests.sh --test --markdown results.md
+Save results to markdown file for documentation
+.TP
+.B perf-tests.sh --test --compare baseline.md
+Compare current performance with previous results
 
-.SS Cache Effects
+.SH RESULT INTERPRETATION
+.SS Normal Results
 .IP \(bu 4
-First run (cold): Realistic user experience
+Consistent results across multiple runs
 .IP \(bu 4
-Subsequent runs (warm): Optimistic results
+Reasonable execution times and memory usage
 .IP \(bu 4
-Large variations: Consider using \fB\-\-cold\fR or \fB\-\-stability\fR
+Expected symbol counts for binary size
 
-.SH TROUBLESHOOTING
-.SS Common Issues
-.TP
-.B Identical binary sizes with different SHA256 hashes
-The binaries contain different metadata but identical code. This can happen with timestamp differences or debug information.
-
-.TP
-.B Large performance variations between runs
-System load or cache effects. Use \fB\-\-cold\fR for consistency or \fB\-\-stability\fR to check variation.
-
-.TP
-.B "Uncommitted changes" warnings
-The script detects uncommitted changes and will stash them. Ensure important work is committed first.
-
-.TP
-.B Permission denied on cache clearing
-Cache clearing may require sudo privileges. The script will continue without clearing caches if permissions are insufficient.
-
-.SS Debug Information
-Use \fB\-\-verify\fR to check:
+.SS Investigate Further
 .IP \(bu 4
-Git repository status
+Extreme performance variations between runs
 .IP \(bu 4
-Existing binary states
+Unusually high memory usage or execution time
 .IP \(bu 4
-Available tools and dependencies
-.IP \(bu 4
-System information
+Zero page faults (suggests measurement issues)
 
-.SH FILES
-.TP
-.B rustowl-baseline
-Baseline binary for comparison
-.TP
-.B rustowl-current
-Current version binary
-.TP
-.B rustowlc-baseline
-Baseline compiler binary
-.TP
-.B rustowlc-current
-Current compiler binary
+.SS Best Practices
+.IP \(bu 4
+Run \fB--verify\fR first to check environment
+.IP \(bu 4
+Use multiple runs for important measurements
+.IP \(bu 4
+Test on quiet systems with minimal background processes
+.IP \(bu 4
+Consider both cold and warm cache performance
+.IP \(bu 4
+Save results to markdown for tracking over time
 
-.SH ENVIRONMENT
-.TP
-.B CARGO_TARGET_DIR
-Cargo build directory (default: target/)
-.TP
-.B RUST_BACKTRACE
-Set to 1 for detailed error traces
-.TP
-.B NO_COLOR
-Disable colored output
+.SH OUTPUT FORMATS
+.SS Standard Output
+Default format displays metrics to stdout with colored output and progress indicators.
+
+.SS Markdown Output
+Use \fB--markdown FILE\fR to generate structured markdown reports suitable for documentation and tracking.
+
+.SS Comparison Output
+Use \fB--compare FILE\fR to compare current results with previously saved markdown results, showing differences and changes.
 
 .SH EXIT STATUS
 .TP
@@ -251,153 +264,39 @@ Disable colored output
 Success
 .TP
 .B 1
-General error (missing tools, build failure)
+General error (missing tools, build failure, binary verification failure)
+
+.SH FILES
 .TP
-.B 2
-Git repository issues
+.B ./target/release/rustowl
+Main binary tested by the script
 .TP
-.B 3
-Binary verification failure
+.B ./target/release/rustowlc
+Compiler binary (also built but not directly tested)
+
+.SH ENVIRONMENT
+.TP
+.B RUSTC_BOOTSTRAP
+Set to 1 for stable compiler with nightly features
+.TP
+.B CARGO_TARGET_DIR
+Cargo build directory (default: target/)
+.TP
+.B NO_COLOR
+Disable colored output
 
 .SH NOTES
-This script is designed for development and CI/CD environments. It requires a clean git working directory or will automatically stash changes.
+This script is designed for development environments and focuses on testing the current code state without git-based comparisons. It prioritizes reproducibility and comprehensive metrics over raw speed.
 
-For accurate performance measurements, consider running multiple iterations and using the \fB\-\-cold\fR option to eliminate cache effects.
-
-The script prioritizes reproducibility and verification over raw speed, making it suitable for regression testing and performance validation.
+For accurate performance measurements, consider running multiple iterations and using appropriate cache management options based on your testing goals.
 
 .SH SEE ALSO
 .BR cargo (1),
-.BR git (1),
+.BR rustup (1),
 .BR hyperfine (1),
 .BR valgrind (1)
 
+RustOwl documentation: docs/CONTRIBUTING.md
+
 .SH AUTHOR
 RustOwl development team
-              Runs the complete workflow: prepare environment, build both versions, and
-              compare performance. This is the standard mode for most use cases.
-
-       Stepwise Testing
-              Break the testing process into individual steps for debugging or detailed
-              analysis:
-              1. --verify   : Check environment
-              2. --prepare  : Build both versions
-              3. --stability: Multi-iteration testing
-              4. --compare  : Performance comparison
-
-MEASUREMENTS
-       Binary Analysis
-              • Binary size comparison with percentage differences
-              • Symbol count analysis (if nm is available)
-              • Strip analysis showing debug symbol overhead
-
-       Performance Metrics
-              • Execution time (wall clock)
-              • Peak memory usage (RSS - Resident Set Size)
-              • Page faults (major/minor indicating I/O and memory pressure)
-              • Context switches (voluntary/involuntary revealing scheduling behavior)
-
-       Verification Features
-              • SHA256 hash comparison to ensure different binaries
-              • Git workflow validation (stash/unstash operations)
-              • Binary functionality testing before measurement
-              • Multi-iteration stability checking
-
-CACHE EFFECTS
-       Performance measurements are significantly affected by system caches. First runs
-       typically show "cold" performance with full disk I/O, while subsequent runs show
-       "warm" performance with cached data.
-
-       Common Cache Types:
-              • Filesystem cache (page cache) - Most significant impact
-              • Binary/library cache - Dynamic linker caching
-              • CPU caches - L1/L2/L3 and branch prediction
-              • Rust build cache - Incremental compilation artifacts
-
-       Cache Clearing:
-              macOS: sudo purge
-              Linux: sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
-              Rust:  cargo clean
-
-       Use --cold option for automated cache clearing between tests.
-
-TOOL REQUIREMENTS
-       Required Tools
-              git    - Version control operations
-              cargo  - Rust build system  
-              bc     - Mathematical calculations
-
-       Optional Tools
-              hyperfine - Statistical benchmarking with confidence intervals
-              valgrind  - Memory profiling (Linux only)
-              perf      - CPU profiling (Linux only)
-              nm        - Symbol table analysis
-              strip     - Debug symbol removal
-
-       The script automatically detects available tools and adapts functionality accordingly.
-       Missing optional tools will show installation suggestions.
-
-RESULT INTERPRETATION
-       Normal Results
-              • Small performance differences (<2x)
-              • Consistent results across multiple runs
-              • Different binary hashes for baseline vs current
-
-       Suspicious Results (Investigate Further)
-              • Identical binary hashes (no code changes detected)
-              • Extreme performance differences (>10x)
-              • Zero page faults (suggests warm cache or measurement issues)
-              • High variation between runs (>2x difference)
-
-       Best Practices
-              • Run --verify first to check environment
-              • Use --stability for significant performance claims
-              • Test on quiet systems with minimal background processes
-              • Consider both cold and warm performance metrics
-              • Run multiple times to confirm consistency
-
-EXAMPLES
-       Basic performance test:
-              ./scripts/perf-tests.sh
-
-       Debug suspicious results:
-              ./scripts/perf-tests.sh --verify
-              ./scripts/perf-tests.sh --prepare --force
-              ./scripts/perf-tests.sh --stability
-
-       Cold performance testing:
-              ./scripts/perf-tests.sh --cold
-
-       Build and test separately:
-              ./scripts/perf-tests.sh --prepare
-              ./scripts/perf-tests.sh --compare
-
-EXIT STATUS
-       0      Success
-       1      Missing required tools or build failure
-       2      Invalid command line arguments
-
-FILES
-       ./rustowl-baseline     Temporary baseline binary
-       ./rustowl-current      Temporary current binary
-       ./rustowlc-baseline    Temporary baseline compiler binary
-       ./rustowlc-current     Temporary current compiler binary
-
-       These files are automatically cleaned up after testing unless the script fails.
-
-ENVIRONMENT
-       RUSTC_BOOTSTRAP        May be set for stable compiler builds
-       CARGO_TARGET_DIR       Custom target directory for builds
-
-SEE ALSO
-       cargo(1), git(1), hyperfine(1), valgrind(1), perf(1)
-
-       RustOwl documentation: docs/CONTRIBUTING.md
-
-BUGS
-       Report bugs to the RustOwl issue tracker.
-
-AUTHORS
-       Written by the RustOwl development team.
-
-RustOwl                                2025-05-31                           PERF-TESTS(1)
