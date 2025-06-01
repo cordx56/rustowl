@@ -22,12 +22,18 @@ impl Loc {
     pub fn new(source: &str, byte_pos: u32, offset: u32) -> Self {
         let byte_pos = byte_pos.saturating_sub(offset);
         // it seems that the compiler is ignoring CR
-        for (i, (byte, _)) in source.replace("\r", "").char_indices().enumerate() {
-            if byte_pos <= byte as u32 {
-                return Self(i as u32);
-            }
+        let source_clean = source.replace("\r", "");
+
+        // Convert byte position to character position safely
+        if byte_pos as usize > source_clean.len() {
+            return Self(source_clean.chars().count() as u32);
         }
-        Self(0)
+        
+        // Find the character index corresponding to the byte position
+        match source_clean.char_indices().position(|(byte_idx, _)| byte_idx >= byte_pos as usize) {
+            Some(char_idx) => Self(char_idx as u32),
+            None => Self(source_clean.chars().count() as u32),
+        }
     }
 }
 impl std::ops::Add<i32> for Loc {

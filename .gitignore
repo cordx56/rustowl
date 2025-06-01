@@ -8,3 +8,4 @@ result*
 # Ignore completions and man dir, they are generated at build time
 completions/
 man/
+memory-bank/
