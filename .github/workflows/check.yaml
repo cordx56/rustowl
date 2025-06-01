@@ -18,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       RUSTUP_TOOLCHAIN: 1.87.0
-      RUSTC_BOOTSTRAP: rustowlc
+      RUSTC_BOOTSTRAP: 1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       
       - name: Build
-        run: rustup run ${{ env.RUSTUP_TOOLCHAIN }} cargo build --release
+        run: cargo build --release
 
       - name: install binaries
         run: cargo install --path .
