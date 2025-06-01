@@ -2,7 +2,18 @@
 ## [Unreleased]
 
 ### 🎨 Chores
+- **aur:** bump rustup toolchain version ([#177](https://github.com/cordx56/rustowl/issues/177))
+
+
+<a name="v0.3.4"></a>
+## [v0.3.4] - 2025-05-20
+### 🎨 Chores
+- urgent release v0.3.4, fixes wrong visualization
+- update changelog ([#170](https://github.com/cordx56/rustowl/issues/170))
 - update changelog ([#168](https://github.com/cordx56/rustowl/issues/168))
+
+### 🐞 Bug Fixes
+- **lsp-core:** fix actual lifetime range visualization for `Drop` variable.
 
 
 <a name="v0.3.3"></a>
@@ -266,7 +277,8 @@
 <a name="v0.0.1"></a>
 ## v0.0.1 - 2024-11-13
 
-[Unreleased]: https://github.com/cordx56/rustowl/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/cordx56/rustowl/compare/v0.3.4...HEAD
+[v0.3.4]: https://github.com/cordx56/rustowl/compare/v0.3.3...v0.3.4
 [v0.3.3]: https://github.com/cordx56/rustowl/compare/v0.3.2...v0.3.3
 [v0.3.2]: https://github.com/cordx56/rustowl/compare/v0.3.1...v0.3.2
 [v0.3.1]: https://github.com/cordx56/rustowl/compare/v0.3.0...v0.3.1
