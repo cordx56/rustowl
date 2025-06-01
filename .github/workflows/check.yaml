@@ -13,14 +13,34 @@ jobs:
         os:
           - ubuntu-latest
           - windows-latest
+          - macos-latest
+          - ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
+    env:
+      RUSTUP_TOOLCHAIN: 1.87.0
+      RUSTC_BOOTSTRAP: 1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - run: rustup component add rustfmt clippy
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
+      
       - run: cargo fmt --check
-      - run: cargo clippy
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      
+      - name: Build
+        run: cargo build --release
+
+      - name: install binaries
+        run: cargo install --path .
+
+      - name: Run RustOwl
+        run: rustowl check
+
 
   vscode:
     runs-on: ubuntu-latest
