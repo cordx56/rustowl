@@ -42,9 +42,10 @@ HAS_PERF=0
 HAS_INSTRUMENTS=0
 
 # Build configuration
-RUST_VERSION="1.86.0"
+RUST_VERSION="1.87.0"
 BUILD_CMD="RUSTC_BOOTSTRAP=1 rustup run $RUST_VERSION cargo build --release"
 BINARY_PATH="./target/release/rustowl"
+TEST_TARGET_PATH="./perf-tests/dummy-package"
 
 # Test results storage for aggregation
 declare -a SIZE_RESULTS=()
@@ -93,6 +94,12 @@ usage() {
     echo "  $0 --markdown results.md     # Save results to file"
     echo "  $0 --compare old-results.md  # Compare with previous results"
     echo "  $0 --memory --warm --runs 1  # Memory test, warm cache, single run"
+    echo ""
+    echo "Test Package:"
+    echo "  The script uses a dummy Rust package located at './perf-tests/dummy-package'"
+    echo "  for consistent performance testing. This package contains various Rust"
+    echo "  patterns that rustowl can analyze, including potential ownership issues,"
+    echo "  error handling patterns, and resource management scenarios."
     echo ""
 }
 
@@ -372,18 +379,33 @@ clear_caches() {
             ;;
     esac
     
-    # Clear RustOwl analysis cache
+    # Clear RustOwl analysis cache for main project
     if [ -d "./target/owl" ]; then
         echo "  Clearing RustOwl analysis cache..."
         rm -rf ./target/owl 2>/dev/null || true
         echo "    ✓ RustOwl analysis cache cleared"
     fi
     
-    # Clear Rust incremental compilation cache
+    # Clear RustOwl analysis cache for dummy package
+    if [ -d "$TEST_TARGET_PATH/target/owl" ]; then
+        echo "  Clearing dummy package RustOwl analysis cache..."
+        rm -rf "$TEST_TARGET_PATH/target/owl" 2>/dev/null || true
+        echo "    ✓ Dummy package RustOwl analysis cache cleared"
+    fi
+    
+    # Clear Rust incremental compilation cache for main project
     if [ -d "./target" ]; then
         echo "  Clearing Rust incremental cache..."
         rm -rf ./target/release/incremental 2>/dev/null || true
         echo "    ✓ Rust incremental cache cleared"
+    fi
+    
+    # Clear Rust incremental compilation cache for dummy package
+    if [ -d "$TEST_TARGET_PATH/target" ]; then
+        echo "  Clearing dummy package Rust incremental cache..."
+        rm -rf "$TEST_TARGET_PATH/target/incremental" 2>/dev/null || true
+        rm -rf "$TEST_TARGET_PATH/target/debug/incremental" 2>/dev/null || true
+        echo "    ✓ Dummy package Rust incremental cache cleared"
     fi
     
     sleep 1
@@ -431,6 +453,20 @@ verify_system() {
     if [ ! -z "$COMPARE_FILE" ]; then
         echo "Comparison file: $COMPARE_FILE"
     fi
+    
+    echo ""
+    
+    echo "Test package verification:"
+    if [ -d "$TEST_TARGET_PATH" ]; then
+        echo "  ✓ Test package directory exists: $TEST_TARGET_PATH"
+        if [ -f "$TEST_TARGET_PATH/Cargo.toml" ]; then
+            echo "  ✓ Test package Cargo.toml found"
+        else
+            echo "  ✗ Test package Cargo.toml missing"
+        fi
+    else
+        echo "  ✗ Test package directory missing: $TEST_TARGET_PATH"
+    fi
 }
 
 build_project() {
@@ -470,6 +506,24 @@ build_project() {
     fi
     
     echo -e "${GREEN}✓ Build completed successfully${NC}"
+    echo ""
+}
+
+prepare_test_package() {
+    echo -e "${BLUE}Preparing test package${NC}"
+    echo "====================="
+    
+    if [ ! -d "$TEST_TARGET_PATH" ]; then
+        echo -e "${RED}✗ Test package directory not found: $TEST_TARGET_PATH${NC}"
+        exit 1
+    fi
+    
+    if [ ! -f "$TEST_TARGET_PATH/Cargo.toml" ]; then
+        echo -e "${RED}✗ Test package Cargo.toml not found: $TEST_TARGET_PATH/Cargo.toml${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓ Test package ready for analysis${NC}"
     echo ""
 }
 
@@ -519,7 +573,7 @@ measure_time_and_resources() {
             # Use manual timing for clean output, /usr/bin/time for system metrics
             if [ $METRIC_TIME -eq 1 ]; then
                 local start_time=$(date +%s.%N)
-                "$BINARY_PATH" check >/dev/null 2>&1 || true
+                "$BINARY_PATH" check "$TEST_TARGET_PATH" >/dev/null 2>&1 || true
                 local end_time=$(date +%s.%N)
                 local real_time=$(echo "scale=2; $end_time - $start_time" | bc -l)
                 TIME_RESULTS+=("$real_time")
@@ -533,7 +587,7 @@ measure_time_and_resources() {
                 local cmd_output=$(mktemp)
                 
                 # Run with time and separate outputs properly
-                /usr/bin/time -l "$BINARY_PATH" check >"$cmd_output" 2>"$time_stderr" || true
+                /usr/bin/time -l "$BINARY_PATH" check "$TEST_TARGET_PATH" >"$cmd_output" 2>"$time_stderr" || true
                 
                 local time_output=$(cat "$time_stderr")
                 rm -f "$time_stderr" "$cmd_output"
@@ -563,7 +617,7 @@ measure_time_and_resources() {
         Linux)
             if [ $METRIC_TIME -eq 1 ]; then
                 local start_time=$(date +%s.%N)
-                "$BINARY_PATH" check >/dev/null 2>&1 || true
+                "$BINARY_PATH" check "$TEST_TARGET_PATH" >/dev/null 2>&1 || true
                 local end_time=$(date +%s.%N)
                 local real_time=$(echo "scale=2; $end_time - $start_time" | bc -l)
                 TIME_RESULTS+=("$real_time")
@@ -571,27 +625,47 @@ measure_time_and_resources() {
             fi
             
             if [ $METRIC_MEMORY -eq 1 ] || [ $METRIC_PAGE_FAULTS -eq 1 ] || [ $METRIC_CONTEXT_SWITCHES -eq 1 ]; then
-                local time_output=$(/usr/bin/time -v "$BINARY_PATH" check >/dev/null 2>&1 || true)
+                # Create temporary files to capture time output
+                local time_stderr=$(mktemp)
+                local cmd_output=$(mktemp)
+                
+                # Run with time and capture stderr separately
+                /usr/bin/time -v "$BINARY_PATH" check "$TEST_TARGET_PATH" >"$cmd_output" 2>"$time_stderr" || true
+                
+                local time_output=$(cat "$time_stderr")
+                rm -f "$time_stderr" "$cmd_output"
                 
                 if [ $METRIC_MEMORY -eq 1 ]; then
                     local memory_kb=$(echo "$time_output" | grep "Maximum resident set size" | awk '{print $NF}')
-                    local memory_mb=$((memory_kb / 1024))
-                    MEMORY_RESULTS+=("$memory_mb")
-                    echo "Peak memory: ${memory_mb} MB (${memory_kb} KB)"
+                    if [ ! -z "$memory_kb" ] && [ "$memory_kb" != "" ]; then
+                        local memory_mb=$((memory_kb / 1024))
+                        MEMORY_RESULTS+=("$memory_mb")
+                        echo "Peak memory: ${memory_mb} MB (${memory_kb} KB)"
+                    else
+                        echo "Peak memory: Unable to measure"
+                    fi
                 fi
                 
                 if [ $METRIC_PAGE_FAULTS -eq 1 ]; then
                     local page_faults=$(echo "$time_output" | grep "Major (requiring I/O) page faults" | awk '{print $NF}')
-                    PAGE_FAULT_RESULTS+=("$page_faults")
-                    echo "Page faults: $page_faults"
+                    if [ ! -z "$page_faults" ] && [ "$page_faults" != "" ]; then
+                        PAGE_FAULT_RESULTS+=("$page_faults")
+                        echo "Page faults: $page_faults"
+                    else
+                        echo "Page faults: Unable to measure"
+                    fi
                 fi
                 
                 if [ $METRIC_CONTEXT_SWITCHES -eq 1 ]; then
                     local vol_cs=$(echo "$time_output" | grep "Voluntary context switches" | awk '{print $NF}')
                     local invol_cs=$(echo "$time_output" | grep "Involuntary context switches" | awk '{print $NF}')
-                    CONTEXT_SWITCH_RESULTS+=("$vol_cs")
-                    echo "Voluntary context switches: $vol_cs"
-                    echo "Involuntary context switches: $invol_cs"
+                    if [ ! -z "$vol_cs" ] && [ "$vol_cs" != "" ]; then
+                        CONTEXT_SWITCH_RESULTS+=("$vol_cs")
+                        echo "Voluntary context switches: $vol_cs"
+                        echo "Involuntary context switches: $invol_cs"
+                    else
+                        echo "Context switches: Unable to measure"
+                    fi
                 fi
             fi
             ;;
@@ -623,15 +697,22 @@ profile_memory() {
     echo "Memory profiling (valgrind):"
     clear_caches
     
-    valgrind --tool=massif --stacks=yes --time-unit=B \
+    # Add timeout to prevent hanging (5 minutes max)
+    timeout 300 valgrind --tool=massif --stacks=yes --time-unit=B \
         --massif-out-file=/tmp/massif.out \
-        "$BINARY_PATH" check >/dev/null 2>&1
+        "$BINARY_PATH" check "$TEST_TARGET_PATH" >/dev/null 2>&1 || true
     
     if [ -f "/tmp/massif.out" ]; then
         local peak_mem=$(grep "mem_heap_B=" /tmp/massif.out | sort -t= -k2 -n | tail -1 | cut -d= -f2)
-        local peak_mb=$((peak_mem / 1024 / 1024))
-        echo "  Peak heap usage: ${peak_mb} MB"
+        if [ ! -z "$peak_mem" ] && [ "$peak_mem" != "" ]; then
+            local peak_mb=$((peak_mem / 1024 / 1024))
+            echo "  Peak heap usage: ${peak_mb} MB"
+        else
+            echo "  Peak heap usage: Unable to measure"
+        fi
         rm -f /tmp/massif.out
+    else
+        echo "  Peak heap usage: Valgrind timed out or failed"
     fi
 }
 
@@ -769,8 +850,8 @@ output_to_markdown() {
     echo "**Rust Version:** $RUST_VERSION" >> "$OUTPUT_FILE"
     echo "**Runs:** $RUNS" >> "$OUTPUT_FILE"
     echo "**Cache Mode:** $([ $COLD_CACHE -eq 1 ] && echo "Cold" || echo "Warm")" >> "$OUTPUT_FILE"
-    echo "**Build Command:** \`RUSTC_BOOTSTRAP=1 rustup run 1.86.0 cargo build --release\`" >> "$OUTPUT_FILE"
-    echo "**Test Command:** \`rustowl check\`" >> "$OUTPUT_FILE"
+    echo "**Build Command:** \`RUSTC_BOOTSTRAP=1 rustup run 1.87.0 cargo build --release\`" >> "$OUTPUT_FILE"
+    echo "**Test Command:** \`rustowl check $TEST_TARGET_PATH\`" >> "$OUTPUT_FILE"
     echo "" >> "$OUTPUT_FILE"
     
     # Summary table
@@ -966,9 +1047,11 @@ main() {
             ;;
         prepare)
             build_project
+            prepare_test_package
             ;;
         test)
             build_project
+            prepare_test_package
             run_performance_tests
             
             if [ "$OUTPUT_FORMAT" = "markdown" ]; then

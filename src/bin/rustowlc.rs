@@ -47,9 +47,9 @@ fn main() {
 
         #[cfg(target_os = "macos")]
         {
-            extern "C" {
+            unsafe extern "C" {
                 fn _rjem_je_zone_register();
-                        }
+            }
 
             #[used]
             static _F7: unsafe extern "C" fn() = _rjem_je_zone_register;
