@@ -93,7 +93,7 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.9",
-    "@types/node": "^22.15.27",
+    "@types/node": "^22.15.29",
     "@types/vscode": "^1.100.0",
     "@typescript-eslint/eslint-plugin": "^8.33.0",
     "@typescript-eslint/parser": "^8.33.0",
