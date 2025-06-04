@@ -55,11 +55,68 @@ yarn install
 
 Before submitting PR, you have to check below:
 
-### Rust code
+### Rust code correctness and formatting
 
 - Correctly formatted by `cargo fmt`
 - Linted using Clippy by `cargo clippy`
 
-### VS Code extension
+### VS Code extension Style
 
 - Correctly formatted by `yarn fmt`
+
+### Performance Testing
+
+Use the performance testing script to validate the performance characteristics of your changes:
+
+```bash
+./scripts/perf-tests.sh --test
+```
+
+The script measures various performance metrics of the current code state, including execution time, memory usage, binary size, symbol counts, and more.
+
+#### Basic Usage
+
+- `./scripts/perf-tests.sh --test` - Run performance measurements (default mode)
+- `./scripts/perf-tests.sh --verify` - Check system readiness and tool availability
+- `./scripts/perf-tests.sh --help` - See all options
+
+#### Common Testing Scenarios
+
+```bash
+# Basic performance test with default metrics (size + time)
+./scripts/perf-tests.sh --test
+
+# Comprehensive testing with all available metrics
+./scripts/perf-tests.sh --test --full
+
+# Test with comprehensive RustOwl analysis (all targets and features)
+./scripts/perf-tests.sh --test --all-targets --all-features
+
+# Memory-focused testing with multiple runs
+./scripts/perf-tests.sh --test --memory --symbols --runs 5
+
+# Save results to markdown for documentation
+./scripts/perf-tests.sh --test --markdown results.md
+
+# Compare with previous results
+./scripts/perf-tests.sh --test --compare previous-results.md
+
+# Benchmark performance impact of comprehensive analysis vs default
+./scripts/perf-tests.sh --test --runs 5 --markdown default-analysis.md
+./scripts/perf-tests.sh --test --all-targets --all-features --runs 5 --markdown comprehensive-analysis.md
+```
+
+#### Metrics Available
+
+- **Binary Analysis**: Size, symbol count, debug symbol overhead
+- **Runtime Performance**: Execution time, memory usage, page faults, context switches
+- **Advanced Analysis**: Static analysis, memory profiling, CPU profiling recommendations
+
+#### Performance Considerations
+
+System caches can affect measurements. Use `--cold` (default) to clear caches between tests for consistent results, or `--warm` to test with realistic cached performance.
+
+**Requirements:** `git`, `cargo`, `bc`  
+**Optional:** `hyperfine`, `valgrind`, `nm`, `perf` for enhanced analysis
+
+See the man page (`man ./docs/perf-tests.1`) for detailed documentation.
