@@ -11,6 +11,13 @@ use tower_lsp::{LspService, Server};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 fn set_log_level(default: log::LevelFilter) {
     log::set_max_level(
         env::var("RUST_LOG")
