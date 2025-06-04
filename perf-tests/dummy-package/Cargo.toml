@@ -1,0 +1,48 @@
+[package]
+name = "rustowl-perf-test-dummy"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["tokio"]
+feature_a = ["dep:winapi"]
+feature_b = ["dep:base64"]
+networking = ["reqwest", "tokio"]
+advanced_crypto = ["feature_b"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"], optional = true }
+reqwest = { version = "0.12.18", features = ["json"], optional = true }
+clap = { version = "4.0", features = ["derive"] }
+anyhow = "1.0"
+thiserror = "2.0.12"
+log = "0.4"
+env_logger = "0.11.8"
+uuid = { version = "1.0", features = ["v4", "js"] }
+chrono = { version = "0.4", features = ["serde"] }
+base64 = { version = "0.22", optional = true }
+
+# Platform-specific dependencies
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "processthreadsapi"], optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[lib]
+name = "rustowl_perf_test_dummy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dummy-app"
+path = "src/main.rs"
+
+[[example]]
+name = "example-target"
+path = "examples/example_target.rs"
+
+[[bench]]
+name = "bench-target"
+path = "benches/bench_target.rs"
