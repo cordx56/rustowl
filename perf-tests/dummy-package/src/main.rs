@@ -1,8 +1,8 @@
-use rustowl_perf_test_dummy::*;
-use clap::{Arg, Command};
-use log::{info, warn, error};
-use std::path::Path;
 use anyhow::Result;
+use clap::{Arg, Command};
+use log::{error, info, warn};
+use rustowl_perf_test_dummy::*;
+use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
                 .value_name("OPERATION")
                 .index(1)
                 .required(true)
-                .value_parser(["data", "network", "files", "compute", "all"])
+                .value_parser(["data", "network", "files", "compute", "all"]),
         )
         .arg(
             Arg::new("size")
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
                 .long("size")
                 .help("Size parameter for operations")
                 .value_name("SIZE")
-                .default_value("100")
+                .default_value("100"),
         )
         .get_matches();
 
@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
 
 async fn run_data_operations(size: usize) -> Result<()> {
     info!("Running data operations with size: {}", size);
-    
+
     // Generate test data
     let dataset = generate_large_dataset(size);
     info!("Generated {} data containers", dataset.len());
@@ -66,7 +66,7 @@ async fn run_data_operations(size: usize) -> Result<()> {
 
     // Test file manager
     let file_manager = FileManager::new();
-    
+
     // This will fail intentionally to test error handling
     if let Err(e) = file_manager.open_file("nonexistent_file.txt") {
         warn!("Expected error opening nonexistent file: {}", e);
@@ -77,13 +77,16 @@ async fn run_data_operations(size: usize) -> Result<()> {
 
 async fn run_network_operations() -> Result<()> {
     info!("Running network operations");
-    
+
     let client = ApiClient::new("https://httpbin.org".to_string());
-    
+
     // Test network request (this might fail if no internet, which is fine for testing)
     match client.fetch_data_safe("get").await {
         Ok(data) => info!("Successfully fetched data: {:?}", data),
-        Err(e) => warn!("Network request failed (expected in some environments): {}", e),
+        Err(e) => warn!(
+            "Network request failed (expected in some environments): {}",
+            e
+        ),
     }
 
     Ok(())
@@ -91,11 +94,11 @@ async fn run_network_operations() -> Result<()> {
 
 fn run_file_operations(count: usize) -> Result<()> {
     info!("Running file operations with count: {}", count);
-    
+
     // Create a temporary directory for test files
     let temp_dir = std::env::temp_dir().join("rustowl_perf_test");
     std::fs::create_dir_all(&temp_dir)?;
-    
+
     // Write test files
     write_test_files(count, temp_dir.to_str().unwrap())?;
     info!("Created {} test files", count);
@@ -109,7 +112,7 @@ fn run_file_operations(count: usize) -> Result<()> {
 
 fn run_compute_operations(size: usize) -> Result<()> {
     info!("Running compute operations with size: {}", size);
-    
+
     // Run Fibonacci computation (limit size to prevent extremely long execution)
     let fib_input = std::cmp::min(size, 35) as u64;
     let result = compute_fibonacci(fib_input);
@@ -130,9 +133,12 @@ fn run_compute_operations(size: usize) -> Result<()> {
     // Write and read config
     let config_json = serde_json::to_string_pretty(&test_config)?;
     std::fs::write(&temp_config_path, config_json)?;
-    
+
     let loaded_config = AppConfig::load_from_file(temp_config_path.to_str().unwrap())?;
-    info!("Loaded config with {} endpoints", loaded_config.api_endpoints.len());
+    info!(
+        "Loaded config with {} endpoints",
+        loaded_config.api_endpoints.len()
+    );
 
     // Test potentially problematic method
     if let Some(endpoint) = loaded_config.get_first_endpoint_safe() {
