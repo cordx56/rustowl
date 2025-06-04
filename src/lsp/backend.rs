@@ -51,6 +51,7 @@ impl Backend {
             work_done_progress: Arc::new(RwLock::new(false)),
         }
     }
+
     /// returns `true` if the root is registered
     async fn set_roots(&self, path: impl AsRef<Path>) -> bool {
         let dir = if path.as_ref().is_dir() {
@@ -84,6 +85,7 @@ impl Backend {
         }
         false
     }
+
     async fn set_workspace(&self, ws: PathBuf) {
         self.workspaces.write().await.push(ws);
     }
@@ -512,6 +514,7 @@ impl LanguageServer for Backend {
         }
         self.analyze().await;
     }
+
     async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
         if let Ok(path) = params.text_document.uri.to_file_path() {
             if params.text_document.language_id == "rust" {
@@ -533,6 +536,7 @@ impl LanguageServer for Backend {
             }
         }
     }
+
     async fn did_change(&self, _params: lsp_types::DidChangeTextDocumentParams) {
         *self.analyzed.write().await = None;
         self.processes.write().await.shutdown().await;

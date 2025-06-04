@@ -45,6 +45,7 @@ impl ProgressToken {
             token: Some(token),
         }
     }
+
     pub async fn report(&self, message: Option<impl ToString>, percentage: Option<u32>) {
         if let (Some(client), Some(token)) = (self.client.clone(), self.token.clone()) {
             let value = lsp_types::ProgressParamsValue::WorkDone(
@@ -62,6 +63,7 @@ impl ProgressToken {
                 .await;
         }
     }
+
     pub async fn finish(mut self) {
         let value = lsp_types::ProgressParamsValue::WorkDone(lsp_types::WorkDoneProgress::End(
             lsp_types::WorkDoneProgressEnd { message: None },
@@ -76,6 +78,7 @@ impl ProgressToken {
         }
     }
 }
+
 impl Drop for ProgressToken {
     fn drop(&mut self) {
         let value = lsp_types::ProgressParamsValue::WorkDone(lsp_types::WorkDoneProgress::End(
