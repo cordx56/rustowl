@@ -119,4 +119,4 @@ System caches can affect measurements. Use `--cold` (default) to clear caches be
 **Requirements:** `git`, `cargo`, `bc`  
 **Optional:** `hyperfine`, `valgrind`, `nm`, `perf` for enhanced analysis
 
-See the man page (`man ./docs/perf-tests.1`) for detailed documentation.
+See the detailed (perf-tests.md)[./perf-tests.md] for more info.
