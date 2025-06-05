@@ -36,9 +36,9 @@ clap_mangen = "0.2.26"
 clap = { version = "4.5.39", features = ["derive"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = { version = "0.6", features = ["unprefixed_malloc_on_supported_platforms", "disable_initial_exec_tls"] }
+tikv-jemallocator = "0.6"
 libc = "0.2.169"
-tikv-jemalloc-sys = { version = "0.6", features = ["unprefixed_malloc_on_supported_platforms", "disable_initial_exec_tls"] }
+tikv-jemalloc-sys = "0.6"
 
 
 [profile.release]
