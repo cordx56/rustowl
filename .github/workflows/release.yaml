@@ -60,6 +60,18 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
+  winget-release:
+    runs-on: windows-latest
+    needs:
+      - build
+      - meta
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@main
+        if: needs.meta.outputs.pre_release != 'true'
+        with:
+          identifier: Cordx56.Rustowl
+          token: ${{ secrets.WINGET_TOKEN }}
+
   aur-release:
     runs-on: ubuntu-latest
     needs:

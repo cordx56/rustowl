@@ -150,6 +150,14 @@ You have to install RustOwl LSP server manually.
 
 ## Architecture / OS / package repositories
 
+### Windows
+
+We have a winget package, install with:
+
+```sh
+winget install rustowl
+```
+
 ### Archlinux
 
 We have an AUR package. Run:
