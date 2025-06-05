@@ -26,14 +26,14 @@ MODE="test"
 CHECK_ALL_TARGETS=0
 CHECK_ALL_FEATURES=0
 
-# Metric flags (default: size and time)
+# Metric flags (default: size, time, and memory)
 METRIC_SIZE=1
 METRIC_TIME=1
 METRIC_SYMBOLS=0
 METRIC_STRIP=0
-METRIC_MEMORY=0
+METRIC_MEMORY=1
 METRIC_PAGE_FAULTS=0
-METRIC_CONTEXT_SWITCHES=0
+METRIC_CONTEXT_SWITCHES=1
 METRIC_STATIC=0
 METRIC_PROFILE_MEMORY=0
 METRIC_PROFILE_CPU=0
@@ -77,7 +77,7 @@ usage() {
     echo "  --all-targets    Pass --all-targets to rustowl check command"
     echo "  --all-features   Pass --all-features to rustowl check command"
     echo ""
-    echo "Metrics (default: size,time):"
+    echo "Metrics (default: size,time,memory):"
     echo "  --full           Enable all available metrics"
     echo "  --size           Binary size analysis"
     echo "  --time           Execution time measurement"
@@ -128,6 +128,7 @@ enable_all_metrics() {
 reset_default_metrics() {
     METRIC_SIZE=1
     METRIC_TIME=1
+    METRIC_MEMORY=1
 }
 
 # Parse command line arguments
