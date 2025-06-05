@@ -70,7 +70,7 @@ jobs:
         if: needs.meta.outputs.pre_release != 'true'
         with:
           identifier: Cordx56.Rustowl
-          token: ${{ secrets.WINGET_TOKEN  }}
+          token: ${{ secrets.WINGET_TOKEN }}
 
   aur-release:
     runs-on: ubuntu-latest
