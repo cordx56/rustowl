@@ -4,6 +4,7 @@
 
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
+use mimalloc::MiMalloc;
 use rustowl::*;
 use std::env;
 use std::io;
@@ -11,12 +12,8 @@ use tower_lsp::{LspService, Server};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
-#[cfg(not(target_env = "msvc"))]
-use tikv_jemallocator::Jemalloc;
-
-#[cfg(not(target_env = "msvc"))]
 #[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn set_log_level(default: log::LevelFilter) {
     log::set_max_level(
