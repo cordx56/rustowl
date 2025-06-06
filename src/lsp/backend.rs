@@ -51,6 +51,7 @@ impl Backend {
             work_done_progress: Arc::new(RwLock::new(false)),
         }
     }
+
     /// returns `true` if the root is registered
     async fn set_roots(&self, path: impl AsRef<Path>) -> bool {
         let dir = if path.as_ref().is_dir() {
@@ -84,6 +85,7 @@ impl Backend {
         }
         false
     }
+
     async fn set_workspace(&self, ws: PathBuf) {
         self.workspaces.write().await.push(ws);
     }
@@ -100,6 +102,10 @@ impl Backend {
     }
 
     async fn analyze(&self) {
+        self.analyze_with_options(true, true).await;
+    }
+
+    async fn analyze_with_options(&self, all_targets: bool, all_features: bool) {
         log::info!("wait 100ms for rust-analyzer");
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -158,14 +164,18 @@ impl Backend {
                 log::info!("using default cargo");
                 process::Command::new("cargo")
             };
+
+            let mut args = vec!["check"];
+            if all_targets {
+                args.push("--all-targets");
+            }
+            if all_features {
+                args.push("--all-features");
+            }
+            args.extend_from_slice(&["--keep-going", "--message-format=json"]);
+
             command
-                .args([
-                    "check",
-                    "--all-targets",
-                    "--all-features",
-                    "--keep-going",
-                    "--message-format=json",
-                ])
+                .args(args)
                 .env("CARGO_TARGET_DIR", &target)
                 .env_remove("RUSTC_WRAPPER")
                 .current_dir(&root)
@@ -410,6 +420,14 @@ impl Backend {
     }
 
     pub async fn check(path: impl AsRef<Path>) -> bool {
+        Self::check_with_options(path, false, false).await
+    }
+
+    pub async fn check_with_options(
+        path: impl AsRef<Path>,
+        all_targets: bool,
+        all_features: bool,
+    ) -> bool {
         let path = path.as_ref();
         let (service, _) = LspService::build(Backend::new).finish();
         let backend = service.inner();
@@ -417,7 +435,9 @@ impl Backend {
         if path.is_dir() {
             backend.set_workspace(path.to_path_buf()).await;
             backend.set_roots(path).await;
-            backend.analyze().await;
+            backend
+                .analyze_with_options(all_targets, all_features)
+                .await;
         } else {
             backend.analyze_single_file(&path).await;
         }
@@ -512,6 +532,7 @@ impl LanguageServer for Backend {
         }
         self.analyze().await;
     }
+
     async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
         if let Ok(path) = params.text_document.uri.to_file_path() {
             if params.text_document.language_id == "rust" {
@@ -533,6 +554,7 @@ impl LanguageServer for Backend {
             }
         }
     }
+
     async fn did_change(&self, _params: lsp_types::DidChangeTextDocumentParams) {
         *self.analyzed.write().await = None;
         self.processes.write().await.shutdown().await;

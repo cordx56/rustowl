@@ -39,6 +39,26 @@ pub struct Check {
     /// The path of a file or directory to check availability.
     #[arg(value_name("path"), value_hint(ValueHint::AnyPath))]
     pub path: Option<std::path::PathBuf>,
+
+    /// Whether to check for all targets
+    /// (default: false).
+    #[arg(
+        long,
+        default_value_t = false,
+        value_name("all-targets"),
+        help = "Run the check for all targets instead of current only"
+    )]
+    pub all_targets: bool,
+
+    /// Whether to check for all features
+    /// (default: false).
+    #[arg(
+        long,
+        default_value_t = false,
+        value_name("all-features"),
+        help = "Run the check for all features instead of the current active ones only"
+    )]
+    pub all_features: bool,
 }
 
 #[derive(Args, Debug)]
