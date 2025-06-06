@@ -31,15 +31,10 @@ fn main() -> Result<(), Error> {
     for shell in Shell::value_variants() {
         generate_to(*shell, &mut cmd, "rustowl", &completion_out_dir)?;
     }
+
     let man_out_dir = out_dir.join("man");
     fs::create_dir_all(&man_out_dir)?;
-    let man = clap_mangen::Man::new(cmd);
-    let mut buffer: Vec<u8> = Default::default();
-    man.render(&mut buffer)?;
-
-    std::fs::write(man_out_dir.join("rustowl.1"), buffer)?;
-
-    Ok(())
+    clap_mangen::generate_to(cmd, man_out_dir)
 }
 
 // get toolchain
