@@ -298,8 +298,8 @@ run_benchmarks() {
         local bench_cmd="cargo bench"
         local bench_args=""
         
-        # Use cargo-criterion if available
-        if command -v cargo-criterion >/dev/null 2>&1; then
+        # Use cargo-criterion if available and not doing baseline operations
+        if command -v cargo-criterion >/dev/null 2>&1 && [[ -z "$SAVE_BASELINE" && "$COMPARE_MODE" != "true" ]]; then
             bench_cmd="cargo criterion"
         fi
         
