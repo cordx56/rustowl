@@ -183,8 +183,8 @@ jobs:
           name: benchmark-failure-logs-pr-${{ github.event.number }}
           path: |
             benchmark-summary.txt
-            baselines/performance/*/
-            target/criterion/**/estimates.json
+            baselines/performance/*/analysis_time.txt
+            baselines/performance/*/test_package.txt
           retention-days: 7
 
       - name: Comment benchmark results on PR

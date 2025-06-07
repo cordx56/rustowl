@@ -75,6 +75,49 @@ jobs:
           set -e  # Exit on any command failure
           ./scripts/security.sh
 
+      - name: Create security summary and cleanup
+        if: always()
+        run: |
+          echo "# Security Testing Summary" > security-summary.txt
+          echo "Generated: $(date)" >> security-summary.txt
+          echo "OS: ${{ matrix.os }}" >> security-summary.txt
+          echo "" >> security-summary.txt
+          
+          # Check if we have various log files and summarize them
+          if [ -f "valgrind.log" ]; then
+            echo "## Valgrind Results" >> security-summary.txt
+            echo "Log file size: $(wc -c < valgrind.log) bytes" >> security-summary.txt
+            echo "Last 10 lines:" >> security-summary.txt
+            tail -10 valgrind.log >> security-summary.txt || true
+            echo "" >> security-summary.txt
+          fi
+          
+          if ls *.trace >/dev/null 2>&1; then
+            echo "## Trace Files" >> security-summary.txt
+            ls -lh *.trace >> security-summary.txt || true
+            echo "" >> security-summary.txt
+          fi
+          
+          # Check target directory sizes and clean up large build artifacts
+          if [ -d "target/sanitizer" ]; then
+            echo "## Sanitizer Build Info" >> security-summary.txt
+            echo "Directory size before cleanup: $(du -sh target/sanitizer | cut -f1)" >> security-summary.txt
+            
+            # Keep only essential files, remove large debug artifacts
+            find target/sanitizer -name "*.rlib" -delete 2>/dev/null || true
+            find target/sanitizer -name "*.rmeta" -delete 2>/dev/null || true
+            find target/sanitizer -name "deps" -type d -exec rm -rf {} + 2>/dev/null || true
+            find target/sanitizer -name "incremental" -type d -exec rm -rf {} + 2>/dev/null || true
+            
+            echo "Directory size after cleanup: $(du -sh target/sanitizer 2>/dev/null | cut -f1 || echo 'N/A')" >> security-summary.txt
+            echo "" >> security-summary.txt
+          fi
+          
+          echo "## Environment" >> security-summary.txt
+          echo "Rust version: $(rustc --version)" >> security-summary.txt
+          echo "Cargo version: $(cargo --version)" >> security-summary.txt
+          echo "Target: $(rustc -vV | grep host | cut -d' ' -f2)" >> security-summary.txt
+
       - name: Upload security artifacts (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
@@ -83,5 +126,5 @@ jobs:
           path: |
             valgrind.log
             *.trace
-            target/sanitizer/
+            security-summary.txt
           retention-days: 7
