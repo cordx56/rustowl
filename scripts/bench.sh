@@ -473,8 +473,8 @@ analyze_regressions() {
     local regression_found=false
     
     if [[ -d "$criterion_dir" ]]; then
-        # Check for regression indicators in Criterion reports
-        if find "$criterion_dir" -name "*.html" -exec grep -l "regressed\|slower" {} \; | head -1 >/dev/null 2>&1; then
+        # Check for regression indicators in Criterion reports (simplified)
+        if find "$criterion_dir" -name "*.html" -print0 2>/dev/null | xargs -0 grep -l "regressed\|slower" 2>/dev/null | head -1 >/dev/null; then
             regression_found=true
         fi
         
