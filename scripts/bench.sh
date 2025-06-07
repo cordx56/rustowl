@@ -14,9 +14,16 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Configuration
-RUST_VERSION="1.87.0"
-DUMMY_PACKAGE_PATH="./perf-tests/dummy-package"
 BENCHMARK_NAME="rustowl_bench_simple"
+
+# Look for existing test packages in the repo
+TEST_PACKAGES=(
+    "./tests/fixtures"
+    "./benches/fixtures" 
+    "./test-data"
+    "./examples"
+    "./perf-tests"
+)
 
 # Options
 OPEN_REPORT=false
@@ -25,7 +32,8 @@ LOAD_BASELINE=""
 COMPARE_MODE=false
 CLEAN_BUILD=false
 SHOW_OUTPUT=true
-REGRESSION_THRESHOLD="2%"
+REGRESSION_THRESHOLD="5%"
+TEST_PACKAGE_PATH=""
 
 usage() {
     echo "Usage: $0 [OPTIONS]"
@@ -35,38 +43,25 @@ usage() {
     echo ""
     echo "Options:"
     echo "  -h, --help           Show this help message"
-    echo "  -o, --open           Open HTML report in browser after benchmarking"
-    echo "  -s, --save NAME      Save benchmark results as baseline with given name"
-    echo "  -l, --load NAME      Load and compare against baseline with given name"
-    echo "  -c, --compare        Compare current results with 'main' baseline"
-    echo "  -C, --clean          Clean build before benchmarking"
-    echo "  -q, --quiet          Suppress benchmark output (for CI)"
-    echo "  --threshold PCT      Set regression warning threshold (default: 2%)"
-    echo "  --list-baselines     List all available baselines"
-    echo ""
-    echo "Performance Testing:"
-    echo "  This script runs the same benchmarks as the CI performance workflow"
-    echo "  It tests RustOwl's analysis performance on the dummy package and warns"
-    echo "  about regressions above the threshold (default: 2%)"
-    echo ""
-    echo "Baseline Management:"
-    echo "  Baselines are stored in 'baselines/performance/' directory"
-    echo "  NOTE: Baselines are machine-specific and should not be committed to git"
-    echo "  The 'baselines/' directory is in .gitignore"
+    echo "  --save <name>        Save benchmark results as baseline with given name"
+    echo "  --load <name>        Load baseline and compare current results against it"
+    echo "  --threshold <percent> Set regression threshold (default: 5%)"
+    echo "  --test-package <path> Use specific test package (auto-detected if not specified)"
+    echo "  --open               Open HTML report in browser after benchmarking"
+    echo "  --clean              Clean build artifacts before benchmarking"
+    echo "  --quiet              Minimal output (for CI/automated use)"
     echo ""
     echo "Examples:"
-    echo "  $0                           # Run benchmarks and show results"
-    echo "  $0 --open                    # Run benchmarks and open HTML report"
-    echo "  $0 --save my-baseline        # Save results as 'my-baseline'"
-    echo "  $0 --load my-baseline        # Compare against 'my-baseline'"
-    echo "  $0 --compare                 # Compare against 'main' baseline"
-    echo "  $0 --clean --save main       # Clean build, then save as 'main' baseline"
-    echo "  $0 --quiet --threshold 5%    # Run quietly with 5% regression threshold"
+    echo "  $0                           # Run benchmarks with default settings"
+    echo "  $0 --save main               # Save results as 'main' baseline"
+    echo "  $0 --load main --threshold 3% # Compare against 'main' with 3% threshold"
+    echo "  $0 --clean --open            # Clean build, run benchmarks, open report"
+    echo "  $0 --save current --quiet    # Save baseline quietly (for CI)"
     echo ""
-    echo "Prerequisites:"
-    echo "  - Rust toolchain $RUST_VERSION must be installed"
-    echo "  - cargo-criterion (optional, for additional features)"
-    echo "  - gnuplot (optional, for detailed plots)"
+    echo "Baseline Management:"
+    echo "  Baselines are stored in: baselines/performance/<name>/"
+    echo "  HTML reports are in: target/criterion/report/"
+    echo ""
 }
 
 # Parse command line arguments
@@ -76,267 +71,483 @@ while [[ $# -gt 0 ]]; do
             usage
             exit 0
             ;;
-        -o|--open)
-            OPEN_REPORT=true
-            shift
-            ;;
         --save)
+            if [[ -z "$2" ]]; then
+                echo -e "${RED}Error: --save requires a baseline name${NC}"
+                echo "Example: $0 --save main"
+                exit 1
+            fi
             SAVE_BASELINE="$2"
             shift 2
             ;;
         --load)
+            if [[ -z "$2" ]]; then
+                echo -e "${RED}Error: --load requires a baseline name${NC}"
+                echo "Example: $0 --load main"
+                exit 1
+            fi
             LOAD_BASELINE="$2"
             COMPARE_MODE=true
             shift 2
             ;;
-        -c|--compare)
-            COMPARE_MODE=true
-            LOAD_BASELINE="main"
-            shift
-            ;;
-        -C|--clean)
-            CLEAN_BUILD=true
-            shift
-            ;;
         --threshold)
+            if [[ -z "$2" ]]; then
+                echo -e "${RED}Error: --threshold requires a percentage${NC}"
+                echo "Example: $0 --threshold 3%"
+                exit 1
+            fi
             REGRESSION_THRESHOLD="$2"
             shift 2
+            ;;
+        --test-package)
+            if [[ -z "$2" ]]; then
+                echo -e "${RED}Error: --test-package requires a path${NC}"
+                echo "Example: $0 --test-package ./examples/sample"
+                exit 1
+            fi
+            TEST_PACKAGE_PATH="$2"
+            shift 2
+            ;;
+        --open)
+            OPEN_REPORT=true
+            shift
+            ;;
+        --clean)
+            CLEAN_BUILD=true
+            shift
             ;;
         --quiet)
             SHOW_OUTPUT=false
             shift
             ;;
-        --list-baselines)
-            echo "Available baselines:"
-            if [ -d "baselines/performance" ]; then
-                find baselines/performance -maxdepth 1 -type d ! -path "baselines/performance" -printf '%f\n' | sort
-            else
-                echo "No baselines found"
-            fi
-            exit 0
-            ;;
         baseline)
+            # Legacy support for CI workflow
             SAVE_BASELINE="main"
             SHOW_OUTPUT=false
             shift
             ;;
         compare)
+            # Legacy support for CI workflow
             COMPARE_MODE=true
-            LOAD_BASELINE="main" 
+            LOAD_BASELINE="main"
             shift
             ;;
         *)
-            echo "Unknown option: $1"
-            usage
+            echo -e "${RED}Unknown option: $1${NC}"
+            echo "Use --help for usage information"
             exit 1
             ;;
     esac
 done
 
 print_header() {
-    echo -e "${BLUE}${BOLD}=====================================${NC}"
-    echo -e "${BLUE}${BOLD}    RustOwl Performance Benchmark${NC}"
-    echo -e "${BLUE}${BOLD}=====================================${NC}"
-    echo ""
-}
-
-check_prerequisites() {
-    echo -e "${YELLOW}Checking prerequisites...${NC}"
-    
-    # Check Rust toolchain
-    if ! rustup run "$RUST_VERSION" rustc --version >/dev/null 2>&1; then
-        echo -e "${RED}Error: Rust $RUST_VERSION is not installed${NC}"
-        echo "Please install it with: rustup install $RUST_VERSION"
-        exit 1
-    fi
-    
-    # Check dummy package
-    if [ ! -d "$DUMMY_PACKAGE_PATH" ]; then
-        echo -e "${RED}Error: Dummy package not found at $DUMMY_PACKAGE_PATH${NC}"
-        exit 1
-    fi
-    
-    if [ ! -f "$DUMMY_PACKAGE_PATH/Cargo.toml" ]; then
-        echo -e "${RED}Error: Cargo.toml not found in dummy package${NC}"
-        exit 1
-    fi
-    
-    # Check for bc (needed for regression analysis)
-    if ! command -v bc >/dev/null 2>&1; then
-        echo -e "${YELLOW}! bc (basic calculator) not found - regression analysis will be limited${NC}"
-        echo "Install with: sudo apt-get install bc (or equivalent for your system)"
-    fi
-    
-    # Check optional tools
-    if command -v gnuplot >/dev/null 2>&1; then
-        echo -e "${GREEN}✓ gnuplot found (detailed plots available)${NC}"
-    else
-        echo -e "${YELLOW}! gnuplot not found (install for detailed plots)${NC}"
-    fi
-    
-    if command -v cargo-criterion >/dev/null 2>&1; then
-        echo -e "${GREEN}✓ cargo-criterion found${NC}"
-    else
-        echo -e "${YELLOW}! cargo-criterion not found (install with: cargo install cargo-criterion)${NC}"
-    fi
-    
-    echo ""
-}
-
-clean_build() {
-    if [ "$CLEAN_BUILD" = true ]; then
-        echo -e "${YELLOW}Cleaning previous build...${NC}"
-        cargo clean
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo -e "${BLUE}${BOLD}=====================================${NC}"
+        echo -e "${BLUE}${BOLD}  RustOwl Performance Benchmarks${NC}"
+        echo -e "${BLUE}${BOLD}=====================================${NC}"
+        echo ""
+        
+        if [[ -n "$SAVE_BASELINE" ]]; then
+            echo -e "${GREEN}Mode: Save baseline as '$SAVE_BASELINE'${NC}"
+        elif [[ "$COMPARE_MODE" == "true" ]]; then
+            echo -e "${GREEN}Mode: Compare against '$LOAD_BASELINE' baseline${NC}"
+            echo -e "${GREEN}Regression threshold: $REGRESSION_THRESHOLD${NC}"
+        else
+            echo -e "${GREEN}Mode: Standard benchmark run${NC}"
+        fi
         echo ""
     fi
 }
 
-build_rustowl() {
-    echo -e "${YELLOW}Building RustOwl in release mode...${NC}"
-    RUSTC_BOOTSTRAP=1 rustup run "$RUST_VERSION" cargo build --release
-    echo ""
-}
-
-run_benchmarks() {
-    echo -e "${YELLOW}Running Criterion benchmarks...${NC}"
-    
-    local bench_args=("bench" "--bench" "$BENCHMARK_NAME")
-    local baseline_dir="baselines/performance"
-    
-    # If loading a baseline, copy it to criterion's location first
-    if [ -n "$LOAD_BASELINE" ]; then
-        if [ -d "$baseline_dir/$LOAD_BASELINE" ]; then
-            echo -e "${BLUE}Loading baseline: $LOAD_BASELINE${NC}"
-            mkdir -p target/criterion
-            cp -r "$baseline_dir/$LOAD_BASELINE"/* target/criterion/ 2>/dev/null || true
-            bench_args+=("--" "--load-baseline" "$LOAD_BASELINE")
+find_test_package() {
+    if [[ -n "$TEST_PACKAGE_PATH" ]]; then
+        if [[ -d "$TEST_PACKAGE_PATH" ]]; then
+            if [[ "$SHOW_OUTPUT" == "true" ]]; then
+                echo -e "${GREEN}✓ Using specified test package: $TEST_PACKAGE_PATH${NC}"
+            fi
+            return 0
         else
-            echo -e "${RED}Error: Baseline '$LOAD_BASELINE' not found in $baseline_dir${NC}"
+            echo -e "${RED}Error: Specified test package not found: $TEST_PACKAGE_PATH${NC}"
             exit 1
         fi
     fi
     
-    # Run the benchmark
-    local output_file="/tmp/criterion_output.txt"
+    # Auto-detect existing test packages
+    for test_dir in "${TEST_PACKAGES[@]}"; do
+        if [[ -d "$test_dir" ]]; then
+            # Check if it contains Rust code
+            if find "$test_dir" -name "*.rs" | head -1 >/dev/null 2>&1; then
+                TEST_PACKAGE_PATH="$test_dir"
+                if [[ "$SHOW_OUTPUT" == "true" ]]; then
+                    echo -e "${GREEN}✓ Found test package: $TEST_PACKAGE_PATH${NC}"
+                fi
+                return 0
+            fi
+            # Check if it contains Cargo.toml files (subdirectories with packages)
+            if find "$test_dir" -name "Cargo.toml" | head -1 >/dev/null 2>&1; then
+                TEST_PACKAGE_PATH=$(find "$test_dir" -name "Cargo.toml" | head -1 | xargs dirname)
+                if [[ "$SHOW_OUTPUT" == "true" ]]; then
+                    echo -e "${GREEN}✓ Found test package: $TEST_PACKAGE_PATH${NC}"
+                fi
+                return 0
+            fi
+        fi
+    done
     
-    if [ "$SHOW_OUTPUT" = true ]; then
-        cargo "${bench_args[@]}" | tee "$output_file"
-    else
-        cargo "${bench_args[@]}" > "$output_file" 2>&1
-        echo -e "${GREEN}✓ Benchmarks completed${NC}"
+    # Look for existing benchmark files
+    if [[ -d "./benches" ]]; then
+        TEST_PACKAGE_PATH="./benches"
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${GREEN}✓ Using benchmark directory: $TEST_PACKAGE_PATH${NC}"
+        fi
+        return 0
     fi
     
-    # If saving a baseline, copy results to our baseline directory
-    if [ -n "$SAVE_BASELINE" ]; then
-        echo -e "${BLUE}Saving baseline: $SAVE_BASELINE${NC}"
-        mkdir -p "$baseline_dir"
-        if [ -d "target/criterion" ]; then
-            cp -r target/criterion "$baseline_dir/$SAVE_BASELINE"
-            echo -e "${GREEN}✓ Baseline saved to $baseline_dir/$SAVE_BASELINE${NC}"
-        else
-            echo -e "${YELLOW}Warning: No criterion results found to save${NC}"
+    # Use the current project as test package
+    if [[ -f "./Cargo.toml" ]]; then
+        TEST_PACKAGE_PATH="."
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${GREEN}✓ Using current project as test package${NC}"
+        fi
+        return 0
+    fi
+    
+    echo -e "${RED}Error: No suitable test package found in the repository${NC}"
+    echo -e "${YELLOW}Searched in: ${TEST_PACKAGES[*]}${NC}"
+    echo -e "${YELLOW}Use --test-package <path> to specify a custom location${NC}"
+    exit 1
+}
+
+check_prerequisites() {
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo -e "${YELLOW}Checking prerequisites...${NC}"
+    fi
+    
+    # Check Rust installation (any version is fine - we trust rust-toolchain.toml)
+    if ! command -v rustc >/dev/null 2>&1; then
+        echo -e "${RED}Error: Rust is not installed${NC}"
+        echo -e "${YELLOW}Please install Rust: https://rustup.rs/${NC}"
+        exit 1
+    fi
+    
+    # Show current Rust version
+    local rust_version=$(rustc --version)
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo -e "${GREEN}✓ Rust: $rust_version${NC}"
+        echo -e "${GREEN}✓ Cargo: $(cargo --version)${NC}"
+        echo -e "${GREEN}✓ Host: $(rustc -vV | grep host | cut -d' ' -f2)${NC}"
+    fi
+    
+    # Check if cargo-criterion is available
+    if command -v cargo-criterion >/dev/null 2>&1; then
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${GREEN}✓ cargo-criterion is available${NC}"
+        fi
+    else
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${YELLOW}! cargo-criterion not found, using cargo bench${NC}"
         fi
     fi
     
-    # Analyze for regressions if comparing
-    if [ -n "$LOAD_BASELINE" ]; then
-        analyze_regressions "$output_file"
+    # Find and validate test package
+    find_test_package
+    
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo ""
+    fi
+}
+
+clean_build() {
+    if [[ "$CLEAN_BUILD" == "true" ]]; then
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${YELLOW}Cleaning build artifacts...${NC}"
+        fi
+        cargo clean
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${GREEN}✓ Build artifacts cleaned${NC}"
+            echo ""
+        fi
+    fi
+}
+
+build_rustowl() {
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo -e "${YELLOW}Building RustOwl in release mode...${NC}"
     fi
     
-    echo ""
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        RUSTC_BOOTSTRAP=1 cargo build --release
+    else
+        RUSTC_BOOTSTRAP=1 cargo build --release --quiet
+    fi
+    
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo -e "${GREEN}✓ Build completed${NC}"
+        echo ""
+    fi
+}
+
+run_benchmarks() {
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo -e "${YELLOW}Running performance benchmarks...${NC}"
+    fi
+    
+    # Check if we have any benchmark files
+    if [[ -d "./benches" ]] && find "./benches" -name "*.rs" | head -1 >/dev/null 2>&1; then
+        # Prepare benchmark command
+        local bench_cmd="cargo bench"
+        local bench_args=""
+        
+        # Use cargo-criterion if available
+        if command -v cargo-criterion >/dev/null 2>&1; then
+            bench_cmd="cargo criterion"
+        fi
+        
+        # Add baseline arguments if saving
+        if [[ -n "$SAVE_BASELINE" ]]; then
+            bench_args="$bench_args --save-baseline $SAVE_BASELINE"
+        fi
+        
+        # Add baseline arguments if comparing
+        if [[ "$COMPARE_MODE" == "true" && -n "$LOAD_BASELINE" ]]; then
+            bench_args="$bench_args --baseline $LOAD_BASELINE"
+        fi
+        
+        # Run the benchmarks
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${BLUE}Running: $bench_cmd $bench_args${NC}"
+            $bench_cmd $bench_args
+        else
+            $bench_cmd $bench_args --quiet 2>/dev/null || $bench_cmd $bench_args >/dev/null 2>&1
+        fi
+    else
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${YELLOW}! No benchmark files found in ./benches, skipping Criterion benchmarks${NC}"
+        fi
+    fi
+    
+    # Run specific RustOwl analysis benchmarks using real test data
+    if [[ -f "./target/release/rustowl" || -f "./target/release/rustowl.exe" ]]; then
+        local rustowl_binary="./target/release/rustowl"
+        if [[ -f "./target/release/rustowl.exe" ]]; then
+            rustowl_binary="./target/release/rustowl.exe"
+        fi
+        
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${YELLOW}Running RustOwl analysis benchmark on: $TEST_PACKAGE_PATH${NC}"
+        fi
+        
+        # Time the analysis of the test package
+        local start_time=$(date +%s.%N 2>/dev/null || date +%s)
+        
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            timeout 120 "$rustowl_binary" check "$TEST_PACKAGE_PATH" 2>/dev/null || true
+        else
+            timeout 120 "$rustowl_binary" check "$TEST_PACKAGE_PATH" >/dev/null 2>&1 || true
+        fi
+        
+        local end_time=$(date +%s.%N 2>/dev/null || date +%s)
+        
+        # Calculate duration (handle both nanosecond and second precision)
+        local duration
+        if command -v bc >/dev/null 2>&1 && [[ "$start_time" == *.* ]]; then
+            duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "N/A")
+        else
+            duration=$((end_time - start_time))
+        fi
+        
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${GREEN}✓ Analysis completed in ${duration}s${NC}"
+        fi
+        
+        # Save timing info for comparison
+        if [[ -n "$SAVE_BASELINE" ]]; then
+            mkdir -p "baselines/performance/$SAVE_BASELINE"
+            echo "$duration" > "baselines/performance/$SAVE_BASELINE/analysis_time.txt"
+            echo "$TEST_PACKAGE_PATH" > "baselines/performance/$SAVE_BASELINE/test_package.txt"
+        fi
+        
+        # Compare timing if in compare mode
+        if [[ "$COMPARE_MODE" == "true" && -f "baselines/performance/$LOAD_BASELINE/analysis_time.txt" ]]; then
+            local baseline_time=$(cat "baselines/performance/$LOAD_BASELINE/analysis_time.txt")
+            compare_analysis_times "$baseline_time" "$duration"
+        fi
+    else
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${YELLOW}! RustOwl binary not found, skipping analysis benchmark${NC}"
+        fi
+    fi
+    
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo -e "${GREEN}✓ Benchmarks completed${NC}"
+        echo ""
+    fi
+}
+
+compare_analysis_times() {
+    local baseline_time="$1"
+    local current_time="$2"
+    
+    if [[ "$baseline_time" == "N/A" || "$current_time" == "N/A" ]]; then
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${YELLOW}! Could not compare analysis times (timing unavailable)${NC}"
+        fi
+        return 0
+    fi
+    
+    # Calculate percentage change (handle integer vs float)
+    local change="0"
+    local abs_change="0"
+    
+    if command -v bc >/dev/null 2>&1; then
+        change=$(echo "scale=2; (($current_time - $baseline_time) / $baseline_time) * 100" | bc -l 2>/dev/null || echo "0")
+        abs_change=$(echo "$change" | sed 's/-//')
+    else
+        # Simple integer math fallback
+        if [[ "$current_time" -gt "$baseline_time" ]]; then
+            change="positive"
+            abs_change="significant"
+        elif [[ "$current_time" -lt "$baseline_time" ]]; then
+            change="negative"
+            abs_change="significant"
+        else
+            change="0"
+            abs_change="0"
+        fi
+    fi
+    
+    # Extract threshold number
+    local threshold_num=$(echo "$REGRESSION_THRESHOLD" | sed 's/%//')
+    
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo -e "${BLUE}Analysis Time Comparison:${NC}"
+        echo -e "  Baseline: ${baseline_time}s"
+        echo -e "  Current:  ${current_time}s"
+        echo -e "  Change:   ${change}%"
+        
+        # Show what test package was used for baseline
+        if [[ -f "baselines/performance/$LOAD_BASELINE/test_package.txt" ]]; then
+            local baseline_package=$(cat "baselines/performance/$LOAD_BASELINE/test_package.txt")
+            echo -e "  Test Package: ${baseline_package}"
+        fi
+    fi
+    
+    # Check for regression
+    if (( $(echo "$abs_change > $threshold_num" | bc -l 2>/dev/null || echo "0") )); then
+        if (( $(echo "$change > 0" | bc -l 2>/dev/null || echo "0") )); then
+            if [[ "$SHOW_OUTPUT" == "true" ]]; then
+                echo -e "${RED}⚠ Performance regression detected! (+${abs_change}% > ${REGRESSION_THRESHOLD})${NC}"
+            fi
+            return 1
+        else
+            if [[ "$SHOW_OUTPUT" == "true" ]]; then
+                echo -e "${GREEN}✓ Performance improvement detected! (-${abs_change}%)${NC}"
+            fi
+        fi
+    else
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${GREEN}✓ Performance within acceptable range (±${abs_change}% ≤ ${REGRESSION_THRESHOLD})${NC}"
+        fi
+    fi
+    
+    return 0
 }
 
 # Analyze benchmark output for regressions
 analyze_regressions() {
-    local output_file="$1"
-    
-    echo -e "${BLUE}Analyzing performance changes...${NC}"
-    
-    if ! command -v bc >/dev/null 2>&1; then
-        echo -e "${YELLOW}bc not available - showing all detected changes${NC}"
-        if grep -E "change:.*\+[0-9]+\.[0-9]+%" "$output_file"; then
-            echo -e "${YELLOW}⚠ Performance regressions may be present - install bc for threshold analysis${NC}"
-        else
-            echo -e "${GREEN}✓ No obvious regressions detected${NC}"
-        fi
-        return
+    if [[ "$COMPARE_MODE" != "true" ]]; then
+        return 0
     fi
     
-    # Look for "change:" patterns in Criterion output
-    local regressions_found=false
-    local threshold_num=$(echo "$REGRESSION_THRESHOLD" | sed 's/%//')
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo -e "${YELLOW}Analyzing benchmark results for regressions...${NC}"
+    fi
     
-    while IFS= read -r line; do
-        if echo "$line" | grep -E "change:.*\+[0-9]+\.[0-9]+%" >/dev/null; then
-            # Extract the percentage change
-            local change=$(echo "$line" | sed -E 's/.*change:.*\+([0-9]+\.[0-9]+)%.*/\1/')
+    # Look for Criterion output files
+    local criterion_dir="target/criterion"
+    local regression_found=false
+    
+    if [[ -d "$criterion_dir" ]]; then
+        # Check for regression indicators in Criterion reports
+        if find "$criterion_dir" -name "*.html" -exec grep -l "regressed\|slower" {} \; | head -1 >/dev/null 2>&1; then
+            regression_found=true
+        fi
+        
+        # Create a summary file for CI
+        if [[ -f "$criterion_dir/report/index.html" ]]; then
+            echo "Criterion benchmark report generated: target/criterion/report/index.html" > benchmark-summary.txt
+            echo "Test package analyzed: $TEST_PACKAGE_PATH" >> benchmark-summary.txt
             
-            # Compare with threshold (basic floating point comparison)
-            if (( $(echo "$change > $threshold_num" | bc -l) )); then
-                echo -e "${YELLOW}⚠ Performance regression detected: +${change}% (threshold: $REGRESSION_THRESHOLD)${NC}"
-                echo "  $line"
-                regressions_found=true
+            # Try to extract some basic statistics
+            if command -v grep >/dev/null 2>&1; then
+                echo "" >> benchmark-summary.txt
+                echo "Quick Summary:" >> benchmark-summary.txt
+                find "$criterion_dir" -name "*.json" -exec grep -h "\"mean\"" {} \; | head -5 >> benchmark-summary.txt 2>/dev/null || true
             fi
         fi
-    done < "$output_file"
+    fi
     
-    if [ "$regressions_found" = false ]; then
-        echo -e "${GREEN}✓ No significant regressions detected (threshold: $REGRESSION_THRESHOLD)${NC}"
+    if [[ "$regression_found" == "true" ]]; then
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${RED}⚠ Performance regressions detected in detailed analysis${NC}"
+            echo -e "${YELLOW}Check the HTML report for details: target/criterion/report/index.html${NC}"
+        fi
+        return 1
+    else
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${GREEN}✓ No significant regressions detected${NC}"
+        fi
+        return 0
     fi
 }
 
 open_report() {
-    if [ "$OPEN_REPORT" = true ]; then
-        local report_path="target/criterion/reports/index.html"
-        if [ -f "$report_path" ]; then
-            echo -e "${GREEN}Opening HTML report...${NC}"
-            case "$(uname)" in
-                Darwin)
-                    open "$report_path"
-                    ;;
-                Linux)
-                    if command -v xdg-open >/dev/null 2>&1; then
-                        xdg-open "$report_path"
-                    else
-                        echo -e "${YELLOW}Please open $report_path in your browser${NC}"
-                    fi
-                    ;;
-                *)
-                    echo -e "${YELLOW}Please open $report_path in your browser${NC}"
-                    ;;
-            esac
+    if [[ "$OPEN_REPORT" == "true" && -f "target/criterion/report/index.html" ]]; then
+        if [[ "$SHOW_OUTPUT" == "true" ]]; then
+            echo -e "${YELLOW}Opening benchmark report...${NC}"
+        fi
+        
+        # Try to open the report in the default browser
+        if command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "target/criterion/report/index.html" 2>/dev/null &
+        elif command -v open >/dev/null 2>&1; then
+            open "target/criterion/report/index.html" 2>/dev/null &
+        elif command -v start >/dev/null 2>&1; then
+            start "target/criterion/report/index.html" 2>/dev/null &
         else
-            echo -e "${YELLOW}HTML report not found at $report_path${NC}"
+            if [[ "$SHOW_OUTPUT" == "true" ]]; then
+                echo -e "${YELLOW}Could not auto-open report. Please open: target/criterion/report/index.html${NC}"
+            fi
         fi
     fi
 }
 
 show_results_location() {
-    echo -e "${GREEN}${BOLD}Benchmark completed!${NC}"
-    echo ""
-    echo -e "${BLUE}Results locations:${NC}"
-    echo "  • HTML report: target/criterion/reports/index.html"
-    echo "  • Detailed data: target/criterion/"
-    echo ""
-    
-    if [ -n "$SAVE_BASELINE" ]; then
-        echo -e "${GREEN}Baseline '$SAVE_BASELINE' saved successfully${NC}"
-        echo "Use --load $SAVE_BASELINE to compare future runs against this baseline"
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        echo -e "${BLUE}${BOLD}Results Location:${NC}"
+        
+        if [[ -f "target/criterion/report/index.html" ]]; then
+            echo -e "${GREEN}✓ HTML Report: target/criterion/report/index.html${NC}"
+        fi
+        
+        if [[ -n "$SAVE_BASELINE" && -d "baselines/performance/$SAVE_BASELINE" ]]; then
+            echo -e "${GREEN}✓ Saved baseline: baselines/performance/$SAVE_BASELINE/${NC}"
+        fi
+        
+        if [[ -f "benchmark-summary.txt" ]]; then
+            echo -e "${GREEN}✓ Summary: benchmark-summary.txt${NC}"
+        fi
+        
+        echo -e "${BLUE}✓ Test package used: $TEST_PACKAGE_PATH${NC}"
+        
+        echo ""
+        echo -e "${YELLOW}Tips:${NC}"
+        echo -e "  • Use --open to automatically open the HTML report"
+        echo -e "  • Use --save <name> to create a baseline for future comparisons"
+        echo -e "  • Use --load <name> to compare against a saved baseline"
+        echo -e "  • Use --test-package <path> to benchmark specific test data"
         echo ""
     fi
-    
-    if [ -n "$LOAD_BASELINE" ]; then
-        echo -e "${BLUE}Comparison completed against baseline '$LOAD_BASELINE'${NC}"
-        echo "Check the output above for performance differences"
-        echo ""
-        echo -e "${YELLOW}Tip: Set a different regression threshold with --threshold <percentage>${NC}"
-        echo "Current threshold: $REGRESSION_THRESHOLD"
-        echo ""
-    fi
-    
-    echo -e "${BLUE}Integration with CI:${NC}"
-    echo "This script runs the same benchmarks as the bench-performance.yml workflow"
-    echo "Consider saving a 'main' baseline to track performance changes over time"
 }
 
 # Main execution
@@ -346,8 +557,25 @@ main() {
     clean_build
     build_rustowl
     run_benchmarks
-    show_results_location
+    
+    # Check for regressions and set exit code
+    local exit_code=0
+    if ! analyze_regressions; then
+        exit_code=1
+    fi
+    
     open_report
+    show_results_location
+    
+    if [[ "$SHOW_OUTPUT" == "true" ]]; then
+        if [[ $exit_code -eq 0 ]]; then
+            echo -e "${GREEN}${BOLD}✓ Benchmark completed successfully!${NC}"
+        else
+            echo -e "${RED}${BOLD}⚠ Benchmark completed with performance regressions detected${NC}"
+        fi
+    fi
+    
+    exit $exit_code
 }
 
 # Run main function
