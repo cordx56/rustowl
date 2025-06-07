@@ -187,10 +187,10 @@ detect_tools() {
 
 # Build the project
 build_project() {
-    echo -e "${YELLOW}Building RustOwl in release mode...${NC}"
-    RUSTC_BOOTSTRAP=1 cargo build --release
+    echo -e "${YELLOW}Building RustOwl in security mode...${NC}"
+    RUSTC_BOOTSTRAP=1 cargo build --profile=security
     
-    if [ ! -f "./target/release/rustowl" ]; then
+    if [ ! -f "./target/security/rustowl" ]; then
         echo -e "${RED}✗ Failed to build rustowl binary${NC}"
         exit 1
     fi
@@ -238,11 +238,11 @@ run_valgrind_tests() {
         echo -e "${YELLOW}Testing rustowl with Valgrind...${NC}"
         if timeout 300 valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all \
            --error-exitcode=1 --track-origins=yes \
-           ./target/release/rustowl check "$TEST_TARGET_PATH" >/dev/null 2>&1; then
+           ./target/security/rustowl check "$TEST_TARGET_PATH" >/dev/null 2>&1; then
             echo -e "${GREEN}✓ No memory errors detected by Valgrind${NC}"
         else
             echo -e "${RED}✗ Valgrind detected memory issues${NC}"
-            echo "Run manually for details: valgrind --tool=memcheck --leak-check=full ./target/release/rustowl check $TEST_TARGET_PATH"
+            echo "Run manually for details: valgrind --tool=memcheck --leak-check=full ./target/security/rustowl check $TEST_TARGET_PATH"
             return 1
         fi
     else
@@ -296,7 +296,7 @@ run_sanitizer_tests() {
             echo "  Testing target: $target"
         fi
         
-        if RUSTFLAGS="-Z sanitizer=address" rustup run nightly cargo build --release $target_flag 2>/dev/null; then
+        if RUSTFLAGS="-Z sanitizer=address" rustup run nightly cargo build --profile=security $target_flag 2>/dev/null; then
             echo -e "${GREEN}✓ AddressSanitizer build successful${NC}${target:+ for $target}"
             addr_success=true
         else
@@ -315,7 +315,7 @@ run_sanitizer_tests() {
                 echo "  Testing target: $target"
             fi
             
-            if RUSTFLAGS="-Z sanitizer=thread" rustup run nightly cargo build --release $target_flag 2>/dev/null; then
+            if RUSTFLAGS="-Z sanitizer=thread" rustup run nightly cargo build --profile=security $target_flag 2>/dev/null; then
                 echo -e "${GREEN}✓ ThreadSanitizer build successful${NC}${target:+ for $target}"
                 thread_success=true
             else
@@ -362,7 +362,7 @@ run_drmemory_tests() {
     
     if [ -d "$TEST_TARGET_PATH" ]; then
         echo -e "${YELLOW}Testing rustowl with DrMemory...${NC}"
-        if drmemory -- ./target/release/rustowl.exe check "$TEST_TARGET_PATH"; then
+        if drmemory -- ./target/security/rustowl.exe check "$TEST_TARGET_PATH"; then
             echo -e "${GREEN}✓ No memory errors detected by DrMemory${NC}"
         else
             echo -e "${RED}✗ DrMemory detected memory issues${NC}"
@@ -385,7 +385,7 @@ run_instruments_tests() {
     echo ""
     
     echo -e "${YELLOW}Note: Instruments requires manual analysis${NC}"
-    echo "Run manually: instruments -t Leaks ./target/release/rustowl check $TEST_TARGET_PATH"
+    echo "Run manually: instruments -t Leaks ./target/security/rustowl check $TEST_TARGET_PATH"
     
     echo ""
 }
