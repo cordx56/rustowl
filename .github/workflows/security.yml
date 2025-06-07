@@ -31,25 +31,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Rust nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          components: miri,rust-src,llvm-tools-preview,rustc-dev
+          components: miri,rust-src,llvm-tools-preview
+          # Automatically reads from rust-toolchain.toml
 
-      - name: Install platform-specific targets for nightly
+      - name: Install platform-specific targets
         shell: bash
         run: |
-          # Install appropriate targets for sanitizer testing
+          # Install appropriate targets for the nightly version
           if [[ "${{ matrix.runner_os }}" == "Linux" ]]; then
-            rustup +nightly target add x86_64-unknown-linux-gnu
+            rustup target add x86_64-unknown-linux-gnu
             if [[ "${{ matrix.os }}" == "ubuntu-24.04-arm" ]]; then
-              rustup +nightly target add aarch64-unknown-linux-gnu
+              rustup target add aarch64-unknown-linux-gnu
             fi
           elif [[ "${{ matrix.runner_os }}" == "macOS" ]]; then
-            # Add both targets for macOS (script will detect which to use)
-            rustup +nightly target add aarch64-apple-darwin x86_64-apple-darwin
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
           elif [[ "${{ matrix.runner_os }}" == "Windows" ]]; then
-            rustup +nightly target add x86_64-pc-windows-msvc
+            rustup target add x86_64-pc-windows-msvc
           fi
 
       - name: Cache dependencies
@@ -75,12 +75,13 @@ jobs:
           set -e  # Exit on any command failure
           ./scripts/security.sh
 
-      - name: Upload Valgrind logs (on failure)
-        if: failure() && matrix.runner_os == 'Linux'
+      - name: Upload security artifacts (on failure)
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: valgrind-logs-${{ matrix.os }}
+          name: security-logs-${{ matrix.os }}
           path: |
             valgrind.log
             *.trace
+            target/sanitizer/
           retention-days: 7

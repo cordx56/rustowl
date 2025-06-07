@@ -1,0 +1,30 @@
+name: 'Comment Benchmark Results'
+description: 'Posts benchmark results as a PR comment'
+inputs:
+  regression-detected:
+    description: 'Whether performance regression was detected'
+    required: true
+  first-run:
+    description: 'Whether this is the first benchmark run'
+    required: false
+    default: 'false'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+    default: ${{ github.token }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Comment on PR
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const { commentBenchmarkResults } = require('${{ github.action_path }}/comment-script.js');
+          await commentBenchmarkResults(
+            github,
+            context,
+            '${{ inputs.regression-detected }}' === 'true',
+            '${{ inputs.first-run }}' === 'true'
+          );

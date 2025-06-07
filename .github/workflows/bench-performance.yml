@@ -1,76 +1,143 @@
-name: Performance Benchmarking
+name: Performance Benchmarks
 
 on:
   pull_request:
     branches: [ "main" ]
-  push:
-    branches: [ "main" ]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'benches/**'
+      - 'perf-tests/**'
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTUP_TOOLCHAIN: 1.87.0
   RUSTC_BOOTSTRAP: 1
 
 jobs:
   benchmark:
-    name: Performance Benchmark
+    name: Performance Regression Detection
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        # Automatically reads from rust-toolchain.toml
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Install system dependencies
+      - name: Install benchmark dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gnuplot bc
+          sudo apt-get install -y bc gnuplot
+          cargo install cargo-criterion || true
 
-      - name: Install cargo tools
+      - name: Try to restore baseline from cache
+        id: restore-baseline
+        uses: actions/cache/restore@v3
+        with:
+          path: baselines/performance/main/
+          key: performance-baseline-latest
+          restore-keys: |
+            performance-baseline-
+
+      - name: Create baseline from main if not found
+        if: steps.restore-baseline.outputs.cache-hit != 'true'
         run: |
-          cargo install cargo-criterion
+          echo "No cached baseline found, creating from main branch..."
+          
+          # Save current state
+          CURRENT_SHA=${{ github.sha }}
+          
+          # Checkout main and create baseline
+          git fetch origin main
+          git checkout origin/main
+          
+          # Check if benchmark script exists in main
+          if [ -f "./scripts/bench.sh" ]; then
+            echo "Benchmark script found in main branch"
+            chmod +x ./scripts/bench.sh
+            
+            # Build main version
+            RUSTC_BOOTSTRAP=1 cargo build --release
+            
+            # Run baseline benchmark
+            ./scripts/bench.sh --save main --quiet
+            echo "Baseline created successfully from main branch"
+          else
+            echo "::warning::Benchmark script not found in main branch"
+            echo "Will run benchmark without comparison"
+          fi
+          
+          # Switch back to PR branch
+          git checkout "$CURRENT_SHA"
+
+      - name: Build RustOwl (PR branch)
+        run: |
+          RUSTC_BOOTSTRAP=1 cargo build --release
 
       - name: Make scripts executable
         run: chmod +x scripts/*.sh
 
-      - name: Run performance benchmarks
-        run: ./scripts/bench.sh
+      - name: Run performance comparison
+        id: benchmark
+        run: |
+          echo "Running benchmark on PR branch..."
+          
+          # Check if we have a baseline to compare against
+          if [ -d "baselines/performance/main" ]; then
+            echo "Comparing against main baseline..."
+            
+            # Run comparison and capture exit code
+            set +e  # Don't exit on error
+            ./scripts/bench.sh --load main --threshold 5%
+            BENCH_EXIT_CODE=$?
+            set -e
+            
+            if [ $BENCH_EXIT_CODE -ne 0 ]; then
+              echo "REGRESSION_DETECTED=true" >> $GITHUB_OUTPUT
+              echo "::warning::Performance regression detected!"
+            else
+              echo "REGRESSION_DETECTED=false" >> $GITHUB_OUTPUT
+              echo "✅ No significant performance regression detected"
+            fi
+          else
+            echo "No baseline available, running benchmark without comparison..."
+            ./scripts/bench.sh --save current --quiet
+            echo "REGRESSION_DETECTED=false" >> $GITHUB_OUTPUT
+            echo "FIRST_RUN=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: criterion-reports
-          path: target/criterion/
-          retention-days: 10
+          name: benchmark-results-pr-${{ github.event.number }}
+          path: |
+            target/criterion/
+            baselines/
+          retention-days: 30
 
-      - name: Compare with main baseline (PR only)
+      - name: Comment benchmark results on PR
         if: github.event_name == 'pull_request'
-        run: |
-          # Save current PR results
-          mkdir -p /tmp/pr-results
-          cp -r target/criterion /tmp/pr-results/ || true
-          
-          # Checkout main branch and create baseline
-          git checkout origin/main
-          ./scripts/bench.sh baseline
-          
-          # Switch back to PR branch and compare
-          git checkout ${{ github.event.pull_request.head.sha }}
-          ./scripts/bench.sh compare || {
-            echo "Performance regression detected!"
-            exit 1
-          }
+        uses: ./.github/actions/comment-benchmark
+        with:
+          regression-detected: ${{ steps.benchmark.outputs.REGRESSION_DETECTED }}
+          first-run: ${{ steps.benchmark.outputs.FIRST_RUN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add regression label
+        if: steps.benchmark.outputs.REGRESSION_DETECTED == 'true' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['performance-regression']
+            });

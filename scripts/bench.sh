@@ -80,12 +80,13 @@ while [[ $# -gt 0 ]]; do
             OPEN_REPORT=true
             shift
             ;;
-        -s|--save)
+        --save)
             SAVE_BASELINE="$2"
             shift 2
             ;;
-        -l|--load)
+        --load)
             LOAD_BASELINE="$2"
+            COMPARE_MODE=true
             shift 2
             ;;
         -c|--compare)
@@ -97,13 +98,13 @@ while [[ $# -gt 0 ]]; do
             CLEAN_BUILD=true
             shift
             ;;
-        -q|--quiet)
-            SHOW_OUTPUT=false
-            shift
-            ;;
         --threshold)
             REGRESSION_THRESHOLD="$2"
             shift 2
+            ;;
+        --quiet)
+            SHOW_OUTPUT=false
+            shift
             ;;
         --list-baselines)
             echo "Available baselines:"
@@ -113,6 +114,16 @@ while [[ $# -gt 0 ]]; do
                 echo "No baselines found"
             fi
             exit 0
+            ;;
+        baseline)
+            SAVE_BASELINE="main"
+            SHOW_OUTPUT=false
+            shift
+            ;;
+        compare)
+            COMPARE_MODE=true
+            LOAD_BASELINE="main" 
+            shift
             ;;
         *)
             echo "Unknown option: $1"

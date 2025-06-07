@@ -1,0 +1,70 @@
+name: Create Performance Baseline
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'benches/**'
+      - 'perf-tests/**'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTC_BOOTSTRAP: 1
+
+jobs:
+  create-baseline:
+    name: Create Performance Baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        # Automatically reads from rust-toolchain.toml
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install benchmark dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc gnuplot
+          cargo install cargo-criterion || true
+
+      - name: Build RustOwl
+        run: |
+          RUSTC_BOOTSTRAP=1 cargo build --release
+
+      - name: Make scripts executable
+        run: chmod +x scripts/*.sh
+
+      - name: Run baseline benchmark
+        run: |
+          echo "Creating new performance baseline from main branch..."
+          ./scripts/bench.sh --save main --quiet
+
+      - name: Upload baseline as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-baseline-${{ github.sha }}
+          path: |
+            baselines/performance/main/
+            target/criterion/report/
+          retention-days: 90  # Keep baselines longer
+
+      - name: Upload baseline to cache
+        uses: actions/cache/save@v3
+        with:
+          path: baselines/performance/main/
+          key: performance-baseline-${{ github.sha }}
+
+      - name: Update latest baseline cache
+        uses: actions/cache/save@v3
+        with:
+          path: baselines/performance/main/
+          key: performance-baseline-latest

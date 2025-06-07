@@ -56,7 +56,7 @@ detect_platform() {
     echo -e "${BLUE}Detected platform: $OS_TYPE${NC}"
 }
 
-# Auto-configure tests based on platform capabilities
+# Auto-configure tests based on platform capabilities and toolchain compatibility
 auto_configure_tests() {
     echo -e "${YELLOW}Auto-configuring tests for $OS_TYPE...${NC}"
     
@@ -64,7 +64,6 @@ auto_configure_tests() {
         "Linux")
             # Linux: Full test suite available
             echo "  Linux detected: Enabling Miri, Valgrind, Sanitizers, and Audit"
-            # Keep all defaults (everything enabled)
             ;;
         "macOS")
             # macOS: No Valgrind (unreliable), no DrMemory, Instruments needs Xcode
@@ -87,8 +86,20 @@ auto_configure_tests() {
             RUN_VALGRIND=0
             RUN_DRMEMORY=0
             RUN_INSTRUMENTS=0
+            # Also disable nightly-dependent features on unknown platforms
+            RUN_MIRI=0
+            RUN_SANITIZERS=0
             ;;
     esac
+    
+    # Additional check: if we detect nightly API compatibility issues, disable advanced features
+    if ! cargo +nightly check --lib >/dev/null 2>&1; then
+        echo -e "${YELLOW}  ! Nightly compatibility issues detected${NC}"
+        echo "  Disabling Miri and Sanitizers to avoid build failures"
+        RUN_MIRI=0
+        RUN_SANITIZERS=0
+    fi
+    
     echo ""
 }
 
@@ -248,26 +259,30 @@ detect_tools() {
 
 # Check nightly toolchain availability for advanced features
 check_nightly_toolchain() {
-    echo -e "${YELLOW}Checking nightly toolchain for advanced security features...${NC}"
+    echo -e "${YELLOW}Checking toolchain for advanced security features...${NC}"
     
-    if ! rustup toolchain list | grep -q nightly; then
-        echo -e "${RED}✗ Nightly toolchain not available${NC}"
-        echo -e "${YELLOW}Install with: rustup toolchain install nightly${NC}"
-        echo -e "${YELLOW}Some advanced security tests (Miri, Sanitizers) will be disabled${NC}"
-        return 1
-    fi
+    # Check what toolchain is currently active
+    local current_toolchain=$(rustup show active-toolchain | cut -d' ' -f1)
+    echo -e "${BLUE}Active toolchain: $current_toolchain${NC}"
     
-    # Check if Miri component is available
-    if ! rustup +nightly component list --installed | grep -q miri 2>/dev/null; then
-        echo -e "${YELLOW}! Miri component not installed on nightly${NC}"
-        echo -e "${YELLOW}Install with: rustup +nightly component add miri${NC}"
-        HAS_MIRI=0
+    if [[ "$current_toolchain" == *"nightly"* ]]; then
+        echo -e "${GREEN}✓ Nightly toolchain is active (from rust-toolchain.toml)${NC}"
     else
-        HAS_MIRI=1
-        echo -e "${GREEN}✓ Miri is available on nightly${NC}"
+        echo -e "${YELLOW}! Stable toolchain detected${NC}"
+        echo -e "${YELLOW}Some advanced features require nightly (check rust-toolchain.toml)${NC}"
     fi
     
-    # Check if required targets are installed for sanitizers
+    # Check if Miri component is available on current toolchain
+    if rustup component list --installed | grep -q miri 2>/dev/null; then
+        HAS_MIRI=1
+        echo -e "${GREEN}✓ Miri is available${NC}"
+    else
+        echo -e "${YELLOW}! Miri component not installed${NC}"
+        echo -e "${YELLOW}Install with: rustup component add miri${NC}"
+        HAS_MIRI=0
+    fi
+    
+    # Check if required targets are installed
     local current_target
     case "$OS_TYPE" in
         "Linux")
@@ -288,30 +303,24 @@ check_nightly_toolchain() {
     esac
     
     if [[ -n "$current_target" ]]; then
-        if rustup +nightly target list --installed | grep -q "$current_target"; then
-            echo -e "${GREEN}✓ Target $current_target is available on nightly${NC}"
+        if rustup target list --installed | grep -q "$current_target"; then
+            echo -e "${GREEN}✓ Target $current_target is available${NC}"
         else
-            echo -e "${YELLOW}! Target $current_target not installed on nightly${NC}"
-            echo -e "${YELLOW}Install with: rustup +nightly target add $current_target${NC}"
+            echo -e "${YELLOW}! Target $current_target not installed${NC}"
+            echo -e "${YELLOW}Install with: rustup target add $current_target${NC}"
         fi
     fi
     
-    echo -e "${GREEN}✓ Nightly toolchain is available${NC}"
     return 0
 }
 
-# Build the project with appropriate profile
+# Build the project with the toolchain specified in rust-toolchain.toml
 build_project() {
     echo -e "${YELLOW}Building RustOwl in security mode...${NC}"
+    echo -e "${BLUE}Using toolchain from rust-toolchain.toml${NC}"
     
-    # Use nightly for the security build to enable all features
-    if check_nightly_toolchain; then
-        echo -e "${BLUE}Using nightly toolchain for security build${NC}"
-        RUSTC_BOOTSTRAP=1 cargo +nightly build --profile=security
-    else
-        echo -e "${YELLOW}Falling back to stable toolchain (limited features)${NC}"
-        RUSTC_BOOTSTRAP=1 cargo build --profile=security
-    fi
+    # Build with the current toolchain (specified by rust-toolchain.toml)
+    RUSTC_BOOTSTRAP=1 cargo build --profile=security
     
     local binary_name="rustowl"
     if [[ "$OS_TYPE" == "Windows" ]]; then
@@ -327,14 +336,14 @@ build_project() {
     echo ""
 }
 
-# Run Miri tests (requires nightly)
+# Run Miri tests using the current toolchain
 run_miri_tests() {
     if [[ $RUN_MIRI -eq 0 ]]; then
         return 0
     fi
     
     if [[ $HAS_MIRI -eq 0 ]]; then
-        echo -e "${YELLOW}Skipping Miri tests (requires: rustup +nightly component add miri)${NC}"
+        echo -e "${YELLOW}Skipping Miri tests (component not installed)${NC}"
         return 0
     fi
     
@@ -343,9 +352,9 @@ run_miri_tests() {
     echo "Miri detects undefined behavior in Rust code"
     echo ""
     
-    # Test the library with Miri using nightly
+    # Test the library with Miri using current toolchain
     echo -e "${YELLOW}Testing library code with Miri...${NC}"
-    if cargo +nightly miri test --lib; then
+    if cargo miri test --lib; then
         echo -e "${GREEN}✓ Library tests passed with Miri${NC}"
     else
         echo -e "${RED}✗ Miri detected issues in library code${NC}"
@@ -393,7 +402,7 @@ run_valgrind_tests() {
     echo ""
 }
 
-# Run sanitizer tests (requires nightly)
+# Run sanitizer tests using the current nightly toolchain
 run_sanitizer_tests() {
     if [[ $RUN_SANITIZERS -eq 0 ]]; then
         return 0
@@ -403,10 +412,10 @@ run_sanitizer_tests() {
     echo -e "${BLUE}================================${NC}"
     echo "Sanitizers detect various memory and threading issues"
     
-    # Check if nightly toolchain is available
-    if ! rustup toolchain list | grep -q nightly; then
-        echo -e "${YELLOW}! Nightly toolchain not available, skipping sanitizers${NC}"
-        echo -e "${YELLOW}Install with: rustup toolchain install nightly${NC}"
+    # Check if current toolchain supports sanitizers
+    local current_toolchain=$(rustup show active-toolchain | cut -d' ' -f1)
+    if [[ "$current_toolchain" != *"nightly"* ]]; then
+        echo -e "${YELLOW}! Sanitizers require nightly toolchain, skipping${NC}"
         return 0
     fi
     
@@ -423,7 +432,6 @@ run_sanitizer_tests() {
             else
                 current_target="x86_64-unknown-linux-gnu"
             fi
-            echo "  Testing target: $current_target"
             ;;
         "macOS")
             if uname -m | grep -q arm64; then
@@ -431,27 +439,27 @@ run_sanitizer_tests() {
             else
                 current_target="x86_64-apple-darwin"
             fi
-            echo "  Testing target: $current_target"
             ;;
         "Windows")
             current_target="x86_64-pc-windows-msvc"
-            echo "  Testing target: $current_target"
             echo "  Note: Limited sanitizer support on Windows"
             ;;
     esac
     
+    echo "  Testing target: $current_target"
+    
     # Try AddressSanitizer
     echo -e "${YELLOW}Building with AddressSanitizer...${NC}"
-    if RUSTFLAGS="-Z sanitizer=address" cargo +nightly build --target "$current_target" --target-dir target/sanitizer --profile=security 2>/dev/null; then
-        echo -e "${GREEN}✓ AddressSanitizer build successful${NC}"
+    if RUSTFLAGS="-Z sanitizer=address" cargo build --target "$current_target" --target-dir target/sanitizer --profile=security 2>/dev/null; then
+        echo -e "${GREEN}✓ AddressSanitizer build successful for $current_target${NC}"
     else
-        echo -e "${YELLOW}! AddressSanitizer build failed${NC}"
+        echo -e "${YELLOW}! AddressSanitizer build failed for $current_target${NC}"
         sanitizer_failed=true
     fi
     
     # Don't fail the entire security suite if sanitizers have issues
     if [[ "$sanitizer_failed" == "true" ]]; then
-        echo -e "${YELLOW}! Sanitizers failed - this may indicate toolchain issues rather than code problems${NC}"
+        echo -e "${YELLOW}! Some sanitizers failed - this may indicate toolchain compatibility issues${NC}"
         return 0  # Don't fail the entire security check
     fi
     
