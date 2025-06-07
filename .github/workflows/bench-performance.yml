@@ -11,6 +11,11 @@ on:
       - 'perf-tests/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 env:
   CARGO_TERM_COLOR: always
   RUSTC_BOOTSTRAP: 1
@@ -68,6 +73,19 @@ jobs:
             # Run baseline benchmark
             ./scripts/bench.sh --save main --quiet
             echo "Baseline created successfully from main branch"
+            
+            # Verify baseline was created
+            if [ -d "baselines/performance/main" ]; then
+              echo "✅ Baseline directory confirmed: baselines/performance/main"
+              ls -la baselines/performance/main/
+              
+              # Backup baseline before Git operations
+              mkdir -p /tmp/baseline-backup
+              cp -r baselines/performance/main/* /tmp/baseline-backup/
+              echo "✅ Baseline backed up to /tmp/baseline-backup"
+            else
+              echo "❌ Baseline directory not found after creation"
+            fi
           else
             echo "::warning::Benchmark script not found in main branch"
             echo "Will run benchmark without comparison"
@@ -75,6 +93,15 @@ jobs:
           
           # Switch back to PR branch
           git checkout "$CURRENT_SHA"
+          
+          # Restore baseline if it was lost during checkout
+          if [ ! -d "baselines/performance/main" ] && [ -d "/tmp/baseline-backup" ]; then
+            echo "🔄 Restoring baseline from backup..."
+            mkdir -p baselines/performance/main
+            cp -r /tmp/baseline-backup/* baselines/performance/main/
+            echo "✅ Baseline restored successfully"
+            ls -la baselines/performance/main/
+          fi
 
       - name: Build RustOwl (PR branch)
         run: |
@@ -83,14 +110,38 @@ jobs:
       - name: Make scripts executable
         run: chmod +x scripts/*.sh
 
+      - name: Debug baseline status
+        run: |
+          echo "🔍 Checking baseline status before comparison..."
+          if [ -d "baselines/performance/main" ]; then
+            echo "✅ Baseline found: baselines/performance/main"
+            ls -la baselines/performance/main/
+            echo "📁 Baseline files:"
+            find baselines/performance/main/ -type f -exec echo "  {}: $(cat {})" \;
+          else
+            echo "❌ No baseline found at: baselines/performance/main"
+            echo "🔍 Available directories:"
+            find . -name "baselines" -type d 2>/dev/null || echo "No baselines directory found"
+            find . -path "*/performance/*" -type d 2>/dev/null || echo "No performance directories found"
+          fi
+
       - name: Run performance comparison
         id: benchmark
         run: |
-          echo "Running benchmark on PR branch..."
+          echo "🚀 Running benchmark on PR branch..."
           
           # Check if we have a baseline to compare against
-          if [ -d "baselines/performance/main" ]; then
-            echo "Comparing against main baseline..."
+          if [ -d "baselines/performance/main" ] && [ "$(ls -A baselines/performance/main 2>/dev/null)" ]; then
+            echo "📊 Comparing against main baseline..."
+            
+            # Show baseline info
+            echo "📋 Baseline details:"
+            if [ -f "baselines/performance/main/analysis_time.txt" ]; then
+              echo "  - Analysis time: $(cat baselines/performance/main/analysis_time.txt)s"
+            fi
+            if [ -f "baselines/performance/main/test_package.txt" ]; then
+              echo "  - Test package: $(cat baselines/performance/main/test_package.txt)"
+            fi
             
             # Run comparison and capture exit code
             set +e  # Don't exit on error
@@ -106,7 +157,7 @@ jobs:
               echo "✅ No significant performance regression detected"
             fi
           else
-            echo "No baseline available, running benchmark without comparison..."
+            echo "📝 No baseline available, running benchmark without comparison..."
             ./scripts/bench.sh --save current --quiet
             echo "REGRESSION_DETECTED=false" >> $GITHUB_OUTPUT
             echo "FIRST_RUN=true" >> $GITHUB_OUTPUT
@@ -118,9 +169,23 @@ jobs:
         with:
           name: benchmark-results-pr-${{ github.event.number }}
           path: |
-            target/criterion/
-            baselines/
+            target/criterion/report/index.html
+            target/criterion/*/report/index.html
+            baselines/performance/*/analysis_time.txt
+            baselines/performance/*/test_package.txt
+            benchmark-summary.txt
           retention-days: 30
+
+      - name: Upload failure logs (on error)
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: benchmark-failure-logs-pr-${{ github.event.number }}
+          path: |
+            benchmark-summary.txt
+            baselines/performance/*/
+            target/criterion/**/estimates.json
+          retention-days: 7
 
       - name: Comment benchmark results on PR
         if: github.event_name == 'pull_request'

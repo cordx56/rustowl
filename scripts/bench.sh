@@ -478,16 +478,40 @@ analyze_regressions() {
             regression_found=true
         fi
         
-        # Create a summary file for CI
+        # Create a comprehensive summary file for CI
         if [[ -f "$criterion_dir/report/index.html" ]]; then
-            echo "Criterion benchmark report generated: target/criterion/report/index.html" > benchmark-summary.txt
-            echo "Test package analyzed: $TEST_PACKAGE_PATH" >> benchmark-summary.txt
+            cat > benchmark-summary.txt << EOF
+# RustOwl Benchmark Summary
+Generated: $(date)
+Test Package: $TEST_PACKAGE_PATH
+Mode: $(if [[ -n "$SAVE_BASELINE" ]]; then echo "Save baseline ($SAVE_BASELINE)"; elif [[ "$COMPARE_MODE" == "true" ]]; then echo "Compare against $LOAD_BASELINE"; else echo "Standard run"; fi)
+
+## Reports Available
+- HTML Report: target/criterion/report/index.html
+$(find "$criterion_dir" -name "index.html" | grep -v "^target/criterion/report/index.html$" | sed 's/^/- Individual: /' || true)
+
+## Benchmark Results Summary
+EOF
             
-            # Try to extract some basic statistics
-            if command -v grep >/dev/null 2>&1; then
+            # Extract key timing information from JSON files
+            if command -v jq >/dev/null 2>&1; then
+                echo "### Detailed Timings (JSON extracted)" >> benchmark-summary.txt
+                find "$criterion_dir" -name "estimates.json" -exec sh -c 'echo "$(dirname "$1" | sed "s|target/criterion/||"): $(jq -r ".mean.point_estimate" "$1" 2>/dev/null || echo "N/A")s"' _ {} \; >> benchmark-summary.txt 2>/dev/null || true
+            else
+                echo "### Quick Summary (grep extracted)" >> benchmark-summary.txt
+                find "$criterion_dir" -name "*.json" -exec grep -h "\"mean\"" {} \; 2>/dev/null | head -10 >> benchmark-summary.txt || true
+            fi
+            
+            # Add regression status if comparing
+            if [[ "$COMPARE_MODE" == "true" ]]; then
                 echo "" >> benchmark-summary.txt
-                echo "Quick Summary:" >> benchmark-summary.txt
-                find "$criterion_dir" -name "*.json" -exec grep -h "\"mean\"" {} \; | head -5 >> benchmark-summary.txt 2>/dev/null || true
+                echo "## Regression Analysis" >> benchmark-summary.txt
+                if [[ "$regression_found" == "true" ]]; then
+                    echo "⚠️ REGRESSION DETECTED" >> benchmark-summary.txt
+                else
+                    echo "✅ No significant regressions" >> benchmark-summary.txt
+                fi
+                echo "Threshold: $REGRESSION_THRESHOLD" >> benchmark-summary.txt
             fi
         fi
     fi
@@ -555,6 +579,40 @@ show_results_location() {
     fi
 }
 
+# Create a basic summary file even without detailed Criterion data
+create_basic_summary() {
+    # Create a basic summary file even without detailed Criterion data
+    if [[ ! -f "benchmark-summary.txt" ]]; then
+        cat > benchmark-summary.txt << EOF
+# RustOwl Benchmark Summary
+Generated: $(date)
+Test Package: $TEST_PACKAGE_PATH
+Mode: $(if [[ -n "$SAVE_BASELINE" ]]; then echo "Save baseline ($SAVE_BASELINE)"; elif [[ "$COMPARE_MODE" == "true" ]]; then echo "Compare against $LOAD_BASELINE"; else echo "Standard run"; fi)
+
+## Analysis Performance
+EOF
+        
+        # Add analysis timing if available
+        if [[ -n "$SAVE_BASELINE" && -f "baselines/performance/$SAVE_BASELINE/analysis_time.txt" ]]; then
+            local analysis_time=$(cat "baselines/performance/$SAVE_BASELINE/analysis_time.txt")
+            echo "Analysis Time: ${analysis_time}s" >> benchmark-summary.txt
+        fi
+        
+        # Add comparison info if available
+        if [[ "$COMPARE_MODE" == "true" && -f "baselines/performance/$LOAD_BASELINE/analysis_time.txt" ]]; then
+            local baseline_time=$(cat "baselines/performance/$LOAD_BASELINE/analysis_time.txt")
+            echo "Baseline Time: ${baseline_time}s" >> benchmark-summary.txt
+            echo "Threshold: $REGRESSION_THRESHOLD" >> benchmark-summary.txt
+        fi
+        
+        # Add build info
+        echo "" >> benchmark-summary.txt
+        echo "## Environment" >> benchmark-summary.txt
+        echo "Rust Version: $(rustc --version 2>/dev/null || echo 'Unknown')" >> benchmark-summary.txt
+        echo "Host: $(rustc -vV 2>/dev/null | grep host | cut -d' ' -f2 || echo 'Unknown')" >> benchmark-summary.txt
+    fi
+}
+
 # Main execution
 main() {
     print_header
@@ -568,6 +626,9 @@ main() {
     if ! analyze_regressions; then
         exit_code=1
     fi
+    
+    # Ensure we have a summary file for CI
+    create_basic_summary
     
     open_report
     show_results_location
