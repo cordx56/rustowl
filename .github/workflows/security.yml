@@ -65,6 +65,20 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Install system dependencies (macOS)
+        if: matrix.runner_os == 'macOS'
+        run: |
+          # Install Xcode command line tools which includes Instruments
+          sudo xcode-select --install || true
+          # Wait a moment for installation to complete
+          sleep 10
+          # Verify Instruments is available
+          if command -v instruments >/dev/null 2>&1; then
+            echo "✓ Instruments is available"
+          else
+            echo "! Instruments not found, will skip Instruments tests"
+          fi
+
       - name: Install system dependencies (Linux)
         if: matrix.valgrind == true
         run: |
@@ -84,14 +98,14 @@ jobs:
         run: |
           set -e  # Exit on any command failure
           if [[ "${{ matrix.runner_os }}" == "Windows" ]]; then
-            # On Windows, use bash and skip Valgrind/DrMemory/Sanitizers for now
-            bash ./scripts/security.sh --no-valgrind --no-drmemory --no-sanitizers
-          elif [[ "${{ matrix.valgrind }}" == "false" ]]; then
-            # Skip Valgrind on macOS as it's not reliable, allow sanitizer failures
-            ./scripts/security.sh --no-valgrind --no-sanitizers || echo "Some security tests failed but continuing..."
+            # On Windows, skip Valgrind, DrMemory, and Sanitizers for now
+            ./scripts/security.sh --no-valgrind --no-drmemory --no-sanitizers
+          elif [[ "${{ matrix.runner_os }}" == "macOS" ]]; then
+            # Skip Valgrind and Instruments on macOS (not reliable in CI)
+            ./scripts/security.sh --no-valgrind --no-instruments --no-sanitizers
           else
-            # Run security tests, temporarily allow sanitizer failures on Linux
-            ./scripts/security.sh --no-sanitizers || echo "Some security tests failed but continuing..."
+            # On Linux, skip only sanitizers for now
+            ./scripts/security.sh --no-sanitizers
           fi
 
       - name: Upload Valgrind logs (on failure)

@@ -374,20 +374,33 @@ run_drmemory_tests() {
 }
 
 # Run Instruments tests (macOS)
-run_instruments_tests() {
-    if [ $RUN_INSTRUMENTS -eq 0 ] || [ $HAS_INSTRUMENTS -eq 0 ] || [ "$OS" != "Darwin" ]; then
+run_instruments() {
+    if [[ "$OS_TYPE" != "Darwin" ]]; then
         return 0
     fi
     
-    echo -e "${BLUE}${BOLD}Running Instruments Tests${NC}"
-    echo -e "${BLUE}================================${NC}"
-    echo "Instruments provides memory and performance analysis on macOS"
-    echo ""
+    echo "Running Instruments Tests (macOS)"
+    echo "=================================="
+    echo "Instruments provides memory and performance analysis"
     
-    echo -e "${YELLOW}Note: Instruments requires manual analysis${NC}"
-    echo "Run manually: instruments -t Leaks ./target/security/rustowl check $TEST_TARGET_PATH"
+    if ! command -v instruments >/dev/null 2>&1; then
+        echo "! Instruments not available (requires Xcode), skipping"
+        return 0
+    fi
     
-    echo ""
+    echo "Testing rustowl with Instruments..."
+    
+    # Run a basic allocation test
+    if instruments -t "Allocations" -D instruments_output.trace "$binary_path" check ./perf-tests/dummy-package >/dev/null 2>&1; then
+        echo "✓ Instruments analysis completed"
+        # Clean up trace file
+        rm -rf instruments_output.trace 2>/dev/null || true
+        return 0
+    else
+        echo "✗ Instruments analysis failed"
+        echo "Run manually for details: instruments -t 'Allocations' $binary_path check ./perf-tests/dummy-package"
+        return 1
+    fi
 }
 
 # Show tool availability summary
