@@ -14,157 +14,192 @@ This directory contains utility scripts for local development and testing that c
 # Run development checks
 ./scripts/dev-checks.sh
 
-# Create performance baseline
-./scripts/bench.sh --save main
+# Check binary size changes
+./scripts/size-check.sh
+
+# Run security and memory safety tests
+./scripts/security.sh
+
+# Run performance benchmarks
+./scripts/bench.sh
 ```
 
-## Scripts
+## Script Overview
 
-### `setup-dev.sh` - Development Environment Setup
-- **Purpose**: One-command setup of entire development environment
-- **Features**:
-  - Rust toolchain installation (1.87.0 + nightly)
-  - All Rust components (rustfmt, clippy, miri)
-  - Cargo tools (cargo-audit, cargo-criterion)
-  - Node.js and yarn (for VS Code extension)
-  - System tools (bc, valgrind, gnuplot)
-  - Directory structure creation
-  - Installation validation
+### `setup-dev.sh`
+Sets up your development environment by installing necessary tools and dependencies.
 
+**Options:**
+- `--check-only`: Only check what's installed, don't install anything
+- `--help`: Show usage information
+
+**What it installs:**
+- Platform-specific development tools
+- Rust components (rustfmt, clippy, etc.)
+- Testing tools (valgrind on Linux/macOS, etc.)
+
+### `dev-checks.sh`
+Runs comprehensive development checks including formatting, linting, and tests.
+
+**Features:**
+- Code formatting checks (`cargo fmt`)
+- Linting with Clippy
+- Unit tests
+- Integration tests
+- Documentation tests
+
+### `size-check.sh`
+Analyzes binary size changes to detect bloat and track optimization efforts.
+
+**Features:**
+- Binary size comparison
+- Dependency analysis
+- Size regression detection
+
+### 🛡️ `security.sh` *(New)*
+Comprehensive security and memory safety testing framework.
+
+**Features:**
+- Multi-tool testing (Miri, Sanitizers, Valgrind, Audit)
+- Cross-platform support (Linux, macOS, Windows, ARM64)
+- Graceful degradation when tools unavailable
+- Configurable test categories and timeouts
+- Color-coded output with progress indicators
+
+**Usage:**
 ```bash
-# Examples
-./scripts/setup-dev.sh                # Full setup
-./scripts/setup-dev.sh --check-only   # Check current status
-./scripts/setup-dev.sh --rust-only    # Setup only Rust toolchain
-./scripts/setup-dev.sh --skip-node    # Setup everything except Node.js
+# Run all available tests
+./scripts/security.sh
+
+# Run specific test categories
+./scripts/security.sh --miri-only
+./scripts/security.sh --sanitizers-only
+./scripts/security.sh --audit-only
+
+# Platform-specific testing
+./scripts/security.sh --platform linux --timeout 300
 ```
 
-### `bench.sh` - Performance Benchmarking
-- **Purpose**: Run Criterion performance benchmarks locally
-- **Matches**: `.github/workflows/bench-performance.yml` CI workflow
-- **Features**:
-  - Criterion benchmark execution
-  - Baseline saving and comparison (stored in `baselines/performance/`)
-  - Regression detection (>2% by default)
-  - HTML report generation
-  - Quiet mode for automation
+### 📊 `bench.sh` *(New)*
+Local performance benchmarking with regression detection.
 
+**Features:**
+- Criterion benchmark integration
+- Baseline creation and comparison
+- Automatic test package detection
+- Configurable regression thresholds
+- HTML report generation
+- CI/local consistency
+
+**Usage:**
 ```bash
-# Examples
-./scripts/bench.sh                    # Run benchmarks
-./scripts/bench.sh --save main        # Save as 'main' baseline
-./scripts/bench.sh --compare          # Compare with 'main' baseline
-./scripts/bench.sh --threshold 5%     # Use 5% regression threshold
+# Standard benchmark run
+./scripts/bench.sh
+
+# Create and compare baselines
+./scripts/bench.sh --save my-baseline
+./scripts/bench.sh --load my-baseline --threshold 3%
+
+# Development workflow
+./scripts/bench.sh --clean --open --test-package ./examples
 ```
 
-**Note**: Baselines are stored in `baselines/performance/` and are machine-specific.
+## Prerequisites
 
-### `security.sh` - Security & Memory Safety Testing
-- **Purpose**: Run security and memory safety analysis tools
-- **Matches**: `.github/workflows/security.yml` CI workflow
-- **Features**:
-  - Miri (undefined behavior detection)
-  - Valgrind (memory error detection, Linux only)
-  - Sanitizers (AddressSanitizer, ThreadSanitizer)
-  - cargo-audit (security vulnerability scanning)
-  - DrMemory (Windows memory debugging)
-  - Instruments (macOS performance analysis)
+### Common Requirements
+- Rust toolchain (automatically managed via `rust-toolchain.toml`)
+- Basic build tools
 
+### Platform-Specific Tools
+
+#### Linux
 ```bash
-# Examples
-./scripts/security.sh                # Run all available security tests
-./scripts/security.sh --check        # Check which tools are available
-./scripts/security.sh --no-miri      # Skip Miri tests
+sudo apt-get update
+sudo apt-get install -y valgrind bc gnuplot build-essential
 ```
 
-### `bump.sh` - Version Management
-- **Purpose**: Bump version numbers and create releases
-- **Features**: Automated version bumping across project files
-- **Note**: This script is excluded from automated validation tests
-
+#### macOS
 ```bash
-# Examples
-./scripts/bump.sh v0.4.0              # Bump to version 0.4.0
+brew install gnuplot
+# Optional: brew install valgrind (limited support)
 ```
 
-### `dev-checks.sh` - Development Checks and Fixes
-- **Purpose**: Run local development quality checks with optional auto-fixing
-- **Features**:
-  - Rust version validation (minimum 1.87)
-  - Code formatting (rustfmt)
-  - Linting (clippy) with auto-fix support
-  - Build verification
-  - Unit test detection (currently none in RustOwl)
-  - VS Code extension checks (TypeScript/ESLint)
-
-```bash
-# Examples
-./scripts/dev-checks.sh                # Run all checks
-./scripts/dev-checks.sh --fix          # Run checks and auto-fix issues
-```
-
-### `size-check.sh` - Binary Size Monitoring
-- **Purpose**: Track and validate binary size metrics
-- **Features**:
-  - Binary size measurement and reporting
-  - Baseline creation and comparison (stored in `baselines/size_baseline.txt`)
-  - Configurable size increase thresholds
-  - Human-readable size formatting
-
-```bash
-# Examples
-./scripts/size-check.sh                # Check current sizes
-./scripts/size-check.sh baseline       # Create size baseline
-./scripts/size-check.sh compare        # Compare with baseline
-./scripts/size-check.sh -t 15 compare  # Use 15% threshold
-```
-
-**Note**: Size baselines are stored in `baselines/` and are machine-specific.
+#### Windows
+- Visual Studio Build Tools
+- Optional: Install gnuplot for enhanced benchmark reports
 
 ## Integration with CI
 
 These scripts are designed to match their corresponding CI workflows:
 
-- **`bench.sh`** ↔ **`bench-performance.yml`**: Same benchmarks, same tools
-- **`security.sh`** ↔ **`security.yml`**: Same security analysis tools  
-- Both use the same Rust version (`1.87.0`) and test targets
+- **`security.sh`** ↔ **`.github/workflows/security.yml`**: Same security analysis tools
+- **`bench.sh`** ↔ **`.github/workflows/bench-performance.yml`**: Same benchmarks, same tools
+- **`setup-dev.sh`** helps install the same tools used in CI locally
 
 This ensures that local testing provides the same results as CI, making development more predictable and reliable.
 
-## Prerequisites
+### GitHub Actions Integration
 
-Run `./scripts/setup-dev.sh` to install all prerequisites automatically, or install manually:
+The scripts integrate with several workflows:
 
-### Common Requirements
-- Rust toolchain 1.87.0: `rustup install 1.87.0`
-- Test package: `./perf-tests/dummy-package` (included in repo)
+#### Performance Workflows
+- **`setup-baseline.yml`**: Creates initial baseline (runs once, then can be deleted)
+- **`create-baseline.yml`**: Updates baselines when main branch changes
+- **`bench-performance.yml`**: Compares PR performance against baselines
 
-### Performance Benchmarking
-- cargo-criterion (optional): `cargo install cargo-criterion`
-- gnuplot (optional): For detailed plots
-- bc (for regression analysis): `sudo apt-get install bc`
+#### Security Workflows
+- **`security.yml`**: Runs comprehensive security testing across platforms
 
-### Security Testing
-- Miri: `rustup component add miri`
-- cargo-audit: `cargo install cargo-audit`
-- Valgrind (Linux): `sudo apt-get install valgrind`
-- Nightly toolchain (for sanitizers): `rustup install nightly`
+#### Composite Actions
+- **`.github/actions/comment-benchmark/`**: Reusable action for PR performance comments
 
-### Development Checks
-- All common requirements
-- clippy: `rustup component add clippy`
-- rustfmt: `rustup component add rustfmt`
-- yarn (for VS Code extension): Follow [yarn installation guide](https://yarnpkg.com/getting-started/install)
+## Development Workflow
 
-### Size Monitoring
-- bc (for calculations): `sudo apt-get install bc`
-- stat command (usually pre-installed on Unix systems)
+### Before Committing
+```bash
+# Run all development checks
+./scripts/dev-checks.sh
 
-## Usage Tips
+# Run security tests
+./scripts/security.sh
 
-1. **Quick setup**: Run `./scripts/setup-dev.sh` for one-command environment setup
-2. **Before submitting PRs**: Run `./scripts/dev-checks.sh --fix` and `./scripts/security.sh`
-3. **Performance tracking**: Save baselines regularly with `./scripts/bench.sh --save`
-4. **Security verification**: Use `./scripts/security.sh --check` to verify tool setup
-5. **CI debugging**: These scripts replicate CI behavior for local debugging
-6. **Status checking**: Use `./scripts/setup-dev.sh --check-only` to see what's installed
+# Check performance impact
+./scripts/bench.sh
+
+# Check binary size impact
+./scripts/size-check.sh
+```
+
+### Setting Up New Environment
+```bash
+# Install all development tools
+./scripts/setup-dev.sh
+
+# Verify installation
+./scripts/setup-dev.sh --check-only
+```
+
+## Troubleshooting
+
+### Script Permissions
+```bash
+chmod +x scripts/*.sh
+```
+
+### Missing Tools
+Run the setup script or check platform-specific installation commands above.
+
+### CI Failures
+- Check workflow logs for specific error messages
+- Verify `rust-toolchain.toml` compatibility
+- Ensure scripts have execution permissions
+- Test locally with the same script used in CI
+
+## Script Architecture
+
+All scripts follow common patterns:
+- **Color-coded output** with emoji indicators
+- **Progressive enhancement** based on available tools
+- **Comprehensive help text** with examples
+- **Error handling** with remediation suggestions
+- **Cross-platform compatibility** with platform-specific optimizations

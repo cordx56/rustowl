@@ -305,12 +305,12 @@ run_benchmarks() {
         
         # Add baseline arguments if saving
         if [[ -n "$SAVE_BASELINE" ]]; then
-            bench_args="$bench_args --save-baseline $SAVE_BASELINE"
+            bench_args="$bench_args -- --save-baseline $SAVE_BASELINE"
         fi
         
         # Add baseline arguments if comparing
         if [[ "$COMPARE_MODE" == "true" && -n "$LOAD_BASELINE" ]]; then
-            bench_args="$bench_args --baseline $LOAD_BASELINE"
+            bench_args="$bench_args -- --baseline $LOAD_BASELINE"
         fi
         
         # Run the benchmarks
