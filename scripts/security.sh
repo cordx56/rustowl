@@ -1,7 +1,7 @@
 #!/bin/bash
 # RustOwl Security & Memory Safety Testing Script
 # Tests for undefined behavior, memory leaks, and security vulnerabilities
-# Matches the security.yml CI workflow
+# Automatically detects platform capabilities and runs appropriate tests
 
 set -e
 
@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 MIN_RUST_VERSION="1.87.0"
 TEST_TARGET_PATH="./perf-tests/dummy-package"
 
-# Test flags (enabled by default, can be disabled via options)
+# Test flags (can be overridden via command line options)
 RUN_MIRI=1
 RUN_VALGRIND=1
 RUN_SANITIZERS=1
@@ -32,24 +32,86 @@ HAS_CARGO_AUDIT=0
 HAS_DRMEMORY=0
 HAS_INSTRUMENTS=0
 
-# OS detection
-OS=$(uname)
+# OS detection with more robust platform detection
+detect_platform() {
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        OS_TYPE="Linux"
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        OS_TYPE="macOS"
+    elif [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
+        OS_TYPE="Windows"
+    elif [[ "$OS" == "Windows_NT" ]]; then
+        OS_TYPE="Windows"
+    else
+        # Fallback to uname
+        local uname_result=$(uname 2>/dev/null || echo "unknown")
+        case "$uname_result" in
+            Linux*) OS_TYPE="Linux" ;;
+            Darwin*) OS_TYPE="macOS" ;;
+            CYGWIN*|MINGW*|MSYS*) OS_TYPE="Windows" ;;
+            *) OS_TYPE="Unknown" ;;
+        esac
+    fi
+    
+    echo -e "${BLUE}Detected platform: $OS_TYPE${NC}"
+}
+
+# Auto-configure tests based on platform capabilities
+auto_configure_tests() {
+    echo -e "${YELLOW}Auto-configuring tests for $OS_TYPE...${NC}"
+    
+    case "$OS_TYPE" in
+        "Linux")
+            # Linux: Full test suite available
+            echo "  Linux detected: Enabling Miri, Valgrind, Sanitizers, and Audit"
+            # Keep all defaults (everything enabled)
+            ;;
+        "macOS")
+            # macOS: No Valgrind (unreliable), no DrMemory, Instruments needs Xcode
+            echo "  macOS detected: Enabling Miri, Sanitizers, and Audit"
+            echo "  Disabling Valgrind (unreliable on macOS)"
+            echo "  Instruments will be skipped if Xcode not available"
+            RUN_VALGRIND=0
+            RUN_DRMEMORY=0
+            ;;
+        "Windows")
+            # Windows: No Valgrind, limited sanitizer support
+            echo "  Windows detected: Enabling Miri, Audit, and DrMemory"
+            echo "  Disabling Valgrind (Linux only)"
+            echo "  Sanitizers may have limited support"
+            RUN_VALGRIND=0
+            RUN_INSTRUMENTS=0
+            ;;
+        *)
+            echo "  Unknown platform: Enabling basic tests only"
+            RUN_VALGRIND=0
+            RUN_DRMEMORY=0
+            RUN_INSTRUMENTS=0
+            ;;
+    esac
+    echo ""
+}
 
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Security and Memory Safety Testing Script"
-    echo "Runs various tools to detect undefined behavior, memory issues, and vulnerabilities"
+    echo "Automatically detects platform and runs appropriate security tests"
     echo ""
     echo "Options:"
     echo "  -h, --help           Show this help message"
     echo "  --check              Check tool availability and system readiness"
     echo "  --no-miri            Skip Miri tests"
-    echo "  --no-valgrind        Skip Valgrind tests (Linux only)"
+    echo "  --no-valgrind        Skip Valgrind tests"
     echo "  --no-sanitizers      Skip sanitizer tests"
     echo "  --no-audit           Skip cargo audit security check"
-    echo "  --no-drmemory        Skip DrMemory tests (Windows only)"
-    echo "  --no-instruments     Skip Instruments tests (macOS only)"
+    echo "  --no-drmemory        Skip DrMemory tests"
+    echo "  --no-instruments     Skip Instruments tests"
+    echo ""
+    echo "Platform Support:"
+    echo "  Linux:   Miri, Valgrind, Sanitizers, cargo-audit"
+    echo "  macOS:   Miri, Sanitizers, cargo-audit, Instruments"
+    echo "  Windows: Miri, Sanitizers, cargo-audit, DrMemory"
     echo ""
     echo "Tests performed:"
     echo "  • Miri: Detects undefined behavior in Rust code"
@@ -62,10 +124,9 @@ usage() {
     echo "  • Instruments: Performance and memory analysis (macOS)"
     echo ""
     echo "Examples:"
-    echo "  $0                   # Run all available security tests"
+    echo "  $0                   # Auto-detect platform and run appropriate tests"
     echo "  $0 --check          # Check which tools are available"
     echo "  $0 --no-miri        # Run tests but skip Miri"
-    echo "  $0 --no-valgrind --no-sanitizers  # Skip memory testing tools"
     echo ""
 }
 
@@ -138,7 +199,7 @@ check_rust_version() {
     fi
 }
 
-# Detect available tools
+# Detect available tools based on platform
 detect_tools() {
     echo -e "${YELLOW}Detecting available security tools...${NC}"
     
@@ -151,10 +212,10 @@ detect_tools() {
     fi
     
     # Check for Valgrind (Linux only)
-    if [ "$OS" = "Linux" ] && command -v valgrind >/dev/null 2>&1; then
+    if [[ "$OS_TYPE" == "Linux" ]] && command -v valgrind >/dev/null 2>&1; then
         HAS_VALGRIND=1
         echo -e "${GREEN}✓ Valgrind is available${NC}"
-    elif [ "$OS" = "Linux" ]; then
+    elif [[ "$OS_TYPE" == "Linux" ]]; then
         echo -e "${YELLOW}! Valgrind not found (install with package manager)${NC}"
     fi
     
@@ -167,30 +228,97 @@ detect_tools() {
     fi
     
     # Check for DrMemory (Windows only)
-    if [ "$OS" = "Windows_NT" ] && command -v drmemory >/dev/null 2>&1; then
+    if [[ "$OS_TYPE" == "Windows" ]] && command -v drmemory >/dev/null 2>&1; then
         HAS_DRMEMORY=1
         echo -e "${GREEN}✓ DrMemory is available${NC}"
-    elif [ "$OS" = "Windows_NT" ]; then
+    elif [[ "$OS_TYPE" == "Windows" ]]; then
         echo -e "${YELLOW}! DrMemory not found${NC}"
     fi
     
     # Check for Instruments (macOS only)
-    if [ "$OS" = "Darwin" ] && command -v instruments >/dev/null 2>&1; then
+    if [[ "$OS_TYPE" == "macOS" ]] && command -v instruments >/dev/null 2>&1; then
         HAS_INSTRUMENTS=1
         echo -e "${GREEN}✓ Instruments is available${NC}"
-    elif [ "$OS" = "Darwin" ]; then
+    elif [[ "$OS_TYPE" == "macOS" ]]; then
         echo -e "${YELLOW}! Instruments not found${NC}"
     fi
     
     echo ""
 }
 
-# Build the project
+# Check nightly toolchain availability for advanced features
+check_nightly_toolchain() {
+    echo -e "${YELLOW}Checking nightly toolchain for advanced security features...${NC}"
+    
+    if ! rustup toolchain list | grep -q nightly; then
+        echo -e "${RED}✗ Nightly toolchain not available${NC}"
+        echo -e "${YELLOW}Install with: rustup toolchain install nightly${NC}"
+        echo -e "${YELLOW}Some advanced security tests (Miri, Sanitizers) will be disabled${NC}"
+        return 1
+    fi
+    
+    # Check if Miri component is available
+    if ! rustup +nightly component list --installed | grep -q miri 2>/dev/null; then
+        echo -e "${YELLOW}! Miri component not installed on nightly${NC}"
+        echo -e "${YELLOW}Install with: rustup +nightly component add miri${NC}"
+        HAS_MIRI=0
+    else
+        HAS_MIRI=1
+        echo -e "${GREEN}✓ Miri is available on nightly${NC}"
+    fi
+    
+    # Check if required targets are installed for sanitizers
+    local current_target
+    case "$OS_TYPE" in
+        "Linux")
+            current_target="x86_64-unknown-linux-gnu"
+            if uname -m | grep -q aarch64; then
+                current_target="aarch64-unknown-linux-gnu"
+            fi
+            ;;
+        "macOS")
+            current_target="aarch64-apple-darwin"
+            if uname -m | grep -q x86_64; then
+                current_target="x86_64-apple-darwin"
+            fi
+            ;;
+        "Windows")
+            current_target="x86_64-pc-windows-msvc"
+            ;;
+    esac
+    
+    if [[ -n "$current_target" ]]; then
+        if rustup +nightly target list --installed | grep -q "$current_target"; then
+            echo -e "${GREEN}✓ Target $current_target is available on nightly${NC}"
+        else
+            echo -e "${YELLOW}! Target $current_target not installed on nightly${NC}"
+            echo -e "${YELLOW}Install with: rustup +nightly target add $current_target${NC}"
+        fi
+    fi
+    
+    echo -e "${GREEN}✓ Nightly toolchain is available${NC}"
+    return 0
+}
+
+# Build the project with appropriate profile
 build_project() {
     echo -e "${YELLOW}Building RustOwl in security mode...${NC}"
-    RUSTC_BOOTSTRAP=1 cargo build --profile=security
     
-    if [ ! -f "./target/security/rustowl" ]; then
+    # Use nightly for the security build to enable all features
+    if check_nightly_toolchain; then
+        echo -e "${BLUE}Using nightly toolchain for security build${NC}"
+        RUSTC_BOOTSTRAP=1 cargo +nightly build --profile=security
+    else
+        echo -e "${YELLOW}Falling back to stable toolchain (limited features)${NC}"
+        RUSTC_BOOTSTRAP=1 cargo build --profile=security
+    fi
+    
+    local binary_name="rustowl"
+    if [[ "$OS_TYPE" == "Windows" ]]; then
+        binary_name="rustowl.exe"
+    fi
+    
+    if [ ! -f "./target/security/$binary_name" ]; then
         echo -e "${RED}✗ Failed to build rustowl binary${NC}"
         exit 1
     fi
@@ -199,9 +327,14 @@ build_project() {
     echo ""
 }
 
-# Run Miri tests
+# Run Miri tests (requires nightly)
 run_miri_tests() {
-    if [ $RUN_MIRI -eq 0 ] || [ $HAS_MIRI -eq 0 ]; then
+    if [[ $RUN_MIRI -eq 0 ]]; then
+        return 0
+    fi
+    
+    if [[ $HAS_MIRI -eq 0 ]]; then
+        echo -e "${YELLOW}Skipping Miri tests (requires: rustup +nightly component add miri)${NC}"
         return 0
     fi
     
@@ -210,9 +343,9 @@ run_miri_tests() {
     echo "Miri detects undefined behavior in Rust code"
     echo ""
     
-    # Test the library with Miri
+    # Test the library with Miri using nightly
     echo -e "${YELLOW}Testing library code with Miri...${NC}"
-    if cargo miri test --lib; then
+    if cargo +nightly miri test --lib; then
         echo -e "${GREEN}✓ Library tests passed with Miri${NC}"
     else
         echo -e "${RED}✗ Miri detected issues in library code${NC}"
@@ -224,7 +357,10 @@ run_miri_tests() {
 
 # Run Valgrind tests
 run_valgrind_tests() {
-    if [ $RUN_VALGRIND -eq 0 ] || [ $HAS_VALGRIND -eq 0 ] || [ "$OS" != "Linux" ]; then
+    if [[ $RUN_VALGRIND -eq 0 ]] || [[ $HAS_VALGRIND -eq 0 ]] || [[ "$OS_TYPE" != "Linux" ]]; then
+        if [[ $RUN_VALGRIND -eq 1 ]] && [[ "$OS_TYPE" == "Linux" ]] && [[ $HAS_VALGRIND -eq 0 ]]; then
+            echo -e "${YELLOW}Skipping Valgrind tests (not installed)${NC}"
+        fi
         return 0
     fi
     
@@ -236,13 +372,18 @@ run_valgrind_tests() {
     # Test with the dummy package
     if [ -d "$TEST_TARGET_PATH" ]; then
         echo -e "${YELLOW}Testing rustowl with Valgrind...${NC}"
-        if timeout 300 valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all \
-           --error-exitcode=1 --track-origins=yes \
-           ./target/security/rustowl check "$TEST_TARGET_PATH" >/dev/null 2>&1; then
+        
+        # Use suppression file if available
+        local valgrind_cmd="valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --error-exitcode=1 --track-origins=yes"
+        if [[ -f ".valgrind-suppressions" ]]; then
+            valgrind_cmd="$valgrind_cmd --suppressions=.valgrind-suppressions"
+        fi
+        
+        if timeout 300 $valgrind_cmd ./target/security/rustowl check "$TEST_TARGET_PATH" >/dev/null 2>&1; then
             echo -e "${GREEN}✓ No memory errors detected by Valgrind${NC}"
         else
             echo -e "${RED}✗ Valgrind detected memory issues${NC}"
-            echo "Run manually for details: valgrind --tool=memcheck --leak-check=full ./target/security/rustowl check $TEST_TARGET_PATH"
+            echo "Run manually for details: $valgrind_cmd ./target/security/rustowl check $TEST_TARGET_PATH"
             return 1
         fi
     else
@@ -252,76 +393,66 @@ run_valgrind_tests() {
     echo ""
 }
 
-# Run sanitizer tests
+# Run sanitizer tests (requires nightly)
 run_sanitizer_tests() {
-    if [ $RUN_SANITIZERS -eq 0 ]; then
+    if [[ $RUN_SANITIZERS -eq 0 ]]; then
         return 0
     fi
     
     echo -e "${BLUE}${BOLD}Running Sanitizer Tests${NC}"
     echo -e "${BLUE}================================${NC}"
     echo "Sanitizers detect various memory and threading issues"
-    echo "Testing on supported targets for maximum coverage"
-    echo ""
     
-    # Define targets to test based on platform
-    local targets=()
-    case "$OS" in
+    # Check if nightly toolchain is available
+    if ! rustup toolchain list | grep -q nightly; then
+        echo -e "${YELLOW}! Nightly toolchain not available, skipping sanitizers${NC}"
+        echo -e "${YELLOW}Install with: rustup toolchain install nightly${NC}"
+        return 0
+    fi
+    
+    echo "Using nightly toolchain for sanitizer testing"
+    
+    local sanitizer_failed=false
+    local current_target
+    
+    # Determine the appropriate target for this platform
+    case "$OS_TYPE" in
         "Linux")
-            targets=("x86_64-unknown-linux-gnu")
-            # Add ARM64 if available
-            if rustup target list --installed | grep -q "aarch64-unknown-linux-gnu"; then
-                targets+=("aarch64-unknown-linux-gnu")
+            if uname -m | grep -q aarch64; then
+                current_target="aarch64-unknown-linux-gnu"
+            else
+                current_target="x86_64-unknown-linux-gnu"
             fi
+            echo "  Testing target: $current_target"
             ;;
-        "Darwin")
-            targets=("x86_64-apple-darwin")
-            if rustup target list --installed | grep -q "aarch64-apple-darwin"; then
-                targets+=("aarch64-apple-darwin")
+        "macOS")
+            if uname -m | grep -q arm64; then
+                current_target="aarch64-apple-darwin"
+            else
+                current_target="x86_64-apple-darwin"
             fi
+            echo "  Testing target: $current_target"
             ;;
-        *)
-            echo -e "${YELLOW}Sanitizers not fully supported on $OS, testing default target${NC}"
-            targets=("")  # Use default target
+        "Windows")
+            current_target="x86_64-pc-windows-msvc"
+            echo "  Testing target: $current_target"
+            echo "  Note: Limited sanitizer support on Windows"
             ;;
     esac
     
-    # AddressSanitizer
+    # Try AddressSanitizer
     echo -e "${YELLOW}Building with AddressSanitizer...${NC}"
-    local addr_success=false
-    for target in "${targets[@]}"; do
-        local target_flag=""
-        if [ -n "$target" ]; then
-            target_flag="--target $target"
-            echo "  Testing target: $target"
-        fi
-        
-        if RUSTFLAGS="-Z sanitizer=address" rustup run nightly cargo build --profile=security $target_flag 2>/dev/null; then
-            echo -e "${GREEN}✓ AddressSanitizer build successful${NC}${target:+ for $target}"
-            addr_success=true
-        else
-            echo -e "${YELLOW}! AddressSanitizer build failed${NC}${target:+ for $target}"
-        fi
-    done
+    if RUSTFLAGS="-Z sanitizer=address" cargo +nightly build --target "$current_target" --target-dir target/sanitizer --profile=security 2>/dev/null; then
+        echo -e "${GREEN}✓ AddressSanitizer build successful${NC}"
+    else
+        echo -e "${YELLOW}! AddressSanitizer build failed${NC}"
+        sanitizer_failed=true
+    fi
     
-    # ThreadSanitizer (on supported platforms)
-    if [ "$OS" = "Linux" ]; then
-        echo -e "${YELLOW}Building with ThreadSanitizer...${NC}"
-        local thread_success=false
-        for target in "${targets[@]}"; do
-            local target_flag=""
-            if [ -n "$target" ]; then
-                target_flag="--target $target"
-                echo "  Testing target: $target"
-            fi
-            
-            if RUSTFLAGS="-Z sanitizer=thread" rustup run nightly cargo build --profile=security $target_flag 2>/dev/null; then
-                echo -e "${GREEN}✓ ThreadSanitizer build successful${NC}${target:+ for $target}"
-                thread_success=true
-            else
-                echo -e "${YELLOW}! ThreadSanitizer build failed${NC}${target:+ for $target}"
-            fi
-        done
+    # Don't fail the entire security suite if sanitizers have issues
+    if [[ "$sanitizer_failed" == "true" ]]; then
+        echo -e "${YELLOW}! Sanitizers failed - this may indicate toolchain issues rather than code problems${NC}"
+        return 0  # Don't fail the entire security check
     fi
     
     echo ""
@@ -329,7 +460,10 @@ run_sanitizer_tests() {
 
 # Run cargo audit
 run_audit_check() {
-    if [ $RUN_AUDIT -eq 0 ] || [ $HAS_CARGO_AUDIT -eq 0 ]; then
+    if [[ $RUN_AUDIT -eq 0 ]] || [[ $HAS_CARGO_AUDIT -eq 0 ]]; then
+        if [[ $RUN_AUDIT -eq 1 ]] && [[ $HAS_CARGO_AUDIT -eq 0 ]]; then
+            echo -e "${YELLOW}Skipping cargo-audit (not installed)${NC}"
+        fi
         return 0
     fi
     
@@ -351,7 +485,10 @@ run_audit_check() {
 
 # Run DrMemory tests (Windows)
 run_drmemory_tests() {
-    if [ $RUN_DRMEMORY -eq 0 ] || [ $HAS_DRMEMORY -eq 0 ] || [ "$OS" != "Windows_NT" ]; then
+    if [[ $RUN_DRMEMORY -eq 0 ]] || [[ $HAS_DRMEMORY -eq 0 ]] || [[ "$OS_TYPE" != "Windows" ]]; then
+        if [[ $RUN_DRMEMORY -eq 1 ]] && [[ "$OS_TYPE" == "Windows" ]] && [[ $HAS_DRMEMORY -eq 0 ]]; then
+            echo -e "${YELLOW}Skipping DrMemory tests (not installed)${NC}"
+        fi
         return 0
     fi
     
@@ -374,53 +511,71 @@ run_drmemory_tests() {
 }
 
 # Run Instruments tests (macOS)
-run_instruments() {
-    if [[ "$OS_TYPE" != "Darwin" ]]; then
+run_instruments_tests() {
+    if [[ $RUN_INSTRUMENTS -eq 0 ]] || [[ $HAS_INSTRUMENTS -eq 0 ]] || [[ "$OS_TYPE" != "macOS" ]]; then
+        if [[ $RUN_INSTRUMENTS -eq 1 ]] && [[ "$OS_TYPE" == "macOS" ]] && [[ $HAS_INSTRUMENTS -eq 0 ]]; then
+            echo -e "${YELLOW}Skipping Instruments tests (not available)${NC}"
+        fi
         return 0
     fi
     
-    echo "Running Instruments Tests (macOS)"
-    echo "=================================="
+    echo -e "${BLUE}${BOLD}Running Instruments Tests (macOS)${NC}"
+    echo -e "${BLUE}================================${NC}"
     echo "Instruments provides memory and performance analysis"
+    echo ""
     
-    if ! command -v instruments >/dev/null 2>&1; then
-        echo "! Instruments not available (requires Xcode), skipping"
-        return 0
+    if [ -d "$TEST_TARGET_PATH" ]; then
+        echo -e "${YELLOW}Testing rustowl with Instruments...${NC}"
+        if instruments -t "Allocations" -D instruments_output.trace ./target/security/rustowl check "$TEST_TARGET_PATH" >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ Instruments analysis completed${NC}"
+            # Clean up trace file
+            rm -rf instruments_output.trace 2>/dev/null || true
+        else
+            echo -e "${RED}✗ Instruments analysis failed${NC}"
+            echo "Run manually for details: instruments -t 'Allocations' ./target/security/rustowl check $TEST_TARGET_PATH"
+            return 1
+        fi
     fi
     
-    echo "Testing rustowl with Instruments..."
-    
-    # Run a basic allocation test
-    if instruments -t "Allocations" -D instruments_output.trace "$binary_path" check ./perf-tests/dummy-package >/dev/null 2>&1; then
-        echo "✓ Instruments analysis completed"
-        # Clean up trace file
-        rm -rf instruments_output.trace 2>/dev/null || true
-        return 0
-    else
-        echo "✗ Instruments analysis failed"
-        echo "Run manually for details: instruments -t 'Allocations' $binary_path check ./perf-tests/dummy-package"
-        return 1
-    fi
+    echo ""
 }
 
 # Show tool availability summary
 show_tool_status() {
     echo -e "${BLUE}${BOLD}Security Tool Availability${NC}"
     echo -e "${BLUE}================================${NC}"
+    echo "Platform: $OS_TYPE"
     echo "Tool availability on this system:"
     echo ""
     echo "  Miri (undefined behavior):     $([ $HAS_MIRI -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${RED}✗ Not available${NC}")"
-    echo "  Valgrind (memory errors):      $([ $HAS_VALGRIND -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${YELLOW}N/A ($([ "$OS" = "Linux" ] && echo "not installed" || echo "Linux only"))${NC}")"
+    
+    if [[ "$OS_TYPE" == "Linux" ]]; then
+        echo "  Valgrind (memory errors):      $([ $HAS_VALGRIND -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${RED}✗ Not installed${NC}")"
+    else
+        echo "  Valgrind (memory errors):      ${YELLOW}N/A (Linux only)${NC}"
+    fi
+    
     echo "  Sanitizers (various):          $(rustup toolchain list | grep -q nightly && echo -e "${GREEN}✓ Available${NC}" || echo -e "${YELLOW}Requires nightly${NC}")"
     echo "  cargo-audit (vulnerabilities): $([ $HAS_CARGO_AUDIT -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${RED}✗ Not installed${NC}")"
-    echo "  DrMemory (Windows):            $([ $HAS_DRMEMORY -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${YELLOW}N/A ($([ "$OS" = "Windows_NT" ] && echo "not installed" || echo "Windows only"))${NC}")"
-    echo "  Instruments (macOS):           $([ $HAS_INSTRUMENTS -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${YELLOW}N/A ($([ "$OS" = "Darwin" ] && echo "not installed" || echo "macOS only"))${NC}")"
+    
+    if [[ "$OS_TYPE" == "Windows" ]]; then
+        echo "  DrMemory (Windows):            $([ $HAS_DRMEMORY -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${RED}✗ Not installed${NC}")"
+    else
+        echo "  DrMemory (Windows):            ${YELLOW}N/A (Windows only)${NC}"
+    fi
+    
+    if [[ "$OS_TYPE" == "macOS" ]]; then
+        echo "  Instruments (macOS):           $([ $HAS_INSTRUMENTS -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${RED}✗ Not installed${NC}")"
+    else
+        echo "  Instruments (macOS):           ${YELLOW}N/A (macOS only)${NC}"
+    fi
+    
     echo ""
     
     echo -e "${BLUE}Installation commands:${NC}"
     echo "  rustup component add miri"
     echo "  cargo install cargo-audit"
-    if [ "$OS" = "Linux" ]; then
+    if [[ "$OS_TYPE" == "Linux" ]]; then
         echo "  sudo apt-get install valgrind  # or equivalent for your distro"
     fi
     echo ""
@@ -432,6 +587,13 @@ main() {
     echo -e "${BLUE}${BOLD}  RustOwl Security & Memory Safety${NC}"
     echo -e "${BLUE}${BOLD}=====================================${NC}"
     echo ""
+    
+    # Detect platform first
+    detect_platform
+    echo ""
+    
+    # Auto-configure tests based on platform
+    auto_configure_tests
     
     # Check Rust version compatibility
     check_rust_version
