@@ -3,6 +3,8 @@ name: Setup Initial Baseline (Auto-run on PR)
 on:
   pull_request:
     branches: [ "main" ]
+  push:
+    branches: [ "main" ]
   workflow_dispatch:
     inputs:
       force_setup:
@@ -19,14 +21,9 @@ jobs:
   setup-baseline:
     name: Create Initial Performance Baseline
     runs-on: ubuntu-latest
-    # Only run if no baseline exists or if forced
-    if: github.event_name == 'workflow_dispatch' || github.event.action == 'opened'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          # Checkout main branch to create baseline from stable code
-          ref: main
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -43,38 +40,38 @@ jobs:
           key: performance-baseline-latest
           lookup-only: true
 
-      - name: Skip if baseline exists
+      - name: Skip if baseline exists and not forced
         if: steps.check-baseline.outputs.cache-hit == 'true' && github.event.inputs.force_setup != 'true'
         run: |
           echo "✅ Performance baseline already exists, skipping setup"
           echo "💡 Use workflow_dispatch with force_setup=true to recreate"
-          exit 0
+          echo "SKIP_SETUP=true" >> $GITHUB_ENV
 
       - name: Install benchmark dependencies
-        if: steps.check-baseline.outputs.cache-hit != 'true' || github.event.inputs.force_setup == 'true'
+        if: env.SKIP_SETUP != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y bc gnuplot
           cargo install cargo-criterion || true
 
-      - name: Build RustOwl (main branch)
-        if: steps.check-baseline.outputs.cache-hit != 'true' || github.event.inputs.force_setup == 'true'
+      - name: Build RustOwl
+        if: env.SKIP_SETUP != 'true'
         run: |
-          echo "🔨 Building RustOwl from main branch for baseline..."
+          echo "🔨 Building RustOwl for baseline creation..."
           RUSTC_BOOTSTRAP=1 cargo build --release
 
       - name: Make scripts executable
-        if: steps.check-baseline.outputs.cache-hit != 'true' || github.event.inputs.force_setup == 'true'
+        if: env.SKIP_SETUP != 'true'
         run: chmod +x scripts/*.sh
 
       - name: Run initial benchmark
-        if: steps.check-baseline.outputs.cache-hit != 'true' || github.event.inputs.force_setup == 'true'
+        if: env.SKIP_SETUP != 'true'
         run: |
-          echo "📊 Creating initial performance baseline from main branch..."
+          echo "📊 Creating initial performance baseline..."
           ./scripts/bench.sh --save main --quiet
 
       - name: Upload initial baseline artifact
-        if: steps.check-baseline.outputs.cache-hit != 'true' || github.event.inputs.force_setup == 'true'
+        if: env.SKIP_SETUP != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: initial-performance-baseline-${{ github.sha }}
@@ -84,25 +81,25 @@ jobs:
           retention-days: 90
 
       - name: Cache initial baseline
-        if: steps.check-baseline.outputs.cache-hit != 'true' || github.event.inputs.force_setup == 'true'
+        if: env.SKIP_SETUP != 'true'
         uses: actions/cache/save@v3
         with:
           path: baselines/performance/main/
           key: performance-baseline-latest
 
       - name: Comment on PR with baseline creation
-        if: github.event_name == 'pull_request' && (steps.check-baseline.outputs.cache-hit != 'true' || github.event.inputs.force_setup == 'true')
+        if: github.event_name == 'pull_request' && env.SKIP_SETUP != 'true'
         uses: actions/github-script@v7
         with:
           script: |
             const comment = `## 🎯 Performance Baseline Created
             
-            ✅ **Initial performance baseline has been created from main branch**
+            ✅ **Initial performance baseline has been created**
             
             This baseline will be used for performance regression detection in future PRs.
             
             **📊 Baseline Details:**
-            - Created from: \`main\` branch (commit: \`${{ github.sha }}\`)
+            - Created from: Current branch/commit (\`${{ github.sha }}\`)
             - Toolchain: \`nightly-2025-04-08\` (from rust-toolchain.toml)
             - Artifacts: Available for 90 days
             - Cache: Stored for future PR comparisons
@@ -122,7 +119,7 @@ jobs:
             });
 
       - name: Add baseline-created label
-        if: github.event_name == 'pull_request' && (steps.check-baseline.outputs.cache-hit != 'true' || github.event.inputs.force_setup == 'true')
+        if: github.event_name == 'pull_request' && env.SKIP_SETUP != 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -134,7 +131,7 @@ jobs:
             });
 
       - name: Success notification
-        if: steps.check-baseline.outputs.cache-hit != 'true' || github.event.inputs.force_setup == 'true'
+        if: env.SKIP_SETUP != 'true'
         run: |
           echo "🎉 SUCCESS: Performance baseline created and cached!"
           echo ""
@@ -144,3 +141,13 @@ jobs:
           echo "  • Future PRs will compare against this baseline"
           echo ""
           echo "🗑️  This setup workflow can now be safely deleted since baseline is established."
+
+      - name: Already exists notification
+        if: env.SKIP_SETUP == 'true'
+        run: |
+          echo "ℹ️  Performance baseline already exists and is cached"
+          echo "   No action needed - future PRs will use the existing baseline"
+          echo ""
+          echo "🔄 To recreate baseline:"
+          echo "   • Use workflow_dispatch with force_setup=true"
+          echo "   • Or delete the cache and re-run this workflow"
