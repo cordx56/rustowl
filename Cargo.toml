@@ -12,34 +12,40 @@ keywords = ["visualization", "ownership", "lifetime", "lsp"]
 categories = ["development-tools", "visualization"]
 
 [dependencies]
-serde = { version = "1.0.210", features = ["derive"] }
-serde_json = "1.0.135"
-log = "0.4.22"
-simple_logger = { version = "5.0.0", features = ["stderr"] }
-tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "process", "fs"] }
-tower-lsp = "0.20.0"
-process_alive = "0.1.1"
-cargo_metadata = "0.20.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+simple_logger = { version = "5", features = ["stderr"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "process", "fs"] }
+tower-lsp = "0.20"
+process_alive = "0.1"
+cargo_metadata = "0.20"
 uuid = { version = "1", features = ["v4"] }
-clap = { version = "4.5.39", features = ["cargo", "derive"] }
-tar = "0.4.44"
-flate2 = "1.1.1"
+clap = { version = "4.5", features = ["cargo", "derive"] }
+tar = "0.4"
+flate2 = "1"
 reqwest = { version = "0.12.19", default-features = false, features = ["http2", "rustls-tls-native-roots"] }
-clap_complete_nushell = "4.5.6"
-clap_complete = "4.5.52"
-zip = "4.0.0"
+clap_complete_nushell = "4.5"
+clap_complete = "4.5"
+zip = "4.0"
 
 [build-dependencies]
-clap_complete_nushell = "4.5.6"
-clap_complete = "4.5.52"
-clap_mangen = "0.2.26"
-clap = { version = "4.5.39", features = ["derive"] }
+clap_complete_nushell = "4.5"
+clap_complete = "4.5"
+clap_mangen = "0.2"
+clap = { version = "4.5", features = ["derive"] }
+
+[dev-dependencies]
+criterion = { version = "0.6", features = ["html_reports"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.6"
-libc = "0.2.169"
+libc = "0.2"
 tikv-jemalloc-sys = "0.6"
 
+[[bench]]
+name = "rustowl_bench_simple"
+harness = false
 
 [profile.release]
 opt-level = 3

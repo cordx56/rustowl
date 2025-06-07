@@ -1,0 +1,176 @@
+name: Performance Benchmarking
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: 1.87.0
+  RUSTC_BOOTSTRAP: 1
+
+jobs:
+  benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Run benchmarks
+        run: cargo bench --bench rustowl_bench_simple
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-reports
+          path: target/criterion/
+          retention-days: 30
+
+      # Compare with main branch for PRs
+      - name: Compare with main (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          # Store PR results
+          mkdir -p /tmp/pr-results
+          cp -r target/criterion /tmp/pr-results/ || true
+          
+          # Checkout main and benchmark
+          git checkout origin/main
+          cargo clean && cargo build --release
+          cargo bench --bench rustowl_bench_simple -- --save-baseline main
+          
+          # Switch back to PR and compare
+          git checkout ${{ github.event.pull_request.head.sha }}
+          cargo build --release
+          cargo bench --bench rustowl_bench_simple -- --load-baseline main > comparison.txt 2>&1 || true
+
+      - name: Check for regression (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 << 'EOF'
+          import re
+          import sys
+          
+          try:
+              with open('comparison.txt', 'r') as f:
+                  content = f.read()
+          except FileNotFoundError:
+              print("No comparison file found")
+              sys.exit(0)
+          
+          print("=== Benchmark Comparison ===")
+          print(content)
+          
+          # Look for performance regressions above 2%
+          regression_threshold = 2.0
+          regressions = []
+          
+          lines = content.split('\n')
+          for line in lines:
+              if 'change:' in line:
+                  match = re.search(r'change:\s*\+([0-9]+\.?[0-9]*)%', line)
+                  if match:
+                      change = float(match.group(1))
+                      if change > regression_threshold:
+                          regressions.append(change)
+          
+          if regressions:
+              max_regression = max(regressions)
+              print(f"::warning::Performance regression detected: {max_regression:.2f}% slower")
+              with open('regression.txt', 'w') as f:
+                  f.write(f"⚠️ Performance regression: {max_regression:.2f}% slower than main")
+          else:
+              print("✅ No significant performance regressions detected")
+              with open('regression.txt', 'w') as f:
+                  f.write("✅ No performance regressions above 2% threshold")
+          EOF
+
+      - name: Comment PR (PR only)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let message = "## 🚀 Performance Benchmark Results\n\n";
+            
+            if (fs.existsSync('regression.txt')) {
+              message += fs.readFileSync('regression.txt', 'utf8') + "\n\n";
+            }
+            
+            message += "Detailed results are available in the workflow artifacts.";
+            
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.data.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('Performance Benchmark Results')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: message
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: message
+              });
+            }
+
+      - name: Check for significant regression
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f benchmark_results.json ]; then
+            has_regression=$(python3 -c "import json; print(json.load(open('benchmark_results.json'))['has_regression'])")
+            max_regression=$(python3 -c "import json; print(json.load(open('benchmark_results.json'))['max_regression'])")
+            
+            if [ "$has_regression" = "True" ]; then
+              echo "::warning::Performance regression detected: ${max_regression}% slower than main branch"
+              echo "::error::Performance regression above 2% threshold. Please review the changes."
+              # Don't fail the workflow, just warn
+              # exit 1
+            fi
+          fi
+
+      - name: Upload comparison results
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-comparison
+          path: |
+            benchmark_comparison.txt
+            benchmark_summary.md
+            benchmark_results.json
+          retention-days: 30
