@@ -14,7 +14,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Configuration
-RUST_VERSION="1.87.0"
+MIN_RUST_VERSION="1.87.0"
 TEST_TARGET_PATH="./perf-tests/dummy-package"
 
 # Test flags (enabled by default, can be disabled via options)
@@ -112,6 +112,32 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Check Rust version compatibility
+check_rust_version() {
+    if ! command -v rustc >/dev/null 2>&1; then
+        echo -e "${RED}✗ Rust compiler not found. Please install Rust: https://rustup.rs/${NC}"
+        exit 1
+    fi
+    
+    local current_version=$(rustc --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    local min_version="$MIN_RUST_VERSION"
+    
+    if [ -z "$current_version" ]; then
+        echo -e "${YELLOW}⚠ Could not determine Rust version, proceeding anyway...${NC}"
+        return 0
+    fi
+    
+    # Simple version comparison (assumes semantic versioning)
+    if printf '%s\n%s\n' "$min_version" "$current_version" | sort -V -C; then
+        echo -e "${GREEN}✓ Rust $current_version >= $min_version (minimum required)${NC}"
+        return 0
+    else
+        echo -e "${RED}✗ Rust $current_version < $min_version (minimum required)${NC}"
+        echo -e "${YELLOW}Please update Rust: rustup update${NC}"
+        exit 1
+    fi
+}
+
 # Detect available tools
 detect_tools() {
     echo -e "${YELLOW}Detecting available security tools...${NC}"
@@ -162,7 +188,7 @@ detect_tools() {
 # Build the project
 build_project() {
     echo -e "${YELLOW}Building RustOwl in release mode...${NC}"
-    RUSTC_BOOTSTRAP=1 rustup run "$RUST_VERSION" cargo build --release
+    RUSTC_BOOTSTRAP=1 cargo build --release
     
     if [ ! -f "./target/release/rustowl" ]; then
         echo -e "${RED}✗ Failed to build rustowl binary${NC}"
@@ -235,24 +261,67 @@ run_sanitizer_tests() {
     echo -e "${BLUE}${BOLD}Running Sanitizer Tests${NC}"
     echo -e "${BLUE}================================${NC}"
     echo "Sanitizers detect various memory and threading issues"
+    echo "Testing on supported targets for maximum coverage"
     echo ""
+    
+    # Define targets to test based on platform
+    local targets=()
+    case "$OS" in
+        "Linux")
+            targets=("x86_64-unknown-linux-gnu")
+            # Add ARM64 if available
+            if rustup target list --installed | grep -q "aarch64-unknown-linux-gnu"; then
+                targets+=("aarch64-unknown-linux-gnu")
+            fi
+            ;;
+        "Darwin")
+            targets=("x86_64-apple-darwin")
+            if rustup target list --installed | grep -q "aarch64-apple-darwin"; then
+                targets+=("aarch64-apple-darwin")
+            fi
+            ;;
+        *)
+            echo -e "${YELLOW}Sanitizers not fully supported on $OS, testing default target${NC}"
+            targets=("")  # Use default target
+            ;;
+    esac
     
     # AddressSanitizer
     echo -e "${YELLOW}Building with AddressSanitizer...${NC}"
-    if RUSTFLAGS="-Z sanitizer=address" rustup run nightly cargo build --release --target x86_64-unknown-linux-gnu 2>/dev/null; then
-        echo -e "${GREEN}✓ AddressSanitizer build successful${NC}"
-    else
-        echo -e "${YELLOW}! AddressSanitizer build failed (requires nightly and specific target)${NC}"
-    fi
+    local addr_success=false
+    for target in "${targets[@]}"; do
+        local target_flag=""
+        if [ -n "$target" ]; then
+            target_flag="--target $target"
+            echo "  Testing target: $target"
+        fi
+        
+        if RUSTFLAGS="-Z sanitizer=address" rustup run nightly cargo build --release $target_flag 2>/dev/null; then
+            echo -e "${GREEN}✓ AddressSanitizer build successful${NC}${target:+ for $target}"
+            addr_success=true
+        else
+            echo -e "${YELLOW}! AddressSanitizer build failed${NC}${target:+ for $target}"
+        fi
+    done
     
     # ThreadSanitizer (on supported platforms)
     if [ "$OS" = "Linux" ]; then
         echo -e "${YELLOW}Building with ThreadSanitizer...${NC}"
-        if RUSTFLAGS="-Z sanitizer=thread" rustup run nightly cargo build --release --target x86_64-unknown-linux-gnu 2>/dev/null; then
-            echo -e "${GREEN}✓ ThreadSanitizer build successful${NC}"
-        else
-            echo -e "${YELLOW}! ThreadSanitizer build failed (requires nightly)${NC}"
-        fi
+        local thread_success=false
+        for target in "${targets[@]}"; do
+            local target_flag=""
+            if [ -n "$target" ]; then
+                target_flag="--target $target"
+                echo "  Testing target: $target"
+            fi
+            
+            if RUSTFLAGS="-Z sanitizer=thread" rustup run nightly cargo build --release $target_flag 2>/dev/null; then
+                echo -e "${GREEN}✓ ThreadSanitizer build successful${NC}${target:+ for $target}"
+                thread_success=true
+            else
+                echo -e "${YELLOW}! ThreadSanitizer build failed${NC}${target:+ for $target}"
+            fi
+        done
     fi
     
     echo ""
@@ -349,6 +418,10 @@ main() {
     echo -e "${BLUE}${BOLD}=====================================${NC}"
     echo -e "${BLUE}${BOLD}  RustOwl Security & Memory Safety${NC}"
     echo -e "${BLUE}${BOLD}=====================================${NC}"
+    echo ""
+    
+    # Check Rust version compatibility
+    check_rust_version
     echo ""
     
     detect_tools

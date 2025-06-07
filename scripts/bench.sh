@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 # Configuration
 RUST_VERSION="1.87.0"
 DUMMY_PACKAGE_PATH="./perf-tests/dummy-package"
-BENCHMARK_NAME="rustowl_bench"
+BENCHMARK_NAME="rustowl_bench_simple"
 
 # Options
 OPEN_REPORT=false
@@ -48,6 +48,11 @@ usage() {
     echo "  This script runs the same benchmarks as the CI performance workflow"
     echo "  It tests RustOwl's analysis performance on the dummy package and warns"
     echo "  about regressions above the threshold (default: 2%)"
+    echo ""
+    echo "Baseline Management:"
+    echo "  Baselines are stored in 'baselines/performance/' directory"
+    echo "  NOTE: Baselines are machine-specific and should not be committed to git"
+    echo "  The 'baselines/' directory is in .gitignore"
     echo ""
     echo "Examples:"
     echo "  $0                           # Run benchmarks and show results"
@@ -101,11 +106,11 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --list-baselines)
-            if [ -d "target/criterion" ]; then
-                echo "Available baselines:"
-                find target/criterion -name "base" -type d | sed 's|target/criterion/||; s|/base||' | sort
+            echo "Available baselines:"
+            if [ -d "baselines/performance" ]; then
+                find baselines/performance -maxdepth 1 -type d ! -path "baselines/performance" -printf '%f\n' | sort
             else
-                echo "No benchmarks have been run yet."
+                echo "No baselines found"
             fi
             exit 0
             ;;
@@ -184,17 +189,23 @@ build_rustowl() {
 run_benchmarks() {
     echo -e "${YELLOW}Running Criterion benchmarks...${NC}"
     
-    local bench_args=("--bench" "$BENCHMARK_NAME")
+    local bench_args=("bench" "--bench" "$BENCHMARK_NAME")
+    local baseline_dir="baselines/performance"
     
-    if [ -n "$SAVE_BASELINE" ]; then
-        bench_args+=("--" "--save-baseline" "$SAVE_BASELINE")
-        echo -e "${BLUE}Saving results as baseline: $SAVE_BASELINE${NC}"
-    elif [ -n "$LOAD_BASELINE" ]; then
-        bench_args+=("--" "--load-baseline" "$LOAD_BASELINE")
-        echo -e "${BLUE}Comparing against baseline: $LOAD_BASELINE${NC}"
+    # If loading a baseline, copy it to criterion's location first
+    if [ -n "$LOAD_BASELINE" ]; then
+        if [ -d "$baseline_dir/$LOAD_BASELINE" ]; then
+            echo -e "${BLUE}Loading baseline: $LOAD_BASELINE${NC}"
+            mkdir -p target/criterion
+            cp -r "$baseline_dir/$LOAD_BASELINE"/* target/criterion/ 2>/dev/null || true
+            bench_args+=("--" "--load-baseline" "$LOAD_BASELINE")
+        else
+            echo -e "${RED}Error: Baseline '$LOAD_BASELINE' not found in $baseline_dir${NC}"
+            exit 1
+        fi
     fi
     
-    # Capture output for regression analysis
+    # Run the benchmark
     local output_file="/tmp/criterion_output.txt"
     
     if [ "$SHOW_OUTPUT" = true ]; then
@@ -202,6 +213,18 @@ run_benchmarks() {
     else
         cargo "${bench_args[@]}" > "$output_file" 2>&1
         echo -e "${GREEN}✓ Benchmarks completed${NC}"
+    fi
+    
+    # If saving a baseline, copy results to our baseline directory
+    if [ -n "$SAVE_BASELINE" ]; then
+        echo -e "${BLUE}Saving baseline: $SAVE_BASELINE${NC}"
+        mkdir -p "$baseline_dir"
+        if [ -d "target/criterion" ]; then
+            cp -r target/criterion "$baseline_dir/$SAVE_BASELINE"
+            echo -e "${GREEN}✓ Baseline saved to $baseline_dir/$SAVE_BASELINE${NC}"
+        else
+            echo -e "${YELLOW}Warning: No criterion results found to save${NC}"
+        fi
     fi
     
     # Analyze for regressions if comparing

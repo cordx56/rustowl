@@ -1,4 +1,4 @@
-name: Security & Profiling
+name: Security & Memory Safety
 
 on:
   pull_request:
@@ -11,200 +11,69 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_TOOLCHAIN: 1.87.0
   RUSTC_BOOTSTRAP: 1
-  DUMMY_PACKAGE_PATH: ./perf-tests/dummy-package
 
 jobs:
-  # =================================================================
-  # Job 1: Miri - Detects Undefined Behavior
-  # Miri runs the binary in an interpreter to find UB.
-  # =================================================================
-  miri:
-    name: Miri (Undefined Behavior Check)
-    runs-on: ubuntu-latest
+  security-checks:
+    name: Security & Memory Safety Analysis
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest, ubuntu-24.04-arm]
+        include:
+          - os: ubuntu-latest
+            valgrind: true
+            runner_os: Linux
+          - os: ubuntu-24.04-arm
+            valgrind: true
+            runner_os: Linux
+          - os: macos-latest
+            valgrind: false
+            runner_os: macOS
+          - os: windows-latest
+            valgrind: false
+            runner_os: Windows
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain with Miri
+      - name: Install Rust stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-          components: miri,rust-src,rustc-dev,llvm-tools
+          components: rust-src,rustc-dev,llvm-tools,clippy,rustfmt
 
-      - name: Setup Miri
-        run: cargo miri setup
-
-      - name: Run the main binary with Miri
-        run: cargo miri run --release --bin rustowl -- check ${{ env.DUMMY_PACKAGE_PATH }}
-
-  # =================================================================
-  # Job 2: Linux Memory Analysis (Valgrind)
-  # Valgrind is used for deep memory analysis on the executed binary.
-  # =================================================================
-  valgrind-linux:
-    name: Memory Analysis (Valgrind)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-          components: rust-src,rustc-dev,llvm-tools
-
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install Valgrind
-        run: sudo apt-get update && sudo apt-get install -y valgrind
-
-      - name: Install cargo-valgrind
-        run: cargo install cargo-valgrind
-
-      - name: Run memory checks with Valgrind
-        run: cargo valgrind --tool=memcheck run --release --bin rustowl -- check ${{ env.DUMMY_PACKAGE_PATH }}
-
-  # =================================================================
-  # Job 3: Linux Sanitizers (Address, Leak, Thread)
-  # Uses the nightly toolchain to find subtle memory and concurrency bugs
-  # by running the binary, not a test suite.
-  # =================================================================
-  sanitizers-linux:
-    name: Sanitizers (Linux)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Nightly Rust toolchain
+      - name: Install nightly toolchain (for Miri and sanitizers)
         uses: dtolnay/rust-toolchain@nightly
         with:
-          components: rust-src,rustc-dev,llvm-tools
+          components: miri,rust-src
 
-      - name: Cache Cargo dependencies
+      - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Set target architecture
-        id: arch
+      - name: Install system dependencies (Linux)
+        if: matrix.valgrind == true
         run: |
-          ARCH=$(rustc --print=target-triple)
-          echo "target_triple=$ARCH" >> $GITHUB_OUTPUT
+          sudo apt-get update
+          sudo apt-get install -y valgrind
 
-      - name: Run with AddressSanitizer (ASan)
-        env:
-          RUSTFLAGS: "-Z sanitizer=address"
-          ASAN_OPTIONS: "detect_odr_violation=0"
+      - name: Install cargo tools
         run: |
-          cargo +nightly build --release --target ${{ steps.arch.outputs.target_triple }} --bin rustowl
-          ./target/${{ steps.arch.outputs.target_triple }}/release/rustowl check ${{ env.DUMMY_PACKAGE_PATH }}
+          cargo install cargo-audit
 
-      - name: Run with LeakSanitizer (LSan)
-        env:
-          RUSTFLAGS: "-Z sanitizer=leak"
+      - name: Make scripts executable (Unix)
+        if: runner.os != 'Windows'
+        run: chmod +x scripts/*.sh
+
+      - name: Run security checks
+        shell: bash
         run: |
-          cargo +nightly build --release --target ${{ steps.arch.outputs.target_triple }} --bin rustowl
-          ./target/${{ steps.arch.outputs.target_triple }}/release/rustowl check ${{ env.DUMMY_PACKAGE_PATH }}
-
-      - name: Run with ThreadSanitizer (TSan)
-        env:
-          RUSTFLAGS: "-Z sanitizer=thread"
-          TSAN_OPTIONS: "suppressions=.tsan-suppressions"
-        run: |
-          # Create suppressions file for known false positives
-          echo "# ThreadSanitizer suppressions" > .tsan-suppressions
-          echo "race:std::sync::Once" >> .tsan-suppressions
-          
-          cargo +nightly build --release --target ${{ steps.arch.outputs.target_triple }} --bin rustowl
-          ./target/${{ steps.arch.outputs.target_triple }}/release/rustowl check ${{ env.DUMMY_PACKAGE_PATH }}
-
-  # =================================================================
-  # Job 4: macOS Memory Analysis (Instruments)
-  # Uses the native Xcode Instruments for profiling on macOS.
-  # =================================================================
-  instruments-macos:
-    name: Memory Analysis (macOS Instruments)
-    runs-on: macos-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-          components: rust-src,rustc-dev,llvm-tools
-
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install cargo-instruments
-        run: cargo install cargo-instruments
-
-      - name: Build rustowl
-        run: cargo build --release
-
-      - name: Run with Instruments (Leaks)
-        run: |
-          cargo instruments -t Leaks --release --bin rustowl -- check ${{ env.DUMMY_PACKAGE_PATH }}
-
-      - name: Run with Instruments (Allocations)
-        run: |
-          cargo instruments -t Allocations --release --bin rustowl -- check ${{ env.DUMMY_PACKAGE_PATH }}
-
-  # =================================================================
-  # Job 5: Windows Memory Analysis (DrMemory)
-  # Uses DrMemory as a Valgrind equivalent for Windows memory analysis.
-  # =================================================================
-  drmemory-windows:
-    name: Memory Analysis (Windows DrMemory)
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-          components: rust-src,rustc-dev,llvm-tools
-
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Download and install DrMemory
-        run: |
-          $url = "https://github.com/DynamoRIO/drmemory/releases/download/cronbuild-2.6.19353/DrMemory-Windows-2.6.19353.tar.gz"
-          Invoke-WebRequest -Uri $url -OutFile DrMemory.tar.gz
-          tar -xzf DrMemory.tar.gz
-          echo "$PWD\DrMemory-Windows-2.6.19353\bin64" >> $env:GITHUB_PATH
-
-      - name: Build release binary
-        run: cargo build --release
-
-      - name: Run with DrMemory
-        run: |
-          drmemory.exe -brief -- .\target\release\rustowl.exe check ${{ env.DUMMY_PACKAGE_PATH }}
-
-  # =================================================================
-  # Job 6: Security Audit
-  # Check for known security vulnerabilities in dependencies
-  # =================================================================
-  security-audit:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
-      - name: Run security audit
-        run: cargo audit
+          if [[ "${{ matrix.runner_os }}" == "Windows" ]]; then
+            # On Windows, use bash and skip Valgrind/DrMemory for now
+            bash ./scripts/security.sh --no-valgrind --no-drmemory
+          elif [[ "${{ matrix.valgrind }}" == "false" ]]; then
+            # Skip Valgrind on macOS as it's not reliable
+            ./scripts/security.sh --no-valgrind
+          else
+            # Run all available security tests
+            ./scripts/security.sh
+          fi

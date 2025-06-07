@@ -12,7 +12,7 @@ jobs:
     uses: ./.github/workflows/checks.yml
 
   rustowl:
-    needs: check
+    needs: [check]
     strategy:
       matrix:
         os:
