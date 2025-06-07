@@ -1,0 +1,76 @@
+name: Performance Benchmarking
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: 1.87.0
+  RUSTC_BOOTSTRAP: 1
+
+jobs:
+  benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnuplot bc
+
+      - name: Install cargo tools
+        run: |
+          cargo install cargo-criterion
+
+      - name: Make scripts executable
+        run: chmod +x scripts/*.sh
+
+      - name: Run performance benchmarks
+        run: ./scripts/bench.sh
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-reports
+          path: target/criterion/
+          retention-days: 10
+
+      - name: Compare with main baseline (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          # Save current PR results
+          mkdir -p /tmp/pr-results
+          cp -r target/criterion /tmp/pr-results/ || true
+          
+          # Checkout main branch and create baseline
+          git checkout origin/main
+          ./scripts/bench.sh baseline
+          
+          # Switch back to PR branch and compare
+          git checkout ${{ github.event.pull_request.head.sha }}
+          ./scripts/bench.sh compare || {
+            echo "Performance regression detected!"
+            exit 1
+          }

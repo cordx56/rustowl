@@ -1,0 +1,119 @@
+name: Security & Memory Safety
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: 1.87.0
+  RUSTC_BOOTSTRAP: 1
+
+jobs:
+  security-checks:
+    name: Security & Memory Safety Analysis
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest, ubuntu-24.04-arm]
+        include:
+          - os: ubuntu-latest
+            valgrind: true
+            runner_os: Linux
+          - os: ubuntu-24.04-arm
+            valgrind: true
+            runner_os: Linux
+          - os: macos-latest
+            valgrind: false
+            runner_os: macOS
+          - os: windows-latest
+            valgrind: false
+            runner_os: Windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          components: rust-src,rustc-dev,llvm-tools,clippy,rustfmt
+
+      - name: Install nightly toolchain (for Miri and sanitizers)
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri,rust-src
+
+      - name: Install additional targets for sanitizers
+        shell: bash
+        run: |
+          # Install common targets for sanitizer testing
+          if [[ "${{ matrix.runner_os }}" == "Linux" ]]; then
+            rustup +nightly target add x86_64-unknown-linux-gnu
+            if [[ "${{ matrix.os }}" == "ubuntu-24.04-arm" ]]; then
+              rustup +nightly target add aarch64-unknown-linux-gnu
+            fi
+          elif [[ "${{ matrix.runner_os }}" == "macOS" ]]; then
+            rustup +nightly target add x86_64-apple-darwin aarch64-apple-darwin
+          elif [[ "${{ matrix.runner_os }}" == "Windows" ]]; then
+            rustup +nightly target add x86_64-pc-windows-msvc
+          fi
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies (macOS)
+        if: matrix.runner_os == 'macOS'
+        run: |
+          # Install Xcode command line tools which includes Instruments
+          sudo xcode-select --install || true
+          # Wait a moment for installation to complete
+          sleep 10
+          # Verify Instruments is available
+          if command -v instruments >/dev/null 2>&1; then
+            echo "✓ Instruments is available"
+          else
+            echo "! Instruments not found, will skip Instruments tests"
+          fi
+
+      - name: Install system dependencies (Linux)
+        if: matrix.valgrind == true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+
+      - name: Install cargo tools
+        run: |
+          cargo install cargo-audit
+
+      - name: Make scripts executable (Unix)
+        if: runner.os != 'Windows'
+        run: chmod +x scripts/*.sh
+
+      - name: Run security checks
+        shell: bash
+        run: |
+          set -e  # Exit on any command failure
+          if [[ "${{ matrix.runner_os }}" == "Windows" ]]; then
+            # On Windows, skip Valgrind, DrMemory, and Sanitizers for now
+            ./scripts/security.sh --no-valgrind --no-drmemory --no-sanitizers
+          elif [[ "${{ matrix.runner_os }}" == "macOS" ]]; then
+            # Skip Valgrind and Instruments on macOS (not reliable in CI)
+            ./scripts/security.sh --no-valgrind --no-instruments --no-sanitizers
+          else
+            # On Linux, skip only sanitizers for now
+            ./scripts/security.sh --no-sanitizers
+          fi
+
+      - name: Upload Valgrind logs (on failure)
+        if: failure() && matrix.valgrind == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: valgrind-logs-${{ matrix.os }}
+          path: |
+            target/security/rustowl
+            perf-tests/dummy-package/**
+          retention-days: 7
