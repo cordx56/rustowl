@@ -122,11 +122,10 @@ jobs:
           pattern: rustowl-*
           merge-multiple: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-ids: ${{ needs.build.outputs.run_id }}
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
           draft: true
           body_path: release.md
-          prerelease: ${{ needs.meta.outputs.pre_release == 'true' }}
+          prerelease: ${{ needs.meta.outputs.pre_release == 'true' }} 

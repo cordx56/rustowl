@@ -9,11 +9,10 @@ on:
 
 jobs:
   check:
-    uses: ./.github/workflows/check.yaml
+    uses: ./.github/workflows/checks.yml
 
   rustowl:
-    needs:
-      - check
+    needs: [check]
     strategy:
       matrix:
         os:
@@ -48,8 +47,8 @@ jobs:
           fi
 
       # We don't have rustup on the Windows 11 Arm64 runner yet, so manually installing it.
-      - if: ${{ matrix.os == 'windows-11-arm' }}
-        name: Install rustup
+      - name: Install rustup
+        if: ${{ matrix.os == 'windows-11-arm' }}
         run: |
           URL='https://static.rust-lang.org/rustup/dist/aarch64-pc-windows-msvc/rustup-init.exe'
           HASH="$(curl -sSL "${URL}.sha256")"
@@ -76,7 +75,7 @@ jobs:
           ([[ "$(rustc --print=host-tuple)" == *linux* ]] && echo "is_linux=true" || echo "is_linux=false") >> $GITHUB_ENV
 
       - name: Install zig
-        if: env.is_linux == 'true'
+        if: ${{ env.is_linux == 'true' }}
         uses: mlugg/setup-zig@v2
         with:
           version: 0.13.0
@@ -147,8 +146,7 @@ jobs:
             ${{ env.archive_name }}
 
   vscode:
-    needs:
-      - check
+    needs: check
     runs-on: ubuntu-latest
     permissions:
       contents: write
