@@ -9,7 +9,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTC_BOOTSTRAP: 1
+  RUSTC_BOOTSTRAP:  1
+  RUSTUP_TOOLCHAIN: 1.87.0
 
 jobs:
   security-checks:
@@ -36,21 +37,6 @@ jobs:
         with:
           components: miri,rust-src,llvm-tools-preview
           # Automatically reads from rust-toolchain.toml
-
-      - name: Install platform-specific targets
-        shell: bash
-        run: |
-          # Install appropriate targets for the nightly version
-          if [[ "${{ matrix.runner_os }}" == "Linux" ]]; then
-            rustup target add x86_64-unknown-linux-gnu
-            if [[ "${{ matrix.os }}" == "ubuntu-24.04-arm" ]]; then
-              rustup target add aarch64-unknown-linux-gnu
-            fi
-          elif [[ "${{ matrix.runner_os }}" == "macOS" ]]; then
-            rustup target add aarch64-apple-darwin x86_64-apple-darwin
-          elif [[ "${{ matrix.runner_os }}" == "Windows" ]]; then
-            rustup target add x86_64-pc-windows-msvc
-          fi
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

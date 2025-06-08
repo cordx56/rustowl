@@ -13,30 +13,36 @@ In this document we describe how to contribute our project, as follows:
 
 Here we describe how to set up your development environment.
 
-### Automated Development Setup
+### Manual Development Setup
 
-We provide comprehensive setup scripts to streamline your development environment:
+Set up your development environment manually by installing the required tools for your platform.
 
+#### Prerequisites
+
+**Common Requirements:**
+- Rust toolchain (automatically managed via `rust-toolchain.toml`)
+- Basic build tools
+
+**Platform-Specific Tools:**
+
+**Linux:**
 ```bash
-# Full development environment setup
-./scripts/setup-dev.sh
-
-# Check what's already installed
-./scripts/setup-dev.sh --check-only
-
-# Setup only Rust toolchain
-./scripts/setup-dev.sh --rust-only
-
-# Setup everything except Node.js
-./scripts/setup-dev.sh --skip-node
+sudo apt-get update
+sudo apt-get install -y valgrind bc gnuplot build-essential
 ```
 
-The setup script automatically installs:
-- Rust toolchain components (rustfmt, clippy, miri, etc.)
-- Platform-specific development tools
-- Testing tools (valgrind on Linux, etc.)
+**macOS:**
+```bash
+brew install gnuplot
+# Optional: brew install valgrind (limited support)
+```
+
+**Windows:**
+- Visual Studio Build Tools
+- Optional: Install gnuplot for enhanced benchmark reports
+
+**Node.js Development (for VS Code extension):**
 - Node.js and yarn for VS Code extension development
-- Additional utilities (bc, gnuplot, etc.)
 
 ### Rust code
 
@@ -183,24 +189,19 @@ If the automated scripts are not available, ensure:
 
 ### Recommended Development Process
 
-1. **Setup environment** (first time only):
-   ```bash
-   ./scripts/setup-dev.sh
-   ```
-
-2. **Before making changes**:
+1. **Before making changes**:
    ```bash
    # Create performance baseline
    ./scripts/bench.sh --save before-changes
    ```
 
-3. **During development**:
+2. **During development**:
    ```bash
    # Run quick checks frequently
    ./scripts/dev-checks.sh --fix
    ```
 
-4. **Before committing**:
+3. **Before committing**:
    ```bash
    # Run comprehensive validation
    ./scripts/dev-checks.sh
@@ -226,13 +227,8 @@ chmod +x scripts/*.sh
 ```
 
 ### Missing Tools
-```bash
-# Check what's installed and what's missing
-./scripts/setup-dev.sh --check-only
 
-# Install missing tools
-./scripts/setup-dev.sh
-```
+Install the required tools manually using the platform-specific commands in the Prerequisites section above.
 
 ### Platform-Specific Issues
 

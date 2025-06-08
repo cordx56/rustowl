@@ -5,12 +5,6 @@ This directory contains utility scripts for local development and testing that c
 ## Quick Start
 
 ```bash
-# Setup development environment (installs all tools and dependencies)
-./scripts/setup-dev.sh
-
-# Check what's already installed
-./scripts/setup-dev.sh --check-only
-
 # Run development checks
 ./scripts/dev-checks.sh
 
@@ -25,18 +19,6 @@ This directory contains utility scripts for local development and testing that c
 ```
 
 ## Script Overview
-
-### `setup-dev.sh`
-Sets up your development environment by installing necessary tools and dependencies.
-
-**Options:**
-- `--check-only`: Only check what's installed, don't install anything
-- `--help`: Show usage information
-
-**What it installs:**
-- Platform-specific development tools
-- Rust components (rustfmt, clippy, etc.)
-- Testing tools (valgrind on Linux/macOS, etc.)
 
 ### `dev-checks.sh`
 Runs comprehensive development checks including formatting, linting, and tests.
@@ -56,7 +38,7 @@ Analyzes binary size changes to detect bloat and track optimization efforts.
 - Dependency analysis
 - Size regression detection
 
-### 🛡️ `security.sh` *(New)*
+### 🛡️ `security.sh`
 Comprehensive security and memory safety testing framework.
 
 **Features:**
@@ -80,7 +62,7 @@ Comprehensive security and memory safety testing framework.
 ./scripts/security.sh --platform linux --timeout 300
 ```
 
-### 📊 `bench.sh` *(New)*
+### 📊 `bench.sh` 
 Local performance benchmarking with regression detection.
 
 **Features:**
@@ -134,7 +116,6 @@ These scripts are designed to match their corresponding CI workflows:
 
 - **`security.sh`** ↔ **`.github/workflows/security.yml`**: Same security analysis tools
 - **`bench.sh`** ↔ **`.github/workflows/bench-performance.yml`**: Same benchmarks, same tools
-- **`setup-dev.sh`** helps install the same tools used in CI locally
 
 This ensures that local testing provides the same results as CI, making development more predictable and reliable.
 
@@ -171,13 +152,7 @@ The scripts integrate with several workflows:
 ```
 
 ### Setting Up New Environment
-```bash
-# Install all development tools
-./scripts/setup-dev.sh
-
-# Verify installation
-./scripts/setup-dev.sh --check-only
-```
+For setting up a development environment, ensure you have the platform-specific tools listed in the Prerequisites section above.
 
 ## Troubleshooting
 
