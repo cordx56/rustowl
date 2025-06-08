@@ -183,14 +183,14 @@ usage() {
     echo "            Buildkite, Azure DevOps, and others with CI environment variables."
     echo ""
     echo "Tests performed:"
-    echo "  • Miri: Detects undefined behavior in Rust code"
-    echo "  • Valgrind: Memory error detection (Linux)"
-    echo "  • AddressSanitizer: Memory error detection"
-    echo "  • ThreadSanitizer: Data race detection" 
-    echo "  • MemorySanitizer: Uninitialized memory detection"
-    echo "  • cargo-audit: Security vulnerability scanning"
-    echo "  • DrMemory: Memory debugging (Windows)"
-    echo "  • Instruments: Performance and memory analysis (macOS)"
+    echo "  - Miri: Detects undefined behavior in Rust code"
+    echo "  - Valgrind: Memory error detection (Linux)"
+    echo "  - AddressSanitizer: Memory error detection"
+    echo "  - ThreadSanitizer: Data race detection" 
+    echo "  - MemorySanitizer: Uninitialized memory detection"
+    echo "  - cargo-audit: Security vulnerability scanning"
+    echo "  - DrMemory: Memory debugging (Windows)"
+    echo "  - Instruments: Performance and memory analysis (macOS)"
     echo ""
     echo "Examples:"
     echo "  $0                   # Auto-detect platform and run appropriate tests"
@@ -260,7 +260,7 @@ done
 # Check Rust version compatibility
 check_rust_version() {
     if ! command -v rustc >/dev/null 2>&1; then
-        echo -e "${RED}✗ Rust compiler not found. Please install Rust: https://rustup.rs/${NC}"
+        echo -e "${RED}[ERROR] Rust compiler not found. Please install Rust: https://rustup.rs/${NC}"
         exit 1
     fi
     
@@ -268,16 +268,16 @@ check_rust_version() {
     local min_version="$MIN_RUST_VERSION"
     
     if [ -z "$current_version" ]; then
-        echo -e "${YELLOW}⚠ Could not determine Rust version, proceeding anyway...${NC}"
+        echo -e "${YELLOW}[WARN] Could not determine Rust version, proceeding anyway...${NC}"
         return 0
     fi
     
     # Simple version comparison (assumes semantic versioning)
     if printf '%s\n%s\n' "$min_version" "$current_version" | sort -V -C; then
-        echo -e "${GREEN}✓ Rust $current_version >= $min_version (minimum required)${NC}"
+        echo -e "${GREEN}[OK] Rust $current_version >= $min_version (minimum required)${NC}"
         return 0
     else
-        echo -e "${RED}✗ Rust $current_version < $min_version (minimum required)${NC}"
+        echo -e "${RED}[ERROR] Rust $current_version < $min_version (minimum required)${NC}"
         echo -e "${YELLOW}Please update Rust: rustup update${NC}"
         exit 1
     fi
@@ -290,7 +290,7 @@ detect_tools() {
     # Check for Miri
     if rustup component list --installed | grep -q miri; then
         HAS_MIRI=1
-        echo -e "${GREEN}✓ Miri is installed${NC}"
+        echo -e "${GREEN}[OK] Miri is installed${NC}"
     else
         echo -e "${YELLOW}! Miri not installed (install with: rustup component add miri)${NC}"
     fi
@@ -298,7 +298,7 @@ detect_tools() {
     # Check for Valgrind (Linux only)
     if [[ "$OS_TYPE" == "Linux" ]] && command -v valgrind >/dev/null 2>&1; then
         HAS_VALGRIND=1
-        echo -e "${GREEN}✓ Valgrind is available${NC}"
+        echo -e "${GREEN}[OK] Valgrind is available${NC}"
     elif [[ "$OS_TYPE" == "Linux" ]]; then
         echo -e "${YELLOW}! Valgrind not found (install with package manager)${NC}"
     fi
@@ -306,7 +306,7 @@ detect_tools() {
     # Check for cargo-audit
     if command -v cargo-audit >/dev/null 2>&1; then
         HAS_CARGO_AUDIT=1
-        echo -e "${GREEN}✓ cargo-audit is available${NC}"
+        echo -e "${GREEN}[OK] cargo-audit is available${NC}"
     else
         echo -e "${YELLOW}! cargo-audit not found (install with: cargo install cargo-audit)${NC}"
     fi
@@ -316,21 +316,21 @@ detect_tools() {
         # Check if already in PATH
         if command -v drmemory >/dev/null 2>&1 || command -v drmemory.exe >/dev/null 2>&1; then
             HAS_DRMEMORY=1
-            echo -e "${GREEN}✓ DrMemory is available in PATH${NC}"
+            echo -e "${GREEN}[OK] DrMemory is available in PATH${NC}"
         # Check our installation directory
         elif [ -f "$DRMEMORY_INSTALL_DIR/bin/drmemory.exe" ]; then
             HAS_DRMEMORY=1
             export PATH="$DRMEMORY_INSTALL_DIR/bin:$PATH"
-            echo -e "${GREEN}✓ DrMemory found at $DRMEMORY_INSTALL_DIR${NC}"
+            echo -e "${GREEN}[OK] DrMemory found at $DRMEMORY_INSTALL_DIR${NC}"
         # Check common installation paths
         elif [ -f "/c/Program Files/Dr. Memory/bin/drmemory.exe" ]; then
             HAS_DRMEMORY=1
             export PATH="/c/Program Files/Dr. Memory/bin:$PATH"
-            echo -e "${GREEN}✓ DrMemory found in Program Files${NC}"
+            echo -e "${GREEN}[OK] DrMemory found in Program Files${NC}"
         elif [ -f "/c/Program Files (x86)/Dr. Memory/bin/drmemory.exe" ]; then
             HAS_DRMEMORY=1
             export PATH="/c/Program Files (x86)/Dr. Memory/bin:$PATH"
-            echo -e "${GREEN}✓ DrMemory found in Program Files (x86)${NC}"
+            echo -e "${GREEN}[OK] DrMemory found in Program Files (x86)${NC}"
         else
             echo -e "${YELLOW}! DrMemory not found${NC}"
         fi
@@ -339,7 +339,7 @@ detect_tools() {
     # Check for Instruments (macOS only)
     if [[ "$OS_TYPE" == "macOS" ]] && command -v instruments >/dev/null 2>&1; then
         HAS_INSTRUMENTS=1
-        echo -e "${GREEN}✓ Instruments is available${NC}"
+        echo -e "${GREEN}[OK] Instruments is available${NC}"
     elif [[ "$OS_TYPE" == "macOS" ]]; then
         echo -e "${YELLOW}! Instruments not found${NC}"
     fi
@@ -356,7 +356,7 @@ check_nightly_toolchain() {
     echo -e "${BLUE}Active toolchain: $current_toolchain${NC}"
     
     if [[ "$current_toolchain" == *"nightly"* ]]; then
-        echo -e "${GREEN}✓ Nightly toolchain is active (from rust-toolchain.toml)${NC}"
+        echo -e "${GREEN}[OK] Nightly toolchain is active (from rust-toolchain.toml)${NC}"
     else
         echo -e "${YELLOW}! Stable toolchain detected${NC}"
         echo -e "${YELLOW}Some advanced features require nightly (check rust-toolchain.toml)${NC}"
@@ -365,7 +365,7 @@ check_nightly_toolchain() {
     # Check if Miri component is available on current toolchain
     if rustup component list --installed | grep -q miri 2>/dev/null; then
         HAS_MIRI=1
-        echo -e "${GREEN}✓ Miri is available${NC}"
+        echo -e "${GREEN}[OK] Miri is available${NC}"
     else
         echo -e "${YELLOW}! Miri component not installed${NC}"
         echo -e "${YELLOW}Install with: rustup component add miri${NC}"
@@ -394,7 +394,7 @@ check_nightly_toolchain() {
     
     if [[ -n "$current_target" ]]; then
         if rustup target list --installed | grep -q "$current_target"; then
-            echo -e "${GREEN}✓ Target $current_target is available${NC}"
+            echo -e "${GREEN}[OK] Target $current_target is available${NC}"
         else
             echo -e "${YELLOW}! Target $current_target not installed${NC}"
             echo -e "${YELLOW}Install with: rustup target add $current_target${NC}"
@@ -418,11 +418,11 @@ build_project() {
     fi
     
     if [ ! -f "./target/security/$binary_name" ]; then
-        echo -e "${RED}✗ Failed to build rustowl binary${NC}"
+        echo -e "${RED}[ERROR] Failed to build rustowl binary${NC}"
         exit 1
     fi
     
-    echo -e "${GREEN}✓ Build completed successfully${NC}"
+    echo -e "${GREEN}[OK] Build completed successfully${NC}"
     echo ""
 }
 
@@ -450,20 +450,20 @@ run_miri_tests() {
     if [ -d "perf-tests/dummy-package" ]; then
         echo -e "${BLUE}Running RustOwl analysis with Miri...${NC}"
         if log_command_detailed "miri_rustowl_analysis" "cargo miri run --bin rustowl -- check perf-tests/dummy-package"; then
-            echo -e "${GREEN}✓ RustOwl execution passed with Miri${NC}"
+            echo -e "${GREEN}[OK] RustOwl execution passed with Miri${NC}"
         else
-            echo -e "${YELLOW}⚠ Miri could not complete analysis (likely due to jemalloc FFI calls)${NC}"
+            echo -e "${YELLOW}[WARN] Miri could not complete analysis (likely due to jemalloc FFI calls)${NC}"
             echo -e "${YELLOW}  This is expected behavior as jemalloc uses foreign functions${NC}"
             echo -e "${YELLOW}  Core RustOwl logic would need testing with system allocator${NC}"
             echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_rustowl_analysis_${TIMESTAMP}.log${NC}"
         fi
     else
-        echo -e "${YELLOW}⚠ No dummy package found at perf-tests/dummy-package${NC}"
+        echo -e "${YELLOW}[WARN] No dummy package found at perf-tests/dummy-package${NC}"
         echo -e "${YELLOW}  Attempting to run RustOwl with --help to test basic execution...${NC}"
         if log_command_detailed "miri_basic_execution" "cargo miri run --bin rustowl -- --help"; then
-            echo -e "${GREEN}✓ RustOwl basic execution passed with Miri${NC}"
+            echo -e "${GREEN}[OK] RustOwl basic execution passed with Miri${NC}"
         else
-            echo -e "${YELLOW}⚠ Miri could not complete analysis (likely due to jemalloc FFI calls)${NC}"
+            echo -e "${YELLOW}[WARN] Miri could not complete analysis (likely due to jemalloc FFI calls)${NC}"
             echo -e "${YELLOW}  This is expected behavior as jemalloc uses foreign functions${NC}"
             echo -e "${YELLOW}  Core RustOwl logic would need testing with system allocator${NC}"
             echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_basic_execution_${TIMESTAMP}.log${NC}"
@@ -501,9 +501,9 @@ run_valgrind_tests() {
         local full_cmd="timeout 300 $valgrind_cmd ./target/security/rustowl check $TEST_TARGET_PATH"
         
         if log_command_detailed "valgrind_rustowl_analysis" "$full_cmd"; then
-            echo -e "${GREEN}✓ No memory errors detected by Valgrind${NC}"
+            echo -e "${GREEN}[OK] No memory errors detected by Valgrind${NC}"
         else
-            echo -e "${RED}✗ Valgrind detected memory issues${NC}"
+            echo -e "${RED}[ERROR] Valgrind detected memory issues${NC}"
             echo -e "${BLUE}  Full output captured in: $LOG_DIR/valgrind_rustowl_analysis_${TIMESTAMP}.log${NC}"
             echo "Run manually for details: $valgrind_cmd ./target/security/rustowl check $TEST_TARGET_PATH"
             return 1
@@ -516,9 +516,9 @@ run_valgrind_tests() {
         local basic_cmd="timeout 60 $valgrind_cmd ./target/security/rustowl --help"
         
         if log_command_detailed "valgrind_basic_execution" "$basic_cmd"; then
-            echo -e "${GREEN}✓ Basic Valgrind test passed${NC}"
+            echo -e "${GREEN}[OK] Basic Valgrind test passed${NC}"
         else
-            echo -e "${RED}✗ Valgrind basic test failed${NC}"
+            echo -e "${RED}[ERROR] Valgrind basic test failed${NC}"
             echo -e "${BLUE}  Full output captured in: $LOG_DIR/valgrind_basic_execution_${TIMESTAMP}.log${NC}"
             return 1
         fi
@@ -578,7 +578,7 @@ run_sanitizer_tests() {
     local asan_cmd="RUSTFLAGS=\"-Z sanitizer=address\" cargo build --target $current_target --target-dir target/sanitizer --profile=security"
     
     if log_command_detailed "sanitizer_address_build" "$asan_cmd"; then
-        echo -e "${GREEN}✓ AddressSanitizer build successful for $current_target${NC}"
+        echo -e "${GREEN}[OK] AddressSanitizer build successful for $current_target${NC}"
         
         # Test execution if possible and test target exists
         if [ -d "$TEST_TARGET_PATH" ]; then
@@ -592,9 +592,9 @@ run_sanitizer_tests() {
                 local asan_test_cmd="$asan_binary check $TEST_TARGET_PATH"
                 
                 if log_command_detailed "sanitizer_address_execution" "$asan_test_cmd"; then
-                    echo -e "${GREEN}✓ AddressSanitizer execution test passed${NC}"
+                    echo -e "${GREEN}[OK] AddressSanitizer execution test passed${NC}"
                 else
-                    echo -e "${YELLOW}⚠ AddressSanitizer execution had issues${NC}"
+                    echo -e "${YELLOW}[WARN] AddressSanitizer execution had issues${NC}"
                     echo -e "${BLUE}  Full output captured in: $LOG_DIR/sanitizer_address_execution_${TIMESTAMP}.log${NC}"
                     sanitizer_failed=true
                 fi
@@ -631,9 +631,9 @@ run_audit_check() {
     
     echo -e "${YELLOW}Scanning dependencies for vulnerabilities...${NC}"
     if log_command_detailed "cargo_audit_scan" "cargo audit"; then
-        echo -e "${GREEN}✓ No known vulnerabilities found${NC}"
+        echo -e "${GREEN}[OK] No known vulnerabilities found${NC}"
     else
-        echo -e "${RED}✗ Security vulnerabilities detected${NC}"
+        echo -e "${RED}[ERROR] Security vulnerabilities detected${NC}"
         echo -e "${BLUE}  Full output captured in: $LOG_DIR/cargo_audit_scan_${TIMESTAMP}.log${NC}"
         return 1
     fi
@@ -663,9 +663,9 @@ run_drmemory_tests() {
     fi
     
     if log_command_detailed "drmemory_version_check" "$drmemory_cmd -version"; then
-        echo -e "${GREEN}✓ DrMemory is working${NC}"
+        echo -e "${GREEN}[OK] DrMemory is working${NC}"
     else
-        echo -e "${RED}✗ DrMemory not working properly${NC}"
+        echo -e "${RED}[ERROR] DrMemory not working properly${NC}"
         echo -e "${BLUE}  Full output captured in: $LOG_DIR/drmemory_version_check_${TIMESTAMP}.log${NC}"
         return 1
     fi
@@ -675,7 +675,7 @@ run_drmemory_tests() {
     if [ ! -f "$rustowl_binary" ]; then
         rustowl_binary="./target/security/rustowl"
         if [ ! -f "$rustowl_binary" ]; then
-            echo -e "${RED}✗ RustOwl binary not found${NC}"
+            echo -e "${RED}[ERROR] RustOwl binary not found${NC}"
             return 1
         fi
     fi
@@ -688,16 +688,16 @@ run_drmemory_tests() {
         local drmemory_full_cmd="timeout 300 $drmemory_cmd -- $rustowl_binary check $TEST_TARGET_PATH"
         
         if log_command_detailed "drmemory_rustowl_analysis" "$drmemory_full_cmd"; then
-            echo -e "${GREEN}✓ No memory errors detected by DrMemory${NC}"
+            echo -e "${GREEN}[OK] No memory errors detected by DrMemory${NC}"
         else
             local exit_code=$?
             if grep -q "timeout" "$LOG_DIR/drmemory_rustowl_analysis_${TIMESTAMP}.log" 2>/dev/null; then
-                echo -e "${YELLOW}⚠ DrMemory test timed out (300 seconds)${NC}"
+                echo -e "${YELLOW}[WARN] DrMemory test timed out (300 seconds)${NC}"
                 echo -e "${YELLOW}  This may indicate a performance issue or DrMemory overhead${NC}"
                 echo -e "${BLUE}  Full output captured in: $LOG_DIR/drmemory_rustowl_analysis_${TIMESTAMP}.log${NC}"
                 return 0  # Don't fail for timeout
             else
-                echo -e "${RED}✗ DrMemory detected memory issues or failed to run${NC}"
+                echo -e "${RED}[ERROR] DrMemory detected memory issues or failed to run${NC}"
                 echo -e "${BLUE}  Full output captured in: $LOG_DIR/drmemory_rustowl_analysis_${TIMESTAMP}.log${NC}"
                 echo "Run manually for details:"
                 echo "  $drmemory_cmd -- $rustowl_binary check $TEST_TARGET_PATH"
@@ -711,14 +711,14 @@ run_drmemory_tests() {
         local drmemory_basic_cmd="timeout 60 $drmemory_cmd -- $rustowl_binary --help"
         
         if log_command_detailed "drmemory_basic_execution" "$drmemory_basic_cmd"; then
-            echo -e "${GREEN}✓ Basic DrMemory test passed${NC}"
+            echo -e "${GREEN}[OK] Basic DrMemory test passed${NC}"
         else
             if grep -q "timeout" "$LOG_DIR/drmemory_basic_execution_${TIMESTAMP}.log" 2>/dev/null; then
-                echo -e "${YELLOW}⚠ DrMemory basic test timed out${NC}"
+                echo -e "${YELLOW}[WARN] DrMemory basic test timed out${NC}"
                 echo -e "${BLUE}  Full output captured in: $LOG_DIR/drmemory_basic_execution_${TIMESTAMP}.log${NC}"
                 return 0
             else
-                echo -e "${RED}✗ DrMemory basic test failed${NC}"
+                echo -e "${RED}[ERROR] DrMemory basic test failed${NC}"
                 echo -e "${BLUE}  Full output captured in: $LOG_DIR/drmemory_basic_execution_${TIMESTAMP}.log${NC}"
                 return 1
             fi
@@ -750,9 +750,9 @@ run_instruments_tests() {
         local instruments_cmd="instruments -t 'Allocations' -D $trace_file ./target/security/rustowl check $TEST_TARGET_PATH"
         
         if log_command_detailed "instruments_allocations_analysis" "$instruments_cmd"; then
-            echo -e "${GREEN}✓ Instruments analysis completed${NC}"
+            echo -e "${GREEN}[OK] Instruments analysis completed${NC}"
         else
-            echo -e "${RED}✗ Instruments analysis failed${NC}"
+            echo -e "${RED}[ERROR] Instruments analysis failed${NC}"
             echo -e "${BLUE}  Full output captured in: $LOG_DIR/instruments_allocations_analysis_${TIMESTAMP}.log${NC}"
             echo "Run manually for details: instruments -t 'Allocations' ./target/security/rustowl check $TEST_TARGET_PATH"
             # Clean up trace file on failure
@@ -770,9 +770,9 @@ run_instruments_tests() {
         local instruments_basic_cmd="instruments -t 'Allocations' -D $trace_file ./target/security/rustowl --help"
         
         if log_command_detailed "instruments_basic_execution" "$instruments_basic_cmd"; then
-            echo -e "${GREEN}✓ Basic Instruments test passed${NC}"
+            echo -e "${GREEN}[OK] Basic Instruments test passed${NC}"
         else
-            echo -e "${RED}✗ Instruments basic test failed${NC}"
+            echo -e "${RED}[ERROR] Instruments basic test failed${NC}"
             echo -e "${BLUE}  Full output captured in: $LOG_DIR/instruments_basic_execution_${TIMESTAMP}.log${NC}"
             # Clean up trace file on failure
             rm -rf "$trace_file" 2>/dev/null || true
@@ -836,20 +836,20 @@ show_tool_status() {
     echo ""
     
     echo "Security Tools:"
-    echo -e "  Miri (UB detection):           $([ $HAS_MIRI -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${RED}✗ Missing${NC}")"
+    echo -e "  Miri (UB detection):           $([ $HAS_MIRI -eq 1 ] && echo -e "${GREEN}[OK] Available${NC}" || echo -e "${RED}[ERROR] Missing${NC}")"
     
     if [[ "$OS_TYPE" == "Linux" ]]; then
-        echo -e "  Valgrind (memory errors):      $([ $HAS_VALGRIND -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${RED}✗ Missing${NC}")"
+        echo -e "  Valgrind (memory errors):      $([ $HAS_VALGRIND -eq 1 ] && echo -e "${GREEN}[OK] Available${NC}" || echo -e "${RED}[ERROR] Missing${NC}")"
     fi
     
-    echo -e "  cargo-audit (vulnerabilities): $([ $HAS_CARGO_AUDIT -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${RED}✗ Missing${NC}")"
+    echo -e "  cargo-audit (vulnerabilities): $([ $HAS_CARGO_AUDIT -eq 1 ] && echo -e "${GREEN}[OK] Available${NC}" || echo -e "${RED}[ERROR] Missing${NC}")"
     
     if [[ "$OS_TYPE" == "Windows" ]]; then
-        echo -e "  DrMemory (memory debugging):   $([ $HAS_DRMEMORY -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${RED}✗ Missing${NC}")"
+        echo -e "  DrMemory (memory debugging):   $([ $HAS_DRMEMORY -eq 1 ] && echo -e "${GREEN}[OK] Available${NC}" || echo -e "${RED}[ERROR] Missing${NC}")"
     fi
     
     if [[ "$OS_TYPE" == "macOS" ]]; then
-        echo -e "  Instruments (performance):     $([ $HAS_INSTRUMENTS -eq 1 ] && echo -e "${GREEN}✓ Available${NC}" || echo -e "${RED}✗ Missing${NC}")"
+        echo -e "  Instruments (performance):     $([ $HAS_INSTRUMENTS -eq 1 ] && echo -e "${GREEN}[OK] Available${NC}" || echo -e "${RED}[ERROR] Missing${NC}")"
     fi
     
     echo ""
@@ -858,10 +858,10 @@ show_tool_status() {
     local current_toolchain=$(rustup show active-toolchain | cut -d' ' -f1)
     echo "Sanitizer Support:"
     if [[ "$current_toolchain" == *"nightly"* ]]; then
-        echo -e "  Nightly toolchain:             ${GREEN}✓ Available${NC}"
-        echo -e "  AddressSanitizer:              ${GREEN}✓ Supported${NC}"
-        echo -e "  ThreadSanitizer:               ${GREEN}✓ Supported${NC}"
-        echo -e "  MemorySanitizer:               ${GREEN}✓ Supported${NC}"
+        echo -e "  Nightly toolchain:             ${GREEN}[OK] Available${NC}"
+        echo -e "  AddressSanitizer:              ${GREEN}[OK] Supported${NC}"
+        echo -e "  ThreadSanitizer:               ${GREEN}[OK] Supported${NC}"
+        echo -e "  MemorySanitizer:               ${GREEN}[OK] Supported${NC}"
     else
         echo -e "  Nightly toolchain:             ${YELLOW}! Stable toolchain active${NC}"
         echo -e "  Sanitizers:                    ${YELLOW}! Require nightly${NC}"
@@ -898,11 +898,11 @@ create_security_summary() {
     echo "" >> "$summary_file"
     echo "| Tool | Status | Notes |" >> "$summary_file"
     echo "|------|--------|-------|" >> "$summary_file"
-    echo "| Miri | $([ $HAS_MIRI -eq 1 ] && echo "✅ Available" || echo "❌ Missing") | Undefined behavior detection |" >> "$summary_file"
-    echo "| Valgrind | $([ $HAS_VALGRIND -eq 1 ] && echo "✅ Available" || echo "❌ Missing/N/A") | Memory error detection (Linux) |" >> "$summary_file"
-    echo "| cargo-audit | $([ $HAS_CARGO_AUDIT -eq 1 ] && echo "✅ Available" || echo "❌ Missing") | Security vulnerability scanning |" >> "$summary_file"
-    echo "| DrMemory | $([ $HAS_DRMEMORY -eq 1 ] && echo "✅ Available" || echo "❌ Missing/N/A") | Memory debugging (Windows) |" >> "$summary_file"
-    echo "| Instruments | $([ $HAS_INSTRUMENTS -eq 1 ] && echo "✅ Available" || echo "❌ Missing/N/A") | Performance analysis (macOS) |" >> "$summary_file"
+    echo "| Miri | $([ $HAS_MIRI -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing") | Undefined behavior detection |" >> "$summary_file"
+    echo "| Valgrind | $([ $HAS_VALGRIND -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing/N/A") | Memory error detection (Linux) |" >> "$summary_file"
+    echo "| cargo-audit | $([ $HAS_CARGO_AUDIT -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing") | Security vulnerability scanning |" >> "$summary_file"
+    echo "| DrMemory | $([ $HAS_DRMEMORY -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing/N/A") | Memory debugging (Windows) |" >> "$summary_file"
+    echo "| Instruments | $([ $HAS_INSTRUMENTS -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing/N/A") | Performance analysis (macOS) |" >> "$summary_file"
     echo "" >> "$summary_file"
     
     # Test results summary
@@ -919,9 +919,9 @@ create_security_summary() {
                 
                 # Check if test passed or failed based on log content
                 if grep -q "COMMAND COMPLETED SUCCESSFULLY" "$log_file"; then
-                    echo "**Status:** ✅ PASSED" >> "$summary_file"
+                    echo "**Status:** [OK] PASSED" >> "$summary_file"
                 elif grep -q "COMMAND FAILED" "$log_file"; then
-                    echo "**Status:** ❌ FAILED" >> "$summary_file"
+                    echo "**Status:** [FAIL] FAILED" >> "$summary_file"
                     
                     # Extract error information
                     echo "" >> "$summary_file"
@@ -931,7 +931,7 @@ create_security_summary() {
                     grep -B 20 "COMMAND FAILED" "$log_file" | tail -20 >> "$summary_file"
                     echo '```' >> "$summary_file"
                 else
-                    echo "**Status:** ⚠️ UNKNOWN" >> "$summary_file"
+                    echo "**Status:** [WARN] UNKNOWN" >> "$summary_file"
                 fi
                 
                 echo "" >> "$summary_file"
@@ -973,11 +973,11 @@ install_required_tools() {
     if [[ $HAS_MIRI -eq 0 ]]; then
         echo -e "${BLUE}Installing Miri component...${NC}"
         if rustup component add miri; then
-            echo -e "${GREEN}✓ Miri installed successfully${NC}"
+            echo -e "${GREEN}[OK] Miri installed successfully${NC}"
             HAS_MIRI=1
             tools_installed=true
         else
-            echo -e "${YELLOW}⚠ Failed to install Miri${NC}"
+            echo -e "${YELLOW}[WARN] Failed to install Miri${NC}"
         fi
     fi
     
@@ -985,11 +985,11 @@ install_required_tools() {
     if [[ $HAS_CARGO_AUDIT -eq 0 ]]; then
         echo -e "${BLUE}Installing cargo-audit...${NC}"
         if cargo install cargo-audit; then
-            echo -e "${GREEN}✓ cargo-audit installed successfully${NC}"
+            echo -e "${GREEN}[OK] cargo-audit installed successfully${NC}"
             HAS_CARGO_AUDIT=1
             tools_installed=true
         else
-            echo -e "${YELLOW}⚠ Failed to install cargo-audit${NC}"
+            echo -e "${YELLOW}[WARN] Failed to install cargo-audit${NC}"
         fi
     fi
     
@@ -998,30 +998,30 @@ install_required_tools() {
         echo -e "${BLUE}Installing Valgrind (Linux)...${NC}"
         if command -v apt-get >/dev/null 2>&1; then
             if sudo apt-get update && sudo apt-get install -y valgrind; then
-                echo -e "${GREEN}✓ Valgrind installed successfully${NC}"
+                echo -e "${GREEN}[OK] Valgrind installed successfully${NC}"
                 HAS_VALGRIND=1
                 tools_installed=true
             else
-                echo -e "${YELLOW}⚠ Failed to install Valgrind via apt-get${NC}"
+                echo -e "${YELLOW}[WARN] Failed to install Valgrind via apt-get${NC}"
             fi
         elif command -v yum >/dev/null 2>&1; then
             if sudo yum install -y valgrind; then
-                echo -e "${GREEN}✓ Valgrind installed successfully${NC}"
+                echo -e "${GREEN}[OK] Valgrind installed successfully${NC}"
                 HAS_VALGRIND=1
                 tools_installed=true
             else
-                echo -e "${YELLOW}⚠ Failed to install Valgrind via yum${NC}"
+                echo -e "${YELLOW}[WARN] Failed to install Valgrind via yum${NC}"
             fi
         elif command -v pacman >/dev/null 2>&1; then
             if sudo pacman -S --noconfirm valgrind; then
-                echo -e "${GREEN}✓ Valgrind installed successfully${NC}"
+                echo -e "${GREEN}[OK] Valgrind installed successfully${NC}"
                 HAS_VALGRIND=1
                 tools_installed=true
             else
-                echo -e "${YELLOW}⚠ Failed to install Valgrind via pacman${NC}"
+                echo -e "${YELLOW}[WARN] Failed to install Valgrind via pacman${NC}"
             fi
         else
-            echo -e "${YELLOW}⚠ No supported package manager found for Valgrind installation${NC}"
+            echo -e "${YELLOW}[WARN] No supported package manager found for Valgrind installation${NC}"
         fi
     fi
     
@@ -1034,20 +1034,20 @@ install_required_tools() {
         if [ -f "$setup_script" ]; then
             echo -e "${BLUE}Running DrMemory setup script...${NC}"
             if powershell.exe -ExecutionPolicy Bypass -File "$setup_script"; then
-                echo -e "${GREEN}✓ DrMemory installation completed${NC}"
+                echo -e "${GREEN}[OK] DrMemory installation completed${NC}"
                 # Re-check for DrMemory after installation
                 if [ -f "$DRMEMORY_INSTALL_DIR/bin/drmemory.exe" ]; then
                     HAS_DRMEMORY=1
                     export PATH="$DRMEMORY_INSTALL_DIR/bin:$PATH"
                     tools_installed=true
                 else
-                    echo -e "${YELLOW}⚠ DrMemory installation completed but binary not found${NC}"
+                    echo -e "${YELLOW}[WARN] DrMemory installation completed but binary not found${NC}"
                 fi
             else
-                echo -e "${YELLOW}⚠ DrMemory installation script failed${NC}"
+                echo -e "${YELLOW}[WARN] DrMemory installation script failed${NC}"
             fi
         else
-            echo -e "${YELLOW}⚠ DrMemory setup script not found at $setup_script${NC}"
+            echo -e "${YELLOW}[WARN] DrMemory setup script not found at $setup_script${NC}"
         fi
     fi
     
@@ -1058,7 +1058,7 @@ install_required_tools() {
     fi
     
     if [[ "$tools_installed" == "true" ]]; then
-        echo -e "${GREEN}✓ Tool installation completed${NC}"
+        echo -e "${GREEN}[OK] Tool installation completed${NC}"
     else
         echo -e "${BLUE}No additional tools needed to be installed${NC}"
     fi
@@ -1129,10 +1129,10 @@ main() {
     echo -e "${BLUE}${BOLD}Security Testing Summary${NC}"
     echo -e "${BLUE}================================${NC}"
     if [ $exit_code -eq 0 ]; then
-        echo -e "${GREEN}✓ All security tests passed!${NC}"
+        echo -e "${GREEN}[OK] All security tests passed!${NC}"
         echo "No memory safety issues or security vulnerabilities detected."
     else
-        echo -e "${RED}✗ Some security tests failed!${NC}"
+        echo -e "${RED}[ERROR] Some security tests failed!${NC}"
         echo "Please review the output above and address any issues found."
     fi
     echo ""

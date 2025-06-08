@@ -44,10 +44,10 @@ function Install-DrMemory {
     
     try {
         Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -UseBasicParsing
-        Write-ColorText "  ✓ Downloaded successfully" $Green
+        Write-ColorText "  [OK] Downloaded successfully" $Green
     }
     catch {
-        Write-ColorText "  ✗ Download failed: $($_.Exception.Message)" $Red
+        Write-ColorText "  [ERROR] Download failed: $($_.Exception.Message)" $Red
         throw
     }
     
@@ -76,10 +76,10 @@ function Install-DrMemory {
             Remove-Item $ExtractedPath -Force
         }
         
-        Write-ColorText "  ✓ Extracted successfully" $Green
+        Write-ColorText "  [OK] Extracted successfully" $Green
     }
     catch {
-        Write-ColorText "  ✗ Extraction failed: $($_.Exception.Message)" $Red
+        Write-ColorText "  [ERROR] Extraction failed: $($_.Exception.Message)" $Red
         throw
     }
     finally {
@@ -91,11 +91,11 @@ function Install-DrMemory {
     
     # Verify installation
     if (Test-DrMemoryInstalled $InstallPath) {
-        Write-ColorText "  ✓ DrMemory installation completed successfully" $Green
+        Write-ColorText "  [OK] DrMemory installation completed successfully" $Green
         return $true
     }
     else {
-        Write-ColorText "  ✗ Installation verification failed" $Red
+        Write-ColorText "  [ERROR] Installation verification failed" $Red
         return $false
     }
 }
@@ -111,14 +111,14 @@ function Add-ToUserPath {
     if ($CurrentPath -notlike "*$BinPath*") {
         $NewPath = "$CurrentPath;$BinPath"
         [Environment]::SetEnvironmentVariable("PATH", $NewPath, "User")
-        Write-ColorText "  ✓ Added to user PATH (restart terminal to take effect)" $Green
+        Write-ColorText "  [OK] Added to user PATH (restart terminal to take effect)" $Green
         
         # Also add to current session
         $env:PATH += ";$BinPath"
-        Write-ColorText "  ✓ Added to current session PATH" $Green
+        Write-ColorText "  [OK] Added to current session PATH" $Green
     }
     else {
-        Write-ColorText "  ! DrMemory bin directory already in PATH" $Yellow
+        Write-ColorText "  [INFO] DrMemory bin directory already in PATH" $Yellow
     }
 }
 
@@ -132,17 +132,17 @@ function Test-DrMemoryWorking {
     try {
         $Output = & $DrMemoryExe -version 2>&1
         if ($LASTEXITCODE -eq 0) {
-            Write-ColorText "  ✓ DrMemory is working correctly" $Green
+            Write-ColorText "  [OK] DrMemory is working correctly" $Green
             Write-ColorText "  Version info: $($Output[0])" $Blue
             return $true
         }
         else {
-            Write-ColorText "  ✗ DrMemory test failed with exit code $LASTEXITCODE" $Red
+            Write-ColorText "  [ERROR] DrMemory test failed with exit code $LASTEXITCODE" $Red
             return $false
         }
     }
     catch {
-        Write-ColorText "  ✗ Failed to run DrMemory: $($_.Exception.Message)" $Red
+        Write-ColorText "  [ERROR] Failed to run DrMemory: $($_.Exception.Message)" $Red
         return $false
     }
 }
@@ -202,7 +202,7 @@ try {
             }
             
             Write-Host ""
-            Write-ColorText "✓ DrMemory setup completed successfully!" $Green
+            Write-ColorText "[OK] DrMemory setup completed successfully!" $Green
             Write-Host ""
             Write-ColorText "Installation location: $InstallPath" $Blue
             Write-ColorText "Binary location: $(Join-Path $InstallPath 'bin\drmemory.exe')" $Blue
@@ -220,19 +220,19 @@ try {
             
             Write-Host ""
             Write-ColorText "Test DrMemory with: drmemory.exe -version" $Blue
-            Write-ColorText "Use with RustOwl: drmemory.exe -- rustowl.exe check <target>" $Blue
+            Write-ColorText "Use with RustOwl: drmemory.exe -- rustowl.exe check [target]" $Blue
         }
         else {
-            Write-ColorText "✗ Installation completed but DrMemory is not working properly" $Red
+            Write-ColorText "[ERROR] Installation completed but DrMemory is not working properly" $Red
             exit 1
         }
     }
     else {
-        Write-ColorText "✗ DrMemory installation failed" $Red
+        Write-ColorText "[ERROR] DrMemory installation failed" $Red
         exit 1
     }
 }
 catch {
-    Write-ColorText "✗ Error during setup: $($_.Exception.Message)" $Red
+    Write-ColorText "[ERROR] Error during setup: $($_.Exception.Message)" $Red
     exit 1
 }
