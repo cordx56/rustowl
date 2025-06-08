@@ -62,6 +62,7 @@ jobs:
 
       - name: Create security summary and cleanup
         if: always()
+        shell: bash
         run: |
           echo "# Security Testing Summary" > security-summary.txt
           echo "Generated: $(date)" >> security-summary.txt

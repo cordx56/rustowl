@@ -55,6 +55,14 @@ opt-level = 3
 inherits = "release"
 lto = "off"
 
+[profile.security]
+inherits = "dev"
+debug = true
+debug-assertions = true
+overflow-checks = true
+opt-level = 1
+strip = "none"
+
 [package.metadata.rust-analyzer]
 rustc_private = true
 
