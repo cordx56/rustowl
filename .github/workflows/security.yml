@@ -46,71 +46,58 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y valgrind
 
-      - name: Install cargo tools
-        run: |
-          cargo install cargo-audit
-
       - name: Make scripts executable (Unix)
         if: runner.os != 'Windows'
         run: chmod +x scripts/*.sh
 
-      - name: Run security checks
+      - name: Run comprehensive security checks
         shell: bash
         run: |
-          set -e  # Exit on any command failure
+          # The security script will auto-detect CI environment and install missing tools
           ./scripts/security.sh
 
       - name: Create security summary and cleanup
         if: always()
         shell: bash
         run: |
-          echo "# Security Testing Summary" > security-summary.txt
-          echo "Generated: $(date)" >> security-summary.txt
-          echo "OS: ${{ matrix.os }}" >> security-summary.txt
-          echo "" >> security-summary.txt
-          
-          # Check if we have various log files and summarize them
-          if [ -f "valgrind.log" ]; then
-            echo "## Valgrind Results" >> security-summary.txt
-            echo "Log file size: $(wc -c < valgrind.log) bytes" >> security-summary.txt
-            echo "Last 10 lines:" >> security-summary.txt
-            tail -10 valgrind.log >> security-summary.txt || true
-            echo "" >> security-summary.txt
+          # The security script should have created its own summary
+          if [ -f "security-logs/security_summary_*.md" ]; then
+            echo "Security script summary found:"
+            ls -la security-logs/security_summary_*.md
+          else
+            echo "Warning: Security script summary not found, creating fallback summary"
+            mkdir -p security-logs
+            echo "# Security Testing Summary (Fallback)" > security-logs/fallback-summary.txt
+            echo "Generated: $(date)" >> security-logs/fallback-summary.txt
+            echo "OS: ${{ matrix.os }}" >> security-logs/fallback-summary.txt
+            echo "Status: Script may have failed to complete properly" >> security-logs/fallback-summary.txt
           fi
           
-          if ls *.trace >/dev/null 2>&1; then
-            echo "## Trace Files" >> security-summary.txt
-            ls -lh *.trace >> security-summary.txt || true
-            echo "" >> security-summary.txt
+          # List all generated logs for debugging
+          if [ -d "security-logs" ]; then
+            echo "Available security logs:"
+            ls -la security-logs/
+            echo "Total log directory size: $(du -sh security-logs 2>/dev/null | cut -f1 || echo 'N/A')"
           fi
           
-          # Check target directory sizes and clean up large build artifacts
+          # Clean up large build artifacts but preserve logs
           if [ -d "target/sanitizer" ]; then
-            echo "## Sanitizer Build Info" >> security-summary.txt
-            echo "Directory size before cleanup: $(du -sh target/sanitizer | cut -f1)" >> security-summary.txt
-            
-            # Keep only essential files, remove large debug artifacts
+            echo "Cleaning up sanitizer build artifacts..."
             find target/sanitizer -name "*.rlib" -delete 2>/dev/null || true
             find target/sanitizer -name "*.rmeta" -delete 2>/dev/null || true
             find target/sanitizer -name "deps" -type d -exec rm -rf {} + 2>/dev/null || true
             find target/sanitizer -name "incremental" -type d -exec rm -rf {} + 2>/dev/null || true
-            
-            echo "Directory size after cleanup: $(du -sh target/sanitizer 2>/dev/null | cut -f1 || echo 'N/A')" >> security-summary.txt
-            echo "" >> security-summary.txt
           fi
-          
-          echo "## Environment" >> security-summary.txt
-          echo "Rust version: $(rustc --version)" >> security-summary.txt
-          echo "Cargo version: $(cargo --version)" >> security-summary.txt
-          echo "Target: $(rustc -vV | grep host | cut -d' ' -f2)" >> security-summary.txt
 
-      - name: Upload security artifacts (on failure)
-        if: failure()
+      - name: Upload security artifacts (always)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: security-logs-${{ matrix.os }}
+          name: security-logs-${{ matrix.os }}-${{ github.run_id }}
           path: |
-            valgrind.log
+            security-logs/
             *.trace
-            security-summary.txt
+            DrMemory-*.log
+            drmemory.*.log
+            instruments_output*.trace
           retention-days: 7

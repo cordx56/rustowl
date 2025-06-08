@@ -71,7 +71,7 @@ Local performance benchmarking with regression detection.
 - Automatic test package detection
 - Configurable regression thresholds
 - HTML report generation
-- CI/local consistency
+- Local development focus
 
 **Usage:**
 ```bash
@@ -85,6 +85,8 @@ Local performance benchmarking with regression detection.
 # Development workflow
 ./scripts/bench.sh --clean --open --test-package ./examples
 ```
+
+**Note:** Benchmarks are designed for local development only. CI environments introduce too much variability for reliable performance measurement.
 
 ## Prerequisites
 
@@ -112,27 +114,22 @@ brew install gnuplot
 
 ## Integration with CI
 
-These scripts are designed to match their corresponding CI workflows:
+These scripts are designed to complement CI workflows where applicable:
 
 - **`security.sh`** ↔ **`.github/workflows/security.yml`**: Same security analysis tools
-- **`bench.sh`** ↔ **`.github/workflows/bench-performance.yml`**: Same benchmarks, same tools
 
-This ensures that local testing provides the same results as CI, making development more predictable and reliable.
+Note: Benchmarking (`bench.sh`) is intentionally local-only due to CI environment variability.
 
 ### GitHub Actions Integration
 
-The scripts integrate with several workflows:
-
-#### Performance Workflows
-- **`setup-baseline.yml`**: Creates initial baseline (runs once, then can be deleted)
-- **`create-baseline.yml`**: Updates baselines when main branch changes
-- **`bench-performance.yml`**: Compares PR performance against baselines
+The scripts integrate with workflows where appropriate:
 
 #### Security Workflows
 - **`security.yml`**: Runs comprehensive security testing across platforms
 
-#### Composite Actions
-- **`.github/actions/comment-benchmark/`**: Reusable action for PR performance comments
+#### Development Scripts
+- **`bench.sh`**: Local-only performance testing (not suitable for CI)
+- **`dev-checks.sh`**: Can be used in CI for code quality checks
 
 ## Development Workflow
 
@@ -144,7 +141,7 @@ The scripts integrate with several workflows:
 # Run security tests
 ./scripts/security.sh
 
-# Check performance impact
+# Check performance impact (local only)
 ./scripts/bench.sh
 
 # Check binary size impact
