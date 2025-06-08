@@ -10,7 +10,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTC_BOOTSTRAP:  1
-  RUSTUP_TOOLCHAIN: 1.87.0
 
 jobs:
   security-checks:
