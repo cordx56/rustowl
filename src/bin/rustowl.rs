@@ -14,7 +14,8 @@ use crate::cli::{Cli, Commands, ToolchainCommands};
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
 
-#[cfg(not(target_env = "msvc"))]
+// Use jemalloc by default, but fall back to system allocator for Miri
+#[cfg(all(not(target_env = "msvc"), not(miri)))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 

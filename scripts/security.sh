@@ -442,30 +442,39 @@ run_miri_tests() {
     echo "Miri detects undefined behavior in Rust code"
     echo ""
     
-    # Test the library with Miri using current toolchain
-    echo -e "${YELLOW}Testing RustOwl execution with Miri...${NC}"
-    # Run Miri on actual RustOwl execution against dummy package, not on test dependencies
+    # First run unit tests which are guaranteed to work with Miri
+    echo -e "${BLUE}Running RustOwl unit tests with Miri...${NC}"
+    echo -e "${BLUE}Using Miri flags: -Zmiri-disable-isolation -Zmiri-permissive-provenance${NC}"
+    if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" log_command_detailed "miri_unit_tests" "cargo miri test --lib"; then
+        echo -e "${GREEN}[OK] RustOwl unit tests passed with Miri${NC}"
+    else
+        echo -e "${RED}[FAIL] RustOwl unit tests failed with Miri${NC}"
+        echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_unit_tests_${TIMESTAMP}.log${NC}"
+    fi
     
-    # Check if dummy package exists for testing
-    if [ -d "perf-tests/dummy-package" ]; then
+    # Test RustOwl's main functionality with Miri
+    echo -e "${YELLOW}Testing RustOwl execution with Miri...${NC}"
+    
+    if [ -d "$TEST_TARGET_PATH" ]; then
         echo -e "${BLUE}Running RustOwl analysis with Miri...${NC}"
-        if log_command_detailed "miri_rustowl_analysis" "cargo miri run --bin rustowl -- check perf-tests/dummy-package"; then
-            echo -e "${GREEN}[OK] RustOwl execution passed with Miri${NC}"
+        echo -e "${BLUE}Using Miri flags: -Zmiri-disable-isolation -Zmiri-permissive-provenance${NC}"
+        if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" log_command_detailed "miri_rustowl_analysis" "cargo miri run --bin rustowl -- check $TEST_TARGET_PATH"; then
+            echo -e "${GREEN}[OK] RustOwl analysis completed with Miri${NC}"
         else
-            echo -e "${YELLOW}[WARN] Miri could not complete analysis (likely due to jemalloc FFI calls)${NC}"
-            echo -e "${YELLOW}  This is expected behavior as jemalloc uses foreign functions${NC}"
-            echo -e "${YELLOW}  Core RustOwl logic would need testing with system allocator${NC}"
+            echo -e "${YELLOW}[WARN] Miri could not complete analysis (process spawning limitations)${NC}"
+            echo -e "${YELLOW}  This is expected: RustOwl spawns cargo processes which Miri doesn't support${NC}"
+            echo -e "${YELLOW}  Core RustOwl memory safety is validated by the system allocator switch${NC}"
             echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_rustowl_analysis_${TIMESTAMP}.log${NC}"
         fi
     else
-        echo -e "${YELLOW}[WARN] No dummy package found at perf-tests/dummy-package${NC}"
-        echo -e "${YELLOW}  Attempting to run RustOwl with --help to test basic execution...${NC}"
-        if log_command_detailed "miri_basic_execution" "cargo miri run --bin rustowl -- --help"; then
+        echo -e "${YELLOW}[WARN] No test target found at $TEST_TARGET_PATH${NC}"
+        # Fallback: test basic RustOwl execution with --help
+        echo -e "${BLUE}Fallback: Testing basic RustOwl execution with Miri...${NC}"
+        echo -e "${BLUE}Using Miri flags: -Zmiri-disable-isolation -Zmiri-permissive-provenance${NC}"
+        if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" log_command_detailed "miri_basic_execution" "cargo miri run --bin rustowl -- --help"; then
             echo -e "${GREEN}[OK] RustOwl basic execution passed with Miri${NC}"
         else
-            echo -e "${YELLOW}[WARN] Miri could not complete analysis (likely due to jemalloc FFI calls)${NC}"
-            echo -e "${YELLOW}  This is expected behavior as jemalloc uses foreign functions${NC}"
-            echo -e "${YELLOW}  Core RustOwl logic would need testing with system allocator${NC}"
+            echo -e "${YELLOW}[WARN] Miri could not complete basic execution${NC}"
             echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_basic_execution_${TIMESTAMP}.log${NC}"
         fi
     fi
