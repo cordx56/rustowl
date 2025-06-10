@@ -52,6 +52,7 @@ fn recursive_read_dir(path: impl AsRef<Path>) -> Vec<PathBuf> {
     }
     paths
 }
+
 pub fn rustc_driver_path(sysroot: impl AsRef<Path>) -> Option<PathBuf> {
     for file in recursive_read_dir(sysroot) {
         if file.file_name().unwrap().to_string_lossy() == RUSTC_DRIVER_NAME {
@@ -65,9 +66,11 @@ pub fn rustc_driver_path(sysroot: impl AsRef<Path>) -> Option<PathBuf> {
 fn sysroot_from_runtime(runtime: impl AsRef<Path>) -> PathBuf {
     runtime.as_ref().join("sysroot").join(TOOLCHAIN)
 }
+
 fn is_valid_sysroot(sysroot: impl AsRef<Path>) -> bool {
     rustc_driver_path(sysroot).is_some()
 }
+
 fn get_configured_runtime_dir() -> Option<PathBuf> {
     let env_var = env::var("RUSTOWL_RUNTIME_DIRS").unwrap_or_default();
 
@@ -89,6 +92,7 @@ fn get_configured_runtime_dir() -> Option<PathBuf> {
     }
     None
 }
+
 pub fn check_fallback_dir() -> Option<PathBuf> {
     for fallback in &*FALLBACK_RUNTIME_DIRS {
         if is_valid_sysroot(sysroot_from_runtime(fallback)) {
@@ -98,6 +102,7 @@ pub fn check_fallback_dir() -> Option<PathBuf> {
     }
     None
 }
+
 async fn get_runtime_dir() -> PathBuf {
     if let Some(runtime) = get_configured_runtime_dir() {
         return runtime;
@@ -115,6 +120,7 @@ async fn get_runtime_dir() -> PathBuf {
         }
     }
 }
+
 fn get_configured_sysroot() -> Option<PathBuf> {
     let env_var = env::var("RUSTOWL_SYSROOTS").unwrap_or_default();
 
@@ -136,6 +142,7 @@ fn get_configured_sysroot() -> Option<PathBuf> {
     }
     None
 }
+
 pub async fn get_sysroot() -> PathBuf {
     if let Some(sysroot) = get_configured_sysroot() {
         return sysroot;

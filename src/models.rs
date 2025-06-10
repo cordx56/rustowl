@@ -22,14 +22,24 @@ impl Loc {
     pub fn new(source: &str, byte_pos: u32, offset: u32) -> Self {
         let byte_pos = byte_pos.saturating_sub(offset);
         // it seems that the compiler is ignoring CR
-        for (i, (byte, _)) in source.replace("\r", "").char_indices().enumerate() {
-            if byte_pos <= byte as u32 {
-                return Self(i as u32);
-            }
+        let source_clean = source.replace("\r", "");
+
+        // Convert byte position to character position safely
+        if source_clean.len() < byte_pos as usize {
+            return Self(source_clean.chars().count() as u32);
         }
-        Self(0)
+
+        // Find the character index corresponding to the byte position
+        match source_clean
+            .char_indices()
+            .position(|(byte_idx, _)| (byte_pos as usize) < byte_idx)
+        {
+            Some(char_idx) => Self(char_idx as u32),
+            None => Self(source_clean.chars().count() as u32),
+        }
     }
 }
+
 impl std::ops::Add<i32> for Loc {
     type Output = Loc;
     fn add(self, rhs: i32) -> Self::Output {
@@ -40,6 +50,7 @@ impl std::ops::Add<i32> for Loc {
         }
     }
 }
+
 impl std::ops::Sub<i32> for Loc {
     type Output = Loc;
     fn sub(self, rhs: i32) -> Self::Output {
@@ -50,11 +61,13 @@ impl std::ops::Sub<i32> for Loc {
         }
     }
 }
+
 impl From<u32> for Loc {
     fn from(value: u32) -> Self {
         Self(value)
     }
 }
+
 impl From<Loc> for u32 {
     fn from(value: Loc) -> Self {
         value.0
@@ -66,6 +79,7 @@ pub struct Range {
     from: Loc,
     until: Loc,
 }
+
 impl Range {
     pub fn new(from: Loc, until: Loc) -> Option<Self> {
         if until.0 <= from.0 {
@@ -103,15 +117,18 @@ pub enum MirVariable {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 #[serde(transparent)]
 pub struct MirVariables(HashMap<u32, MirVariable>);
+
 impl Default for MirVariables {
     fn default() -> Self {
         Self::new()
     }
 }
+
 impl MirVariables {
     pub fn new() -> Self {
         Self(HashMap::new())
     }
+
     pub fn push(&mut self, var: MirVariable) {
         match &var {
             MirVariable::User { index, .. } => {
@@ -126,6 +143,7 @@ impl MirVariables {
             }
         }
     }
+
     pub fn to_vec(self) -> Vec<MirVariable> {
         self.0.into_values().collect()
     }
@@ -145,6 +163,7 @@ pub struct File {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(transparent)]
 pub struct Workspace(pub HashMap<String, Crate>);
+
 impl Workspace {
     pub fn merge(&mut self, other: Self) {
         let Workspace(crates) = other;
@@ -161,6 +180,7 @@ impl Workspace {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(transparent)]
 pub struct Crate(pub HashMap<String, File>);
+
 impl Crate {
     pub fn merge(&mut self, other: Self) {
         let Crate(files) = other;
