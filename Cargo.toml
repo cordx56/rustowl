@@ -26,12 +26,12 @@ tar = "0.4.44"
 flate2 = "1.1.2"
 reqwest = { version = "0.12.19", default-features = false, features = ["http2", "rustls-tls-native-roots"] }
 clap_complete_nushell = "4.5.7"
-clap_complete = "4.5.52"
+clap_complete = "4.5.54"
 zip = "4.0.0"
 
 [build-dependencies]
 clap_complete_nushell = "4.5.7"
-clap_complete = "4.5.52"
+clap_complete = "4.5.54"
 clap_mangen = "0.2.26"
 clap = { version = "4.5.40", features = ["derive"] }
 
