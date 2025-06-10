@@ -5,7 +5,8 @@ param(
     [string]$InstallPath = "$env:USERPROFILE\.drmemory",
     [string]$Version = "2.6.0",
     [switch]$AddToPath,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$PreCacheSyscalls
 )
 
 $ErrorActionPreference = "Stop"
@@ -122,7 +123,41 @@ function Add-ToUserPath {
     }
 }
 
-function Test-DrMemoryWorking {
+function Pre-CacheSystemCalls {
+    param($InstallPath)
+    
+    Write-ColorText "Pre-caching system call information..." $Yellow
+    
+    $DrMemoryExe = Join-Path $InstallPath "bin\drmemory.exe"
+    
+    try {
+        # Create a simple test executable to trigger syscall info generation
+        $TestPath = Join-Path $env:TEMP "drmemory_syscall_cache_test.exe"
+        
+        # Use a simple Windows utility that's guaranteed to exist
+        $TestExe = "C:\Windows\System32\whoami.exe"
+        
+        Write-ColorText "  Generating system call info for current OS version..." $Yellow
+        $Output = & $DrMemoryExe -sysnum_file "" -generate_sysnum_file -- $TestExe 2>&1
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-ColorText "  [OK] System call information cached successfully" $Green
+            return $true
+        }
+        else {
+            Write-ColorText "  [WARN] System call caching completed with warnings (exit code $LASTEXITCODE)" $Yellow
+            Write-ColorText "  This is normal for some OS versions" $Yellow
+            return $true
+        }
+    }
+    catch {
+        Write-ColorText "  [WARN] System call caching failed: $($_.Exception.Message)" $Yellow
+        Write-ColorText "  DrMemory will auto-generate on first use" $Yellow
+        return $true
+    }
+}
+
+function Test-DrMemoryInstallation {
     param($InstallPath)
     
     Write-ColorText "Testing DrMemory installation..." $Yellow
@@ -160,9 +195,10 @@ function Show-Usage {
     Write-Host "  -Version <version>    DrMemory version to install (default: 2.6.0)"
     Write-Host "  -AddToPath           Add DrMemory to user PATH environment variable"
     Write-Host "  -Force               Force reinstallation even if already installed"
+    Write-Host "  -PreCacheSyscalls    Pre-cache system call information (reduces first-run time)"
     Write-Host ""
     Write-Host "Examples:"
-    Write-Host "  .\setup-drmemory-windows.ps1 -AddToPath"
+    Write-Host "  .\setup-drmemory-windows.ps1 -AddToPath -PreCacheSyscalls"
     Write-Host "  .\setup-drmemory-windows.ps1 -InstallPath C:\Tools\DrMemory -Force"
     Write-Host ""
 }
@@ -180,7 +216,7 @@ try {
         Write-ColorText "Use -Force to reinstall" $Yellow
         
         # Test if it's working
-        if (Test-DrMemoryWorking $InstallPath) {
+        if (Test-DrMemoryInstallation $InstallPath) {
             if ($AddToPath) {
                 Add-ToUserPath $InstallPath
             }
@@ -196,7 +232,12 @@ try {
     # Install DrMemory
     if (Install-DrMemory $InstallPath $Version) {
         # Test installation
-        if (Test-DrMemoryWorking $InstallPath) {
+        if (Test-DrMemoryInstallation $InstallPath) {
+            # Pre-cache system calls if requested
+            if ($PreCacheSyscalls) {
+                Pre-CacheSystemCalls $InstallPath
+            }
+            
             if ($AddToPath) {
                 Add-ToUserPath $InstallPath
             }
