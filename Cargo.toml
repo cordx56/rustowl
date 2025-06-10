@@ -21,7 +21,7 @@ tower-lsp = "0.20.0"
 process_alive = "0.1.1"
 cargo_metadata = "0.20.0"
 uuid = { version = "1", features = ["v4"] }
-clap = { version = "4.5.39", features = ["cargo", "derive"] }
+clap = { version = "4.5.40", features = ["cargo", "derive"] }
 tar = "0.4.44"
 flate2 = "1.1.2"
 reqwest = { version = "0.12.19", default-features = false, features = ["http2", "rustls-tls-native-roots"] }
@@ -33,7 +33,7 @@ zip = "4.0.0"
 clap_complete_nushell = "4.5.7"
 clap_complete = "4.5.52"
 clap_mangen = "0.2.26"
-clap = { version = "4.5.39", features = ["derive"] }
+clap = { version = "4.5.40", features = ["derive"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.6"
