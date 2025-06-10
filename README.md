@@ -33,9 +33,14 @@ For these editors, move the text cursor over the variable or function call you w
 We implemented LSP server with an extended protocol.
 So, RustOwl can be used easily from other editor.
 
+We have a [Discord server](https://discord.gg/XbxN949dpG).
+Feel free to join us.
+
 ## Support
 
 If you're looking for support, please consider checking all issues, existing discussions, and [starting a discussion](https://github.com/cordx56/rustowl/discussions/new?category=q-a) first!
+
+Also, you can reach out to us on the Discord server provided above.
 
 ## Quick Start
 
