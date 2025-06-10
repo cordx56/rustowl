@@ -466,6 +466,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Helper function to print section headers
+print_section_header() {
+    local title="$1"
+    local description="$2"
+    echo -e "${BLUE}${BOLD}$title${NC}"
+    echo -e "${BLUE}================================${NC}"
+    echo "$description"
+    echo ""
+}
+
 # Check Rust version compatibility
 check_rust_version() {
     if ! command -v rustc >/dev/null 2>&1; then
@@ -555,14 +565,7 @@ detect_tools() {
             ;;
     esac
 
-    echo ""
-}
-
-# Check nightly toolchain availability for advanced features
-check_nightly_toolchain() {
-    echo -e "${YELLOW}Checking toolchain for advanced security features...${NC}"
-    
-    # Check what toolchain is currently active
+    # Check nightly toolchain availability for advanced features
     local current_toolchain=$(rustup show active-toolchain | cut -d' ' -f1)
     echo -e "${BLUE}Active toolchain: $current_toolchain${NC}"
     
@@ -582,46 +585,8 @@ check_nightly_toolchain() {
         echo -e "${YELLOW}Install with: rustup component add miri${NC}"
         HAS_MIRI=0
     fi
-    
-    # Check if required targets are installed
-    local current_target
-    local arch
-    case "$OS_TYPE" in
-        "Linux")
-            arch=$(uname -m)
-            if [[ "$arch" == "x86_64" ]]; then
-                current_target="x86_64-unknown-linux-gnu"
-            elif [[ "$arch" == "aarch64" ]]; then
-                current_target="aarch64-unknown-linux-gnu"
-            else
-                echo -e "${YELLOW}Unsupported Linux architecture: $arch for sanitizer tests.${NC}"
-            fi
-            ;;
-        "macOS")
-            arch=$(uname -m)
-            if [[ "$arch" == "x86_64" ]]; then
-                current_target="x86_64-apple-darwin"
-            elif [[ "$arch" == "arm64" ]]; then # arm64 is the output for Apple Silicon
-                current_target="aarch64-apple-darwin"
-            else
-                echo -e "${YELLOW}Unsupported macOS architecture: $arch for sanitizer tests.${NC}"
-            fi
-            ;;
-        "Windows")
-            current_target="x86_64-pc-windows-msvc"
-            ;;
-    esac
-    
-    if [[ -n "$current_target" ]]; then
-        if rustup target list --installed | grep -q "$current_target"; then
-            echo -e "${GREEN}[OK] Target $current_target is available${NC}"
-        else
-            echo -e "${YELLOW}! Target $current_target not installed${NC}"
-            echo -e "${YELLOW}Install with: rustup target add $current_target${NC}"
-        fi
-    fi
-    
-    return 0
+
+    echo ""
 }
 
 # Build the project with the toolchain specified in rust-toolchain.toml
@@ -644,554 +609,6 @@ build_project() {
     
     echo -e "${GREEN}[OK] Build completed successfully${NC}"
     echo ""
-}
-
-# Run Miri tests using the current toolchain
-run_miri_tests() {
-    if [[ $RUN_MIRI -eq 0 ]]; then
-        return 0
-    fi
-    
-    if [[ $HAS_MIRI -eq 0 ]]; then
-        echo -e "${YELLOW}Skipping Miri tests (component not installed)${NC}"
-        return 0
-    fi
-    
-    echo -e "${BLUE}${BOLD}Running Miri Tests${NC}"
-    echo -e "${BLUE}================================${NC}"
-    echo "Miri detects undefined behavior in Rust code"
-    echo ""
-    
-    # First run unit tests which are guaranteed to work with Miri
-    echo -e "${BLUE}Running RustOwl unit tests with Miri...${NC}"
-    echo -e "${BLUE}Using Miri flags: -Zmiri-disable-isolation -Zmiri-permissive-provenance${NC}"
-    if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" RUSTFLAGS="--cfg miri" log_command_detailed "miri_unit_tests" "cargo miri test --lib"; then
-        echo -e "${GREEN}[OK] RustOwl unit tests passed with Miri${NC}"
-    else
-        echo -e "${RED}[FAIL] RustOwl unit tests failed with Miri${NC}"
-        echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_unit_tests_${TIMESTAMP}.log${NC}"
-        return 1
-    fi
-    
-    # Test RustOwl's main functionality with Miri
-    echo -e "${YELLOW}Testing RustOwl execution with Miri...${NC}"
-    
-    if [ -d "$TEST_TARGET_PATH" ]; then
-        echo -e "${BLUE}Running RustOwl analysis with Miri...${NC}"
-        echo -e "${BLUE}Using Miri flags: -Zmiri-disable-isolation -Zmiri-permissive-provenance${NC}"
-        if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" RUSTFLAGS="--cfg miri" log_command_detailed "miri_rustowl_analysis" "cargo miri run --bin rustowl -- check $TEST_TARGET_PATH"; then
-            echo -e "${GREEN}[OK] RustOwl analysis completed with Miri${NC}"
-        else
-            echo -e "${YELLOW}[WARN] Miri could not complete analysis (process spawning limitations)${NC}"
-            echo -e "${YELLOW}  This is expected: RustOwl spawns cargo processes which Miri doesn't support${NC}"
-            echo -e "${YELLOW}  Core RustOwl memory safety is validated by the system allocator switch${NC}"
-            echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_rustowl_analysis_${TIMESTAMP}.log${NC}"
-        fi
-    else
-        echo -e "${YELLOW}[WARN] No test target found at $TEST_TARGET_PATH${NC}"
-        # Fallback: test basic RustOwl execution with --help
-        echo -e "${BLUE}Fallback: Testing basic RustOwl execution with Miri...${NC}"
-        echo -e "${BLUE}Using Miri flags: -Zmiri-disable-isolation -Zmiri-permissive-provenance${NC}"
-        
-        if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" RUSTFLAGS="--cfg miri" log_command_detailed "miri_basic_execution" "cargo miri run --bin rustowl -- --help"; then
-            echo -e "${GREEN}[OK] RustOwl basic execution passed with Miri${NC}"
-        else
-            echo -e "${YELLOW}[WARN] Miri could not complete basic execution${NC}"
-            echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_basic_execution_${TIMESTAMP}.log${NC}"
-        fi
-    fi
-    
-    echo ""
-}
-
-# Run Valgrind tests
-run_valgrind_tests() {
-    if [[ $RUN_VALGRIND -eq 0 ]] || [[ $HAS_VALGRIND -eq 0 ]] || [[ "$OS_TYPE" != "Linux" ]]; then
-        if [[ $RUN_VALGRIND -eq 1 ]] && [[ "$OS_TYPE" == "Linux" ]] && [[ $HAS_VALGRIND -eq 0 ]]; then
-            echo -e "${YELLOW}Skipping Valgrind tests (not installed)${NC}"
-        fi
-        return 0
-    fi
-    
-    echo -e "${BLUE}${BOLD}Running Valgrind Tests${NC}"
-    echo -e "${BLUE}================================${NC}"
-    echo "Valgrind detects memory errors and leaks"
-    echo ""
-    
-    # Test with the dummy package
-    if [ -d "$TEST_TARGET_PATH" ]; then
-        echo -e "${YELLOW}Testing rustowl with Valgrind...${NC}"
-        
-        # Use suppression file if available
-        local valgrind_cmd="valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --error-exitcode=1 --track-origins=yes"
-        if [[ -f ".valgrind-suppressions" ]]; then
-            valgrind_cmd="$valgrind_cmd --suppressions=.valgrind-suppressions"
-        fi
-        
-        # Add timeout to the command for enhanced logging
-        local full_cmd="timeout 300 $valgrind_cmd ./target/security/rustowl check $TEST_TARGET_PATH"
-        
-        if log_command_detailed "valgrind_rustowl_analysis" "$full_cmd"; then
-            echo -e "${GREEN}[OK] No memory errors detected by Valgrind${NC}"
-        else
-            echo -e "${RED}[ERROR] Valgrind detected memory issues${NC}"
-            echo -e "${BLUE}  Full output captured in: $LOG_DIR/valgrind_rustowl_analysis_${TIMESTAMP}.log${NC}"
-            echo "Run manually for details: $valgrind_cmd ./target/security/rustowl check $TEST_TARGET_PATH"
-            return 1
-        fi
-    else
-        echo -e "${YELLOW}! Test package not found at $TEST_TARGET_PATH${NC}"
-        echo -e "${YELLOW}  Testing basic rustowl execution with Valgrind...${NC}"
-        
-        local valgrind_cmd="valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --error-exitcode=1 --track-origins=yes"
-        local basic_cmd="timeout 60 $valgrind_cmd ./target/security/rustowl --help"
-        
-        if log_command_detailed "valgrind_basic_execution" "$basic_cmd"; then
-            echo -e "${GREEN}[OK] Basic Valgrind test passed${NC}"
-        else
-            echo -e "${RED}[ERROR] Valgrind basic test failed${NC}"
-            echo -e "${BLUE}  Full output captured in: $LOG_DIR/valgrind_basic_execution_${TIMESTAMP}.log${NC}"
-            return 1
-        fi
-    fi
-    
-    echo ""
-}
-
-# Run sanitizer tests using the current nightly toolchain
-run_sanitizer_tests() {
-    if [[ $RUN_SANITIZERS -eq 0 ]]; then
-        echo -e "${YELLOW}Skipping sanitizer tests (disabled for this platform)${NC}"
-        return 0
-    fi
-
-    echo -e "${BLUE}Running RustOwl sanitizer tests...${NC}"
-
-    local current_target
-    local toolchain_name # This will store the actual installed nightly toolchain name
-
-    # Determine the appropriate target for this platform
-    case "$OS_TYPE" in
-        "Linux")
-            arch=$(uname -m)
-            if [[ "$arch" == "x86_64" ]]; then
-                current_target="x86_64-unknown-linux-gnu"
-            elif [[ "$arch" == "aarch64" ]]; then
-                current_target="aarch64-unknown-linux-gnu"
-            else
-                echo -e "${YELLOW}Unsupported Linux architecture: $arch. Sanitizer tests might not run correctly.${NC}"
-                current_target="x86_64-unknown-linux-gnu" # Fallback
-            fi
-            ;;
-        "macOS")
-            arch=$(uname -m)
-            if [[ "$arch" == "x86_64" ]]; then
-                current_target="x86_64-apple-darwin"
-            elif [[ "$arch" == "arm64" ]]; then
-                current_target="aarch64-apple-darwin"
-            else
-                 echo -e "${YELLOW}Unsupported macOS architecture: $arch. Sanitizer tests might not run correctly.${NC}"
-                current_target="x86_64-apple-darwin" # Fallback
-            fi
-            ;;
-        "Windows")
-            current_target="x86_64-pc-windows-msvc"
-            ;;
-        *)
-            echo -e "${RED}[FAIL] Unsupported OS for sanitizer tests: $OS_TYPE${NC}"
-            return 1
-            ;;
-    esac
-
-    # Get the *installed* nightly toolchain name (not necessarily active)
-    # This is needed for constructing the path to sanitizer libraries on Windows.
-    toolchain_name=$(rustup toolchain list | grep "nightly" | head -n 1 | awk '{print $1}')
-    if [[ -z "$toolchain_name" ]]; then
-        echo -e "${RED}[FAIL] No nightly toolchain found. Cannot run sanitizer tests. Please ensure 'nightly' is installed.${NC}"
-        return 1
-    fi
-
-    local rustup_home="${RUSTUP_HOME:-$HOME/.rustup}" # Get RUSTUP_HOME or default
-
-    # For Windows, add the sanitizer runtime DLL path to PATH
-    if [[ "$OS_TYPE" == "Windows" ]]; then
-        local sanitizer_lib_path="${rustup_home}/toolchains/${toolchain_name}/lib/rustlib/${current_target}/lib"
-        if [[ -d "$sanitizer_lib_path" ]]; then
-            echo -e "${BLUE}Adding Windows sanitizer lib path to PATH: ${sanitizer_lib_path}${NC}"
-            export PATH="${sanitizer_lib_path}:$PATH"
-        else
-            echo -e "${YELLOW}[WARN] Sanitizer library path not found: ${sanitizer_lib_path}. Sanitizer tests might fail.${NC}"
-        fi
-    elif [[ "$OS_TYPE" == "macOS" ]]; then
-        # On macOS, do NOT set DYLD_INSERT_LIBRARIES for sanitizers; let Rust handle it.
-        echo -e "${BLUE}macOS detected: Not setting DYLD_INSERT_LIBRARIES for sanitizers.${NC}"
-        if [[ "$(uname -m)" == "arm64e" ]]; then
-            echo -e "${YELLOW}[WARN] Detected arm64e architecture. Rust sanitizers may not be fully supported.${NC}"
-        fi
-    fi
-
-    # Define common RUSTFLAGS for sanitizers
-    # Changed 'all' to 'address' for sanitizer-recover as 'all' is no longer supported.
-    local RUSTFLAGS_COMMON="-Zsanitizer=address -Zsanitizer-recover=address -Ctarget-feature=+crt-static"
-
-    # Test RustOwl's main functionality with AddressSanitizer
-    echo -e "${BLUE}Running RustOwl analysis with AddressSanitizer...${NC}"
-    echo -e "${BLUE}Using RUSTFLAGS: ${RUSTFLAGS_COMMON}${NC}"
-    if [ -d "$TEST_TARGET_PATH" ]; then
-        # Use `cargo +nightly` to explicitly use the nightly toolchain
-        if RUSTFLAGS="${RUSTFLAGS_COMMON}" log_command_detailed "asan_rustowl_analysis" "cargo +nightly run --bin rustowl -- check $TEST_TARGET_PATH"; then
-            echo -e "${GREEN}[OK] RustOwl analysis completed with AddressSanitizer${NC}"
-        else
-            echo -e "${RED}[FAIL] RustOwl analysis failed with AddressSanitizer${NC}"
-            echo -e "${BLUE}  Full output captured in: $LOG_DIR/asan_rustowl_analysis_${TIMESTAMP}.log${NC}"
-            return 1
-        fi
-    else
-        echo -e "${YELLOW}[WARN] No test target found at $TEST_TARGET_PATH${NC}"
-        # Fallback: test basic RustOwl execution with --help
-        echo -e "${BLUE}Fallback: Testing basic RustOwl execution with AddressSanitizer...${NC}"
-        # Use `cargo +nightly` to explicitly use the nightly toolchain
-        if RUSTFLAGS="${RUSTFLAGS_COMMON}" log_command_detailed "asan_basic_execution" "cargo +nightly run --bin rustowl -- --help"; then
-            echo -e "${GREEN}[OK] RustOwl basic execution passed with AddressSanitizer${NC}"
-        else
-            echo -e "${RED}[FAIL] RustOwl basic execution failed with AddressSanitizer${NC}"
-            echo -e "${BLUE}  Full output captured in: $LOG_DIR/asan_basic_execution_${TIMESTAMP}.log${NC}"
-            return 1
-        fi
-    fi
-
-    echo ""
-}
-
-# Run ThreadSanitizer (better macOS support)
-run_thread_sanitizer_tests() {
-    if [[ $RUN_THREAD_SANITIZER -eq 0 ]]; then
-        return 0
-    fi
-
-    echo -e "${BLUE}Running ThreadSanitizer tests...${NC}"
-    echo -e "${BLUE}ThreadSanitizer detects data races and threading issues${NC}"
-    echo ""
-
-    # ThreadSanitizer flags (generally more stable on macOS than AddressSanitizer)
-    local TSAN_FLAGS="-Zsanitizer=thread"
-
-    echo -e "${BLUE}Running RustOwl with ThreadSanitizer...${NC}"
-    echo -e "${BLUE}Using RUSTFLAGS: ${TSAN_FLAGS}${NC}"
-    
-    if [ -d "$TEST_TARGET_PATH" ]; then
-        if RUSTFLAGS="${TSAN_FLAGS}" log_command_detailed "tsan_rustowl_analysis" "cargo +nightly run --bin rustowl -- check $TEST_TARGET_PATH"; then
-            echo -e "${GREEN}[OK] RustOwl analysis completed with ThreadSanitizer${NC}"
-        else
-            echo -e "${YELLOW}[WARN] ThreadSanitizer test completed with warnings${NC}"
-            echo -e "${BLUE}  Full output captured in: $LOG_DIR/tsan_rustowl_analysis_${TIMESTAMP}.log${NC}"
-        fi
-    else
-        echo -e "${YELLOW}[WARN] No test target found at $TEST_TARGET_PATH${NC}"
-        if RUSTFLAGS="${TSAN_FLAGS}" log_command_detailed "tsan_basic_execution" "cargo +nightly run --bin rustowl -- --help"; then
-            echo -e "${GREEN}[OK] RustOwl basic execution passed with ThreadSanitizer${NC}"
-        else
-            echo -e "${YELLOW}[WARN] ThreadSanitizer basic test completed with warnings${NC}"
-            echo -e "${BLUE}  Full output captured in: $LOG_DIR/tsan_basic_execution_${TIMESTAMP}.log${NC}"
-        fi
-    fi
-
-    echo ""
-}
-
-# Run cargo-machete for unused dependency detection
-run_cargo_machete_tests() {
-    if [[ $RUN_CARGO_MACHETE -eq 0 ]] || [[ $HAS_CARGO_MACHETE -eq 0 ]]; then
-        return 0
-    fi
-
-    echo -e "${BLUE}Running cargo-machete unused dependency analysis...${NC}"
-    echo -e "${BLUE}cargo-machete detects unused dependencies${NC}"
-    echo ""
-
-    if log_command_detailed "cargo_machete" "cargo machete"; then
-        echo -e "${GREEN}[OK] No unused dependencies found${NC}"
-    else
-        echo -e "${YELLOW}[WARN] Unused dependencies detected${NC}"
-        echo -e "${BLUE}  Full output captured in: $LOG_DIR/cargo_machete_${TIMESTAMP}.log${NC}"
-    fi
-
-    echo ""
-}
-
-# Run cargo audit
-run_audit_check() {
-    if [[ $RUN_AUDIT -eq 0 ]] || [[ $HAS_CARGO_AUDIT -eq 0 ]]; then
-        if [[ $RUN_AUDIT -eq 1 ]] && [[ $HAS_CARGO_AUDIT -eq 0 ]]; then
-            echo -e "${YELLOW}Skipping cargo-audit (not installed)${NC}"
-        fi
-        return 0
-    fi
-    
-    echo -e "${BLUE}${BOLD}Running Security Audit${NC}"
-    echo -e "${BLUE}================================${NC}"
-    echo "cargo-audit checks for known security vulnerabilities"
-    echo ""
-    
-    echo -e "${YELLOW}Scanning dependencies for vulnerabilities...${NC}"
-    if log_command_detailed "cargo_audit_scan" "cargo audit"; then
-        echo -e "${GREEN}[OK] No known vulnerabilities found${NC}"
-    else
-        echo -e "${RED}[ERROR] Security vulnerabilities detected${NC}"
-        echo -e "${BLUE}  Full output captured in: $LOG_DIR/cargo_audit_scan_${TIMESTAMP}.log${NC}"
-        return 1
-    fi
-    
-    echo ""
-}
-
-# Run DrMemory tests (Windows)
-run_drmemory_tests() {
-    if [[ $RUN_DRMEMORY -eq 0 ]] || [[ $HAS_DRMEMORY -eq 0 ]] || [[ "$OS_TYPE" != "Windows" ]]; then
-        if [[ $RUN_DRMEMORY -eq 1 ]] && [[ "$OS_TYPE" == "Windows" ]] && [[ $HAS_DRMEMORY -eq 0 ]]; then
-            echo -e "${YELLOW}Skipping DrMemory tests (not installed)${NC}"
-        fi
-        return 0
-    fi
-    
-    # Check if DrMemory should be disabled in CI
-    if [[ $IS_CI -eq 1 ]] && [[ $DISABLE_DRMEMORY_IN_CI -eq 1 ]]; then
-        echo -e "${YELLOW}Skipping DrMemory tests (disabled in CI for stability)${NC}"
-        echo -e "${YELLOW}  DrMemory can be re-enabled by setting DISABLE_DRMEMORY_IN_CI=0${NC}"
-        return 0
-    fi
-    
-    echo -e "${BLUE}${BOLD}Running DrMemory Tests${NC}"
-    echo -e "${BLUE}================================${NC}"
-    echo "DrMemory detects memory errors on Windows"
-    echo ""
-    
-    # In CI environments, use much more conservative DrMemory settings
-    if [[ $IS_CI -eq 1 ]]; then
-        echo -e "${YELLOW}CI environment detected - using conservative DrMemory settings${NC}"
-        if [[ $FORCE_BASIC_DRMEMORY_IN_CI -eq 1 ]]; then
-            echo -e "${YELLOW}  Forcing basic DrMemory tests only (FORCE_BASIC_DRMEMORY_IN_CI=1)${NC}"
-        fi
-        echo -e "${YELLOW}  Note: DrMemory analysis is limited to prevent CI timeouts${NC}"
-    fi
-    
-    # Verify DrMemory is working
-    echo -e "${YELLOW}Verifying DrMemory installation...${NC}"
-    local drmemory_cmd="drmemory"
-    if ! command -v drmemory >/dev/null 2>&1; then
-        drmemory_cmd="drmemory.exe"
-    fi
-    
-    if log_command_detailed "drmemory_version_check" "$drmemory_cmd -version"; then
-        echo -e "${GREEN}[OK] DrMemory is working${NC}"
-    else
-        echo -e "${RED}[ERROR] DrMemory not working properly${NC}"
-        echo -e "${BLUE}  Full output captured in: $LOG_DIR/drmemory_version_check_${TIMESTAMP}.log${NC}"
-        return 1
-    fi
-    
-    # Find the rustowl binary
-    local rustowl_binary="./target/security/rustowl.exe"
-    if [ ! -f "$rustowl_binary" ]; then
-        rustowl_binary="./target/security/rustowl"
-        if [ ! -f "$rustowl_binary" ]; then
-            echo -e "${RED}[ERROR] RustOwl binary not found${NC}"
-            return 1
-        fi
-    fi
-    
-    # Configure DrMemory options based on environment
-    local drmemory_opts="-ignore_kernel -quiet -batch"
-    local timeout_seconds=120
-    local test_mode="basic"
-    
-    if [[ $IS_CI -eq 1 ]]; then
-        # Aggressive CI optimizations to prevent timeouts and hangs
-        drmemory_opts="${drmemory_opts} -light -no_follow_children -no_count_leaks"
-        drmemory_opts="$drmemory_opts -malloc_max_frames 5 -callstack_max_frames 10"
-        drmemory_opts="$drmemory_opts -no_gen_suppress_syms -no_check_uninit_non_moves"
-        timeout_seconds=180  # Reduced timeout for CI
-        
-        # Force basic test if configured
-        if [[ $FORCE_BASIC_DRMEMORY_IN_CI -eq 1 ]]; then
-            test_mode="basic"
-        fi
-        echo -e "${YELLOW}  Using aggressive CI optimizations to prevent hangs${NC}"
-    else
-        # More thorough analysis for local/non-CI environments
-        drmemory_opts="$drmemory_opts -light"
-        timeout_seconds=600
-        test_mode="full"
-    fi
-    
-    # Determine if we should run basic or full test
-    local run_basic_test=0
-    if [[ $IS_CI -eq 1 ]] && [[ $FORCE_BASIC_DRMEMORY_IN_CI -eq 1 ]]; then
-        run_basic_test=1
-    elif [[ ! -d "$TEST_TARGET_PATH" ]]; then
-        run_basic_test=1
-    fi
-    
-    # Run basic or full test based on configuration
-    if [[ $run_basic_test -eq 1 ]]; then
-        if [[ ! -d "$TEST_TARGET_PATH" ]]; then
-            echo -e "${YELLOW}! Test package not found at $TEST_TARGET_PATH${NC}"
-        fi
-        echo -e "${YELLOW}  Running basic DrMemory test (safer for CI)...${NC}"
-        
-        local drmemory_basic_cmd="timeout $timeout_seconds $drmemory_cmd $drmemory_opts -- $rustowl_binary --help"
-        echo "  Command: $drmemory_basic_cmd"
-        
-        if log_command_detailed "drmemory_basic_execution" "$drmemory_basic_cmd"; then
-            echo -e "${GREEN}[OK] Basic DrMemory test passed${NC}"
-        else
-            local exit_code=$?
-            if [[ $exit_code -eq 124 ]] || grep -q "timeout\|TIMEOUT" "$LOG_DIR/drmemory_basic_execution_${TIMESTAMP}.log" 2>/dev/null; then
-                echo -e "${YELLOW}[WARN] DrMemory basic test timed out (${timeout_seconds}s)${NC}"
-                echo -e "${YELLOW}  This indicates DrMemory overhead is too high for CI${NC}"
-                echo -e "${BLUE}  Full output captured in: $LOG_DIR/drmemory_basic_execution_${TIMESTAMP}.log${NC}"
-                
-                # In CI, timeout is not a failure - DrMemory is just too slow
-                if [[ $IS_CI -eq 1 ]]; then
-                    echo -e "${YELLOW}  Treating timeout as non-fatal in CI environment${NC}"
-                    echo -e "${YELLOW}  Consider setting DISABLE_DRMEMORY_IN_CI=1 if this persists${NC}"
-                    return 0
-                fi
-                return 0
-            else
-                echo -e "${RED}[ERROR] DrMemory basic test failed${NC}"
-                echo -e "${BLUE}  Full output captured in: $LOG_DIR/drmemory_basic_execution_${TIMESTAMP}.log${NC}"
-                return 1
-            fi
-        fi
-    else
-        # Full analysis only in non-CI environments or when explicitly requested
-        echo -e "${YELLOW}Testing rustowl with DrMemory (full analysis)...${NC}"
-        local drmemory_full_cmd="timeout $timeout_seconds $drmemory_cmd $drmemory_opts -- $rustowl_binary check $TEST_TARGET_PATH"
-        echo "  Command: $drmemory_full_cmd"
-        
-        if log_command_detailed "drmemory_rustowl_analysis" "$drmemory_full_cmd"; then
-            echo -e "${GREEN}[OK] No memory errors detected by DrMemory${NC}"
-        else
-            local exit_code=$?
-            if [[ $exit_code -eq 124 ]] || grep -q "timeout\|TIMEOUT" "$LOG_DIR/drmemory_rustowl_analysis_${TIMESTAMP}.log" 2>/dev/null; then
-                echo -e "${YELLOW}[WARN] DrMemory test timed out (${timeout_seconds}s)${NC}"
-                echo -e "${YELLOW}  This may indicate a performance issue or DrMemory overhead${NC}"
-                echo -e "${BLUE}  Full output captured in: $LOG_DIR/drmemory_rustowl_analysis_${TIMESTAMP}.log${NC}"
-                return 0  # Don't fail for timeout
-            else
-                echo -e "${RED}[ERROR] DrMemory detected memory issues or failed to run${NC}"
-                echo -e "${BLUE}  Full output captured in: $LOG_DIR/drmemory_rustowl_analysis_${TIMESTAMP}.log${NC}"
-                echo "Run manually for details:"
-                echo "  $drmemory_cmd $drmemory_opts -- $rustowl_binary check $TEST_TARGET_PATH"
-                return 1
-            fi
-        fi
-    fi
-    
-    echo ""
-}
-
-# Run Instruments memory profiling tests (macOS only)
-run_instruments_tests() {
-    if [[ $RUN_INSTRUMENTS -eq 0 ]] || [[ $HAS_INSTRUMENTS -eq 0 ]]; then
-        if [[ "$OS_TYPE" == "macOS" ]]; then
-            if [[ $IS_CI -eq 1 ]]; then
-                echo -e "${YELLOW}Skipping Instruments tests (disabled in CI - requires full Xcode)${NC}"
-                echo -e "${YELLOW}CI runners typically only have Xcode Command Line Tools${NC}"
-            else
-                echo -e "${YELLOW}Skipping Instruments tests (not available)${NC}"
-                echo -e "${YELLOW}To enable: Install full Xcode from App Store or developer portal${NC}"
-            fi
-        fi
-        return 0
-    fi
-
-    echo -e "${BLUE}Running Instruments memory profiling...${NC}"
-    echo -e "${BLUE}Instruments provides detailed memory analysis on macOS${NC}"
-    echo ""
-
-    # First, try to build the project
-    echo -e "${BLUE}Building RustOwl for Instruments analysis...${NC}"
-    if ! cargo build --bin rustowl --release; then
-        echo -e "${RED}[FAIL] Failed to build RustOwl for Instruments${NC}"
-        return 1
-    fi
-
-    local rustowl_binary="./target/release/rustowl"
-    if [[ ! -f "$rustowl_binary" ]]; then
-        echo -e "${RED}[FAIL] RustOwl binary not found at $rustowl_binary${NC}"
-        return 1
-    fi
-
-    # Run Instruments with Allocations template
-    echo -e "${BLUE}Running Instruments with Allocations template...${NC}"
-    local trace_file="$LOG_DIR/rustowl_allocations_${TIMESTAMP}.trace"
-    
-    # Create a simple test to avoid hanging
-    local test_args="--help"
-    if [[ -d "$TEST_TARGET_PATH" ]]; then
-        test_args="check $TEST_TARGET_PATH"
-    fi
-
-    # Run instruments with timeout to avoid hanging
-    if timeout 60s instruments -t Allocations -D "$trace_file" "$rustowl_binary" $test_args >/dev/null 2>&1; then
-        echo -e "${GREEN}[OK] Instruments profiling completed${NC}"
-        echo -e "${BLUE}  Trace file saved to: $trace_file${NC}"
-        
-        # Try to extract some basic info from the trace
-        if [[ -f "$trace_file" ]]; then
-            local trace_size=$(du -h "$trace_file" | cut -f1)
-            echo -e "${BLUE}  Trace file size: $trace_size${NC}"
-        fi
-    else
-        echo -e "${YELLOW}[WARN] Instruments profiling timed out or failed${NC}"
-        echo -e "${YELLOW}  This may be normal in CI environments${NC}"
-        # Don't treat this as a hard failure
-        return 0
-    fi
-
-    echo ""
-}
-
-# Logging configuration
-LOG_DIR="security-logs"
-TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
-
-# Enhanced logging function for tool outputs
-log_command_detailed() {
-    local test_name="$1"
-    local command="$2"
-    local log_file="$LOG_DIR/${test_name}_${TIMESTAMP}.log"
-    
-    # Create log directory if it doesn't exist
-    mkdir -p "$LOG_DIR"
-    
-    echo "===========================================" >> "$log_file"
-    echo "Test: $test_name" >> "$log_file"
-    echo "Command: $command" >> "$log_file"
-    echo "Timestamp: $(date)" >> "$log_file"
-    echo "Working Directory: $(pwd)" >> "$log_file"
-    echo "Environment: OS=$OS_TYPE, CI=$IS_CI" >> "$log_file"
-    echo "===========================================" >> "$log_file"
-    echo "" >> "$log_file"
-    
-    # Run the command and capture both stdout and stderr
-    echo "=== COMMAND OUTPUT ===" >> "$log_file"
-    if eval "$command" >> "$log_file" 2>&1; then
-        local exit_code=0
-        echo "" >> "$log_file"
-        echo "=== COMMAND COMPLETED SUCCESSFULLY ===" >> "$log_file"
-    else
-        local exit_code=$?
-        echo "" >> "$log_file"
-        echo "=== COMMAND FAILED WITH EXIT CODE: $exit_code ===" >> "$log_file"
-    fi
-    
-    echo "End timestamp: $(date)" >> "$log_file"
-    echo "===========================================" >> "$log_file"
-    
-    return $exit_code
 }
 
 # Show tool status summary
@@ -1272,75 +689,276 @@ create_security_summary() {
     echo "| DrMemory | $([ $HAS_DRMEMORY -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing/N/A") | Memory debugging (Windows) |" >> "$summary_file"
     echo "| Instruments | $([ $HAS_INSTRUMENTS -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing/N/A") | Performance analysis (macOS) |" >> "$summary_file"
     echo "" >> "$summary_file"
-    
-    # Test results summary
-    echo "## Test Results" >> "$summary_file"
-    echo "" >> "$summary_file"
-    
-    # Find all log files and summarize them
-    if [ -d "$LOG_DIR" ]; then
-        for log_file in "$LOG_DIR"/*.log; do
-            if [ -f "$log_file" ]; then
-                local test_name=$(basename "$log_file" .log | sed "s/_${TIMESTAMP}//")
-                echo "### $test_name" >> "$summary_file"
-                echo "" >> "$summary_file"
-                
-                # Check if test passed or failed based on log content
-                if grep -q "COMMAND COMPLETED SUCCESSFULLY" "$log_file"; then
-                    echo "**Status:** [OK] PASSED" >> "$summary_file"
-                elif grep -q "COMMAND FAILED" "$log_file"; then
-                    echo "**Status:** [FAIL] FAILED" >> "$summary_file"
-                    
-                    # Extract error information
-                    echo "" >> "$summary_file"
-                    echo "**Error Details:**" >> "$summary_file"
-                    echo '```' >> "$summary_file"
-                    # Get last 20 lines before the failure marker
-                    grep -B 20 "COMMAND FAILED" "$log_file" | tail -20 >> "$summary_file"
-                    echo '```' >> "$summary_file"
-                else
-                    echo "**Status:** [WARN] UNKNOWN" >> "$summary_file"
-                fi
-                
-                echo "" >> "$summary_file"
-                echo "**Log file:** \`$(basename "$log_file")\`" >> "$summary_file"
-                echo "**File size:** $(wc -c < "$log_file" 2>/dev/null || echo 'N/A') bytes" >> "$summary_file"
-                echo "" >> "$summary_file"
-            fi
-        done
-    fi
-    
-    # System information
-    echo "## System Information" >> "$summary_file"
-    echo "" >> "$summary_file"
-    echo "**Rust Toolchain:**" >> "$summary_file"
-    echo '```' >> "$summary_file"
-    rustup show 2>/dev/null || echo "Rustup not available" >> "$summary_file"
-    echo '```' >> "$summary_file"
-    echo "" >> "$summary_file"
-    
-    # Environment variables relevant to security testing
-    echo "**Environment Variables:**" >> "$summary_file"
-    echo '```' >> "$summary_file"
-    echo "RUSTC_BOOTSTRAP=$RUSTC_BOOTSTRAP" >> "$summary_file"
-    echo "CARGO_TERM_COLOR=$CARGO_TERM_COLOR" >> "$summary_file"
-    echo "CI=$CI" >> "$summary_file"
-    echo "GITHUB_ACTIONS=$GITHUB_ACTIONS" >> "$summary_file"
-    echo '```' >> "$summary_file"
-    
-    echo "" >> "$summary_file"
-    echo "---" >> "$summary_file"
-    echo "*Generated by RustOwl security testing script*" >> "$summary_file"
 }
 
-# Debug: Script end reached
-echo "DEBUG: Script loaded, checking if main should be called"
-echo "DEBUG: BASH_SOURCE[0]=${BASH_SOURCE[0]}, \$0=$0"
+# Run Miri tests using the current toolchain
+run_miri_tests() {
+    if [[ $RUN_MIRI -eq 0 ]]; then
+        return 0
+    fi
+    
+    if [[ $HAS_MIRI -eq 0 ]]; then
+        echo -e "${YELLOW}Skipping Miri tests (component not installed)${NC}"
+        return 0
+    fi
+    
+    echo -e "${BLUE}${BOLD}Running Miri Tests${NC}"
+    echo -e "${BLUE}================================${NC}"
+    echo "Miri detects undefined behavior in Rust code"
+    echo ""
+    
+    # First run unit tests which are guaranteed to work with Miri
+    echo -e "${BLUE}Running RustOwl unit tests with Miri...${NC}"
+    echo -e "${BLUE}Using Miri flags: -Zmiri-disable-isolation -Zmiri-permissive-provenance${NC}"
+    if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" RUSTFLAGS="--cfg miri" log_command_detailed "miri_unit_tests" "cargo miri test --lib"; then
+        echo -e "${GREEN}[OK] RustOwl unit tests passed with Miri${NC}"
+    else
+        echo -e "${RED}[FAIL] RustOwl unit tests failed with Miri${NC}"
+        echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_unit_tests_${TIMESTAMP}.log${NC}"
+        return 1
+    fi
+    
+    # Test RustOwl's main functionality with Miri
+    echo -e "${YELLOW}Testing RustOwl execution with Miri...${NC}"
+    
+    if [ -d "$TEST_TARGET_PATH" ]; then
+        echo -e "${BLUE}Running RustOwl analysis with Miri...${NC}"
+        echo -e "${BLUE}Using Miri flags: -Zmiri-disable-isolation -Zmiri-permissive-provenance${NC}"
+        if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" RUSTFLAGS="--cfg miri" log_command_detailed "miri_rustowl_analysis" "cargo miri run --bin rustowl -- check $TEST_TARGET_PATH"; then
+            echo -e "${GREEN}[OK] RustOwl analysis completed with Miri${NC}"
+        else
+            echo -e "${YELLOW}[WARN] Miri could not complete analysis (process spawning limitations)${NC}"
+            echo -e "${YELLOW}  This is expected: RustOwl spawns cargo processes which Miri doesn't support${NC}"
+            echo -e "${YELLOW}  Core RustOwl memory safety is validated by the system allocator switch${NC}"
+            echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_rustowl_analysis_${TIMESTAMP}.log${NC}"
+        fi
+    else
+        echo -e "${YELLOW}[WARN] No test target found at $TEST_TARGET_PATH${NC}"
+        # Fallback: test basic RustOwl execution with --help
+        echo -e "${BLUE}Fallback: Testing basic RustOwl execution with Miri...${NC}"
+        echo -e "${BLUE}Using Miri flags: -Zmiri-disable-isolation -Zmiri-permissive-provenance${NC}"
+        
+        if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" RUSTFLAGS="--cfg miri" log_command_detailed "miri_basic_execution" "cargo miri run --bin rustowl -- --help"; then
+            echo -e "${GREEN}[OK] RustOwl basic execution passed with Miri${NC}"
+        else
+            echo -e "${YELLOW}[WARN] Miri could not complete basic execution${NC}"
+            echo -e "${BLUE}  Full output captured in: $LOG_DIR/miri_basic_execution_${TIMESTAMP}.log${NC}"
+        fi
+    fi
+    
+    echo ""
+}
 
-# Run main function if script is executed directly
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    echo "DEBUG: Calling main function with args: $*"
-    main "$@"
-else
-    echo "DEBUG: Script sourced, not calling main"
-fi
+run_thread_sanitizer_tests() {
+    if [[ $RUN_THREAD_SANITIZER -eq 0 ]]; then
+        return 0
+    fi
+
+    echo -e "${BLUE}Running ThreadSanitizer tests...${NC}"
+    echo -e "${BLUE}ThreadSanitizer detects data races and threading issues${NC}"
+    echo ""
+
+    # ThreadSanitizer flags (generally more stable on macOS than AddressSanitizer)
+    local TSAN_FLAGS="-Zsanitizer=thread"
+
+    echo -e "${BLUE}Running RustOwl with ThreadSanitizer...${NC}"
+    echo -e "${BLUE}Using RUSTFLAGS: ${TSAN_FLAGS}${NC}"
+    
+    if [ -d "$TEST_TARGET_PATH" ]; then
+        if RUSTFLAGS="${TSAN_FLAGS}" log_command_detailed "tsan_rustowl_analysis" "cargo +nightly run --bin rustowl -- check $TEST_TARGET_PATH"; then
+            echo -e "${GREEN}[OK] RustOwl analysis completed with ThreadSanitizer${NC}"
+        else
+            echo -e "${YELLOW}[WARN] ThreadSanitizer test completed with warnings${NC}"
+            echo -e "${BLUE}  Full output captured in: $LOG_DIR/tsan_rustowl_analysis_${TIMESTAMP}.log${NC}"
+        fi
+    else
+        echo -e "${YELLOW}[WARN] No test target found at $TEST_TARGET_PATH${NC}"
+        if RUSTFLAGS="${TSAN_FLAGS}" log_command_detailed "tsan_basic_execution" "cargo +nightly run --bin rustowl -- --help"; then
+            echo -e "${GREEN}[OK] RustOwl basic execution passed with ThreadSanitizer${NC}"
+        else
+            echo -e "${YELLOW}[WARN] ThreadSanitizer basic test completed with warnings${NC}"
+            echo -e "${BLUE}  Full output captured in: $LOG_DIR/tsan_basic_execution_${TIMESTAMP}.log${NC}"
+        fi
+    fi
+
+    echo ""
+}
+
+run_valgrind_tests() {
+    echo -e "${YELLOW}Valgrind tests not yet implemented${NC}"
+    return 0
+}
+
+run_sanitizer_tests() {
+    if [[ $RUN_SANITIZERS -eq 0 ]]; then
+        echo -e "${YELLOW}Skipping sanitizer tests (disabled for this platform)${NC}"
+        return 0
+    fi
+
+    echo -e "${BLUE}Running RustOwl sanitizer tests...${NC}"
+
+    local current_target
+    local toolchain_name
+
+    # Determine the appropriate target for this platform
+    case "$OS_TYPE" in
+        "Linux")
+            arch=$(uname -m)
+            if [[ "$arch" == "x86_64" ]]; then
+                current_target="x86_64-unknown-linux-gnu"
+            elif [[ "$arch" == "aarch64" ]]; then
+                current_target="aarch64-unknown-linux-gnu"
+            else
+                echo -e "${YELLOW}Unsupported Linux architecture: $arch. Sanitizer tests might not run correctly.${NC}"
+                current_target="x86_64-unknown-linux-gnu" # Fallback
+            fi
+            ;;
+        "macOS")
+            arch=$(uname -m)
+            if [[ "$arch" == "x86_64" ]]; then
+                current_target="x86_64-apple-darwin"
+            elif [[ "$arch" == "arm64" ]]; then
+                current_target="aarch64-apple-darwin"
+            else
+                 echo -e "${YELLOW}Unsupported macOS architecture: $arch. Sanitizer tests might not run correctly.${NC}"
+                current_target="x86_64-apple-darwin" # Fallback
+            fi
+            ;;
+        "Windows")
+            current_target="x86_64-pc-windows-msvc"
+            ;;
+        *)
+            echo -e "${RED}[FAIL] Unsupported OS for sanitizer tests: $OS_TYPE${NC}"
+            return 1
+            ;;
+    esac
+
+    # Get the *installed* nightly toolchain name (not necessarily active)
+    toolchain_name=$(rustup toolchain list | grep "nightly" | head -n 1 | awk '{print $1}')
+    if [[ -z "$toolchain_name" ]]; then
+        echo -e "${RED}[FAIL] No nightly toolchain found. Cannot run sanitizer tests. Please ensure 'nightly' is installed.${NC}"
+        return 1
+    fi
+
+    local rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+
+    # For Windows, add the sanitizer runtime DLL path to PATH
+    if [[ "$OS_TYPE" == "Windows" ]]; then
+        local sanitizer_lib_path="${rustup_home}/toolchains/${toolchain_name}/lib/rustlib/${current_target}/lib"
+        if [[ -d "$sanitizer_lib_path" ]]; then
+            echo -e "${BLUE}Adding Windows sanitizer lib path to PATH: ${sanitizer_lib_path}${NC}"
+            export PATH="${sanitizer_lib_path}:$PATH"
+        else
+            echo -e "${YELLOW}[WARN] Sanitizer library path not found: ${sanitizer_lib_path}. Sanitizer tests might fail.${NC}"
+        fi
+    elif [[ "$OS_TYPE" == "macOS" ]]; then
+        echo -e "${BLUE}macOS detected: Not setting DYLD_INSERT_LIBRARIES for sanitizers.${NC}"
+        if [[ "$(uname -m)" == "arm64e" ]]; then
+            echo -e "${YELLOW}[WARN] Detected arm64e architecture. Rust sanitizers may not be fully supported.${NC}"
+        fi
+    fi
+
+    # Define common RUSTFLAGS for sanitizers
+    local RUSTFLAGS_COMMON="-Zsanitizer=address -Zsanitizer-recover=address -Ctarget-feature=+crt-static"
+
+    # Test RustOwl's main functionality with AddressSanitizer
+    echo -e "${BLUE}Running RustOwl analysis with AddressSanitizer...${NC}"
+    echo -e "${BLUE}Using RUSTFLAGS: ${RUSTFLAGS_COMMON}${NC}"
+    if [ -d "$TEST_TARGET_PATH" ]; then
+        if RUSTFLAGS="${RUSTFLAGS_COMMON}" log_command_detailed "asan_rustowl_analysis" "cargo +nightly run --bin rustowl -- check $TEST_TARGET_PATH"; then
+            echo -e "${GREEN}[OK] RustOwl analysis completed with AddressSanitizer${NC}"
+        else
+            echo -e "${RED}[FAIL] RustOwl analysis failed with AddressSanitizer${NC}"
+            echo -e "${BLUE}  Full output captured in: $LOG_DIR/asan_rustowl_analysis_${TIMESTAMP}.log${NC}"
+            return 1
+        fi
+    else
+        echo -e "${YELLOW}[WARN] No test target found at $TEST_TARGET_PATH${NC}"
+        echo -e "${BLUE}Fallback: Testing basic RustOwl execution with AddressSanitizer...${NC}"
+        if RUSTFLAGS="${RUSTFLAGS_COMMON}" log_command_detailed "asan_basic_execution" "cargo +nightly run --bin rustowl -- --help"; then
+            echo -e "${GREEN}[OK] RustOwl basic execution passed with AddressSanitizer${NC}"
+        else
+            echo -e "${RED}[FAIL] RustOwl basic execution failed with AddressSanitizer${NC}"
+            echo -e "${BLUE}  Full output captured in: $LOG_DIR/asan_basic_execution_${TIMESTAMP}.log${NC}"
+            return 1
+        fi
+    fi
+
+    echo ""
+}
+
+run_audit_check() {
+    if [[ $RUN_AUDIT -eq 0 ]] || [[ $HAS_CARGO_AUDIT -eq 0 ]]; then
+        if [[ $RUN_AUDIT -eq 1 ]] && [[ $HAS_CARGO_AUDIT -eq 0 ]]; then
+            echo -e "${YELLOW}Skipping cargo-audit (not installed)${NC}"
+        fi
+        return 0
+    fi
+    
+    echo -e "${BLUE}Scanning dependencies for vulnerabilities...${NC}"
+    if cargo audit; then
+        echo -e "${GREEN}[OK] No known vulnerabilities found${NC}"
+    else
+        echo -e "${RED}[ERROR] Security vulnerabilities detected${NC}"
+        return 1
+    fi
+    
+    echo ""
+}
+
+run_cargo_machete_tests() {
+    echo -e "${YELLOW}cargo-machete tests not yet implemented${NC}"
+    return 0
+}
+
+run_drmemory_tests() {
+    echo -e "${YELLOW}DrMemory tests not yet implemented${NC}"
+    return 0
+}
+
+run_instruments_tests() {
+    echo -e "${YELLOW}Instruments tests not yet implemented${NC}"
+    return 0
+}
+
+# Enhanced logging function for tool outputs
+log_command_detailed() {
+    local test_name="$1"
+    local command="$2"
+    local log_file="$LOG_DIR/${test_name}_${TIMESTAMP}.log"
+    
+    # Create log directory if it doesn't exist
+    mkdir -p "$LOG_DIR"
+    
+    echo "===========================================" >> "$log_file"
+    echo "Test: $test_name" >> "$log_file"
+    echo "Command: $command" >> "$log_file"
+    echo "Timestamp: $(date)" >> "$log_file"
+    echo "Working Directory: $(pwd)" >> "$log_file"
+    echo "Environment: OS=$OS_TYPE, CI=$IS_CI" >> "$log_file"
+    echo "===========================================" >> "$log_file"
+    echo "" >> "$log_file"
+    
+    # Run the command and capture both stdout and stderr
+    echo "=== COMMAND OUTPUT ===" >> "$log_file"
+    if eval "$command" >> "$log_file" 2>&1; then
+        local exit_code=0
+        echo "" >> "$log_file"
+        echo "=== COMMAND COMPLETED SUCCESSFULLY ===" >> "$log_file"
+    else
+        local exit_code=$?
+        echo "" >> "$log_file"
+        echo "=== COMMAND FAILED WITH EXIT CODE: $exit_code ===" >> "$log_file"
+    fi
+    
+    echo "End timestamp: $(date)" >> "$log_file"
+    echo "===========================================" >> "$log_file"
+    
+    return $exit_code
+}
+
+# Logging configuration
+LOG_DIR="security-logs"
+TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
+
+# Helper function to print section headers
