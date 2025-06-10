@@ -25,14 +25,14 @@ impl Loc {
         let source_clean = source.replace("\r", "");
 
         // Convert byte position to character position safely
-        if byte_pos as usize > source_clean.len() {
+        if source_clean.len() < byte_pos as usize {
             return Self(source_clean.chars().count() as u32);
         }
 
         // Find the character index corresponding to the byte position
         match source_clean
             .char_indices()
-            .position(|(byte_idx, _)| byte_idx >= byte_pos as usize)
+            .position(|(byte_idx, _)| (byte_pos as usize) < byte_idx)
         {
             Some(char_idx) => Self(char_idx as u32),
             None => Self(source_clean.chars().count() as u32),
