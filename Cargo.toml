@@ -24,7 +24,7 @@ uuid = { version = "1", features = ["v4"] }
 clap = { version = "4.5.40", features = ["cargo", "derive"] }
 tar = "0.4.44"
 flate2 = "1.1.2"
-reqwest = { version = "0.12.19", default-features = false, features = ["http2", "rustls-tls-native-roots"] }
+reqwest = { version = "0.12.20", default-features = false, features = ["http2", "rustls-tls-native-roots"] }
 clap_complete_nushell = "4.5.7"
 clap_complete = "4.5.54"
 zip = "4.0.0"
