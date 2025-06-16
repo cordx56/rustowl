@@ -27,7 +27,7 @@ flate2 = "1.1.2"
 reqwest = { version = "0.12.20", default-features = false, features = ["http2", "rustls-tls-native-roots"] }
 clap_complete_nushell = "4.5.7"
 clap_complete = "4.5.54"
-zip = "4.0.0"
+zip = "4.1.0"
 
 [build-dependencies]
 clap_complete_nushell = "4.5.7"
