@@ -37,7 +37,7 @@ clap = { version = "4.5.40", features = ["derive"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.6"
-libc = "0.2.173"
+libc = "0.2.174"
 tikv-jemalloc-sys = "0.6"
 
 
