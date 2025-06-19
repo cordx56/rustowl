@@ -56,7 +56,18 @@ else
   echo "Warning: aur/PKGBUILD not found"
 fi
 
-# 4. Create a git tag
+# 4. Update aur/PKGBUILD-BIN only for stable releases
+if [ "$IS_PRERELEASE" = false ] && [ -f aur/PKGBUILD-BIN ]; then
+  echo "Updating aur/PKGBUILD..."
+  # Use sed to replace the pkgver line
+  $sed -i "s/^pkgver=.*/pkgver=$VERSION_WITHOUT_V/" aur/PKGBUILD-BIN
+elif [ -f aur/PKGBUILD-BIN ]; then
+  echo "Skipping aur/PKGBUILD-BIN update for pre-release version"
+else
+  echo "Warning: aur/PKGBUILD-BIN not found"
+fi
+
+# 5. Create a git tag
 echo "Creating git tag: $VERSION"
 git tag $VERSION
 
