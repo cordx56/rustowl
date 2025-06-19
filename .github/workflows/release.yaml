@@ -104,8 +104,24 @@ jobs:
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
         if: needs.meta.outputs.pre_release != 'true'
         with:
-          pkgname: rustowl-bin
+          pkgname: rustowl
           pkgbuild: ./aur/PKGBUILD
+          updpkgsums: true
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: Update AUR package
+          ssh_keyscan_types: rsa,ecdsa,ed25519
+        env:
+          AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
+          AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+      - name: AUR Release (Bin)
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        if: needs.meta.outputs.pre_release != 'true'
+        with:
+          pkgname: rustowl-bin
+          pkgbuild: ./aur/PKGBUILD-BIN
           updpkgsums: true
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}

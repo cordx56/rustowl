@@ -1,15 +1,15 @@
 # Maintainer: MuntasirSZN <muntasir.joypurhat@gmail.com>
 # Maintainer: cordx56 <cordx56@cordx.cx>
 
-pkgname=rustowl-bin
+pkgname=rustowl
 pkgver=0.3.4
 pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
-makedepends=('rustup' 'zig=0.13.0')
+makedepends=('rustup')
 depends=()
-conflicts=('rustowl-git')
+conflicts=('rustowl-git' 'rustowl-bin')
 arch=('any')
 source=("https://github.com/cordx56/rustowl/archive/refs/tags/v${pkgver}.tar.gz")
 sha256sums=('fa120643aeb48061eb32a7c993dabff88aa4e9d0b32f8ab0f3289b3fb2cf5744')
@@ -20,7 +20,6 @@ prepare() {
     export RUSTUP_TOOLCHAIN=1.87.0
     rustup component add rust-src rustc-dev llvm-tools
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
-    cargo install --locked cargo-zigbuild
 }
 
 build() {
@@ -29,7 +28,7 @@ build() {
     export RUSTC_BOOTSTRAP=1
     export RUSTUP_TOOLCHAIN=1.87.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
-    cargo zigbuild --frozen --release --all-features --target $(rustc --print=host-tuple).2.17
+    cargo build --frozen --release --all-features --target $(rustc --print=host-tuple)
 }
 
 check() {
@@ -59,4 +58,3 @@ package() {
     install -Dm644 "rustowl-build-time-out/completions/rustowl.elv" "${pkgdir}/usr/share/elvish/completions/rustowl.elv"
     install -Dm644 "rustowl-build-time-out/completions/_rustowl.ps1" "${pkgdir}/usr/share/powershell/Modules/Rustowl/_rustowl.ps1"
 }
-
