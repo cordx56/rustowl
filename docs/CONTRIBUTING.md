@@ -37,10 +37,6 @@ brew install gnuplot
 # Optional: brew install valgrind (limited support)
 ```
 
-**Windows:**
-- Visual Studio Build Tools
-- Optional: Install gnuplot for enhanced benchmark reports
-
 **Node.js Development (for VS Code extension):**
 - Node.js and yarn for VS Code extension development
 
@@ -129,7 +125,7 @@ The security script includes:
 - **Sanitizers**: AddressSanitizer, ThreadSanitizer, MemorySanitizer
 - **Valgrind**: Memory error detection (Linux)
 - **cargo-audit**: Security vulnerability scanning
-- **Platform-specific tools**: DrMemory (Windows), Instruments (macOS)
+- **Platform-specific tools**: Instruments (macOS)
 
 ### Performance Testing
 
@@ -243,10 +239,6 @@ sudo apt-get install -y valgrind bc gnuplot build-essential
 brew install gnuplot
 # Valgrind has limited support on macOS
 ```
-
-#### Windows
-- Ensure Visual Studio Build Tools are installed
-- PowerShell scripts may require execution policy changes
 
 ### CI Failures
 - Check workflow logs for specific error messages

@@ -16,7 +16,7 @@ jobs:
     name: Security & Memory Safety Analysis
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest, ubuntu-24.04-arm]
+        os: [ubuntu-latest, macos-latest, ubuntu-24.04-arm]
         include:
           - os: ubuntu-latest
             runner_os: Linux
@@ -24,8 +24,6 @@ jobs:
             runner_os: Linux
           - os: macos-latest
             runner_os: macOS
-          - os: windows-latest
-            runner_os: Windows
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository

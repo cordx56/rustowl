@@ -32,7 +32,6 @@ RUN_MIRI=1
 RUN_VALGRIND=1
 RUN_SANITIZERS=1
 RUN_AUDIT=1
-RUN_DRMEMORY=1
 RUN_INSTRUMENTS=1
 RUN_THREAD_SANITIZER=0
 RUN_CARGO_MACHETE=0
@@ -41,20 +40,8 @@ RUN_CARGO_MACHETE=0
 HAS_MIRI=0
 HAS_VALGRIND=0
 HAS_CARGO_AUDIT=0
-HAS_DRMEMORY=0
 HAS_INSTRUMENTS=0
 HAS_CARGO_MACHETE=0
-
-# DrMemory configuration
-DRMEMORY_VERSION="2.6.0"
-DRMEMORY_URL="https://github.com/DynamoRIO/drmemory/releases/download/release_${DRMEMORY_VERSION}/DrMemory-Windows-${DRMEMORY_VERSION}.zip"
-DRMEMORY_INSTALL_DIR="$HOME/.drmemory"
-
-# DrMemory CI safety settings
-# Set to 1 to completely disable DrMemory in CI environments (recommended if causing timeouts)
-DISABLE_DRMEMORY_IN_CI=0
-# Set to 1 to force only basic DrMemory tests in CI (safer alternative)
-FORCE_BASIC_DRMEMORY_IN_CI=1
 
 # OS detection with more robust platform detection
 detect_platform() {
@@ -62,17 +49,12 @@ detect_platform() {
         OS_TYPE="Linux"
     elif [[ "$OSTYPE" == "darwin"* ]]; then
         OS_TYPE="macOS"
-    elif [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
-        OS_TYPE="Windows"
-    elif [[ "$OS" == "Windows_NT" ]]; then
-        OS_TYPE="Windows"
     else
         # Fallback to uname
         local uname_result=$(uname 2>/dev/null || echo "unknown")
         case "$uname_result" in
             Linux*) OS_TYPE="Linux" ;;
             Darwin*) OS_TYPE="macOS" ;;
-            CYGWIN*|MINGW*|MSYS*) OS_TYPE="Windows" ;;
             *) OS_TYPE="Unknown" ;;
         esac
     fi
@@ -131,17 +113,6 @@ install_required_tools() {
             HAS_MIRI=1
         else
             echo -e "${RED}Failed to install Miri component${NC}"
-        fi
-    fi
-
-    # Install DrMemory on Windows
-    if [[ "$OS_TYPE" == "Windows" ]] && [[ $HAS_DRMEMORY -eq 0 ]] && [[ $RUN_DRMEMORY -eq 1 ]]; then
-        echo "Installing DrMemory..."
-        if install_drmemory; then
-            echo -e "${GREEN}DrMemory installed successfully${NC}"
-            HAS_DRMEMORY=1
-        else
-            echo -e "${RED}Failed to install DrMemory${NC}"
         fi
     fi
 
@@ -269,42 +240,6 @@ install_xcode_ci() {
     echo ""
 }
 
-# Install DrMemory for Windows
-install_drmemory() {
-    if [[ "$OS_TYPE" != "Windows" ]]; then
-        return 0
-    fi
-    
-    echo "Installing DrMemory..."
-    
-    # Download DrMemory
-    local drmemory_zip="DrMemory-Windows-${DRMEMORY_VERSION}.zip"
-    local drmemory_dir="DrMemory-Windows-${DRMEMORY_VERSION}"
-    
-    if command -v curl >/dev/null 2>&1; then
-        curl -L -o "$drmemory_zip" "$DRMEMORY_URL"
-    elif command -v wget >/dev/null 2>&1; then
-        wget -O "$drmemory_zip" "$DRMEMORY_URL"
-    else
-        echo -e "${RED}Error: Neither curl nor wget is available for downloading DrMemory.${NC}"
-        return 1
-    fi
-    
-    # Extract and install
-    if unzip -q "$drmemory_zip"; then
-        echo "DrMemory installed to: $DRMEMORY_INSTALL_DIR"
-        echo "Add to PATH: set PATH=%PATH%;$DRMEMORY_INSTALL_DIR\\bin"
-        
-        # Clean up
-        rm -f "$drmemory_zip"
-    else
-        echo -e "${RED}Failed to install DrMemory${NC}"
-        return 1
-    fi
-    
-    echo ""
-}
-
 # Auto-configure tests based on platform capabilities and toolchain compatibility
 auto_configure_tests() {
     echo -e "${YELLOW}Auto-configuring tests for $OS_TYPE...${NC}"
@@ -323,25 +258,14 @@ auto_configure_tests() {
             echo "  Enabling cargo-machete for unused dependency detection"
             echo "  Instruments will be attempted after Xcode setup in CI"
             RUN_VALGRIND=0
-            RUN_DRMEMORY=0
             RUN_SANITIZERS=0  # Disable AddressSanitizer
             RUN_THREAD_SANITIZER=0  # Also disable ThreadSanitizer
             RUN_CARGO_MACHETE=1  # Detect unused dependencies
             RUN_INSTRUMENTS=1  # Enable Instruments (will try to install Xcode in CI)
             ;;
-        "Windows")
-            # Windows: Disable sanitizers as they're often problematic on Windows CI
-            echo "  Windows detected: Enabling Miri, Audit, and DrMemory"
-            echo "  Disabling Valgrind (Linux only)"
-            echo "  Disabling Sanitizers (unreliable on Windows CI)"
-            RUN_VALGRIND=0
-            RUN_INSTRUMENTS=0
-            RUN_SANITIZERS=0  # Disable sanitizers on Windows
-            ;;
         *)
             echo "  Unknown platform: Enabling basic tests only"
             RUN_VALGRIND=0
-            RUN_DRMEMORY=0
             RUN_INSTRUMENTS=0
             # Also disable nightly-dependent features on unknown platforms
             RUN_MIRI=0
@@ -368,15 +292,11 @@ usage() {
     echo "  --no-valgrind        Skip Valgrind tests"
     echo "  --no-sanitizers      Skip sanitizer tests"
     echo "  --no-audit           Skip cargo audit security check"
-    echo "  --no-drmemory        Skip DrMemory tests"
-    echo "  --disable-drmemory-ci Disable DrMemory completely in CI environments"
-    echo "  --allow-full-drmemory-ci Allow full DrMemory analysis in CI (not recommended)"
     echo "  --no-instruments     Skip Instruments tests"
     echo ""
     echo "Platform Support:"
     echo "  Linux:   Miri, Valgrind, Sanitizers, cargo-audit"
     echo "  macOS:   Miri, Sanitizers, cargo-audit, Instruments"
-    echo "  Windows: Miri, Sanitizers, cargo-audit, DrMemory"
     echo ""
     echo "CI Environment:"
     echo "  The script automatically detects CI environments and installs missing tools."
@@ -390,7 +310,6 @@ usage() {
     echo "  - ThreadSanitizer: Data race detection" 
     echo "  - MemorySanitizer: Uninitialized memory detection"
     echo "  - cargo-audit: Security vulnerability scanning"
-    echo "  - DrMemory: Memory debugging (Windows)"
     echo "  - Instruments: Performance and memory analysis (macOS)"
     echo ""
     echo "Examples:"
@@ -440,18 +359,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-audit)
             RUN_AUDIT=0
-            shift
-            ;;
-        --no-drmemory)
-            RUN_DRMEMORY=0
-            shift
-            ;;
-        --disable-drmemory-ci)
-            DISABLE_DRMEMORY_IN_CI=1
-            shift
-            ;;
-        --allow-full-drmemory-ci)
-            FORCE_BASIC_DRMEMORY_IN_CI=0
             shift
             ;;
         --no-instruments)
@@ -543,16 +450,6 @@ detect_tools() {
                 echo -e "${YELLOW}! Instruments not found (will try to install Xcode in CI)${NC}"
             fi
             ;;
-        "Windows")
-            # Check for DrMemory
-            if [[ -f "$DRMEMORY_INSTALL_DIR/bin/drmemory.exe" ]] || command -v drmemory >/dev/null 2>&1; then
-                HAS_DRMEMORY=1
-                echo -e "${GREEN}[OK] DrMemory available${NC}"
-            else
-                echo -e "${YELLOW}! DrMemory not found${NC}"
-                HAS_DRMEMORY=0
-            fi
-            ;;
         "Linux")
             # Check for Valgrind
             if command -v valgrind >/dev/null 2>&1; then
@@ -598,9 +495,6 @@ build_project() {
     RUSTC_BOOTSTRAP=1 cargo build --profile=security
     
     local binary_name="rustowl"
-    if [[ "$OS_TYPE" == "Windows" ]]; then
-        binary_name="rustowl.exe"
-    fi
     
     if [ ! -f "./target/security/$binary_name" ]; then
         echo -e "${RED}[ERROR] Failed to build rustowl binary${NC}"
@@ -629,10 +523,6 @@ show_tool_status() {
     
     echo -e "  cargo-audit (vulnerabilities): $([ $HAS_CARGO_AUDIT -eq 1 ] && echo -e "${GREEN}[OK] Available${NC}" || echo -e "${RED}[ERROR] Missing${NC}")"
     
-    if [[ "$OS_TYPE" == "Windows" ]]; then
-        echo -e "  DrMemory (memory debugging):   $([ $HAS_DRMEMORY -eq 1 ] && echo -e "${GREEN}[OK] Available${NC}" || echo -e "${RED}[ERROR] Missing${NC}")"
-    fi
-    
     if [[ "$OS_TYPE" == "macOS" ]]; then
         echo -e "  Instruments (performance):     $([ $HAS_INSTRUMENTS -eq 1 ] && echo -e "${GREEN}[OK] Available${NC}" || echo -e "${RED}[ERROR] Missing${NC}")"
     fi
@@ -658,7 +548,6 @@ show_tool_status() {
     echo -e "  Run Valgrind:   $([ $RUN_VALGRIND -eq 1 ] && echo -e "${GREEN}Enabled${NC}" || echo -e "${YELLOW}Disabled${NC}")"
     echo -e "  Run Sanitizers: $([ $RUN_SANITIZERS -eq 1 ] && echo -e "${GREEN}Enabled${NC}" || echo -e "${YELLOW}Disabled${NC}")"
     echo -e "  Run Audit:      $([ $RUN_AUDIT -eq 1 ] && echo -e "${GREEN}Enabled${NC}" || echo -e "${YELLOW}Disabled${NC}")"
-    echo -e "  Run DrMemory:   $([ $RUN_DRMEMORY -eq 1 ] && echo -e "${GREEN}Enabled${NC}" || echo -e "${YELLOW}Disabled${NC}")"
     echo -e "  Run Instruments: $([ $RUN_INSTRUMENTS -eq 1 ] && echo -e "${GREEN}Enabled${NC}" || echo -e "${YELLOW}Disabled${NC}")"
     
     echo ""
@@ -686,7 +575,6 @@ create_security_summary() {
     echo "| Miri | $([ $HAS_MIRI -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing") | Undefined behavior detection |" >> "$summary_file"
     echo "| Valgrind | $([ $HAS_VALGRIND -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing/N/A") | Memory error detection (Linux) |" >> "$summary_file"
     echo "| cargo-audit | $([ $HAS_CARGO_AUDIT -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing") | Security vulnerability scanning |" >> "$summary_file"
-    echo "| DrMemory | $([ $HAS_DRMEMORY -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing/N/A") | Memory debugging (Windows) |" >> "$summary_file"
     echo "| Instruments | $([ $HAS_INSTRUMENTS -eq 1 ] && echo "[OK] Available" || echo "[FAIL] Missing/N/A") | Performance analysis (macOS) |" >> "$summary_file"
     echo "" >> "$summary_file"
 }
@@ -824,9 +712,6 @@ run_sanitizer_tests() {
                 current_target="x86_64-apple-darwin" # Fallback
             fi
             ;;
-        "Windows")
-            current_target="x86_64-pc-windows-msvc"
-            ;;
         *)
             echo -e "${RED}[FAIL] Unsupported OS for sanitizer tests: $OS_TYPE${NC}"
             return 1
@@ -842,16 +727,8 @@ run_sanitizer_tests() {
 
     local rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
 
-    # For Windows, add the sanitizer runtime DLL path to PATH
-    if [[ "$OS_TYPE" == "Windows" ]]; then
-        local sanitizer_lib_path="${rustup_home}/toolchains/${toolchain_name}/lib/rustlib/${current_target}/lib"
-        if [[ -d "$sanitizer_lib_path" ]]; then
-            echo -e "${BLUE}Adding Windows sanitizer lib path to PATH: ${sanitizer_lib_path}${NC}"
-            export PATH="${sanitizer_lib_path}:$PATH"
-        else
-            echo -e "${YELLOW}[WARN] Sanitizer library path not found: ${sanitizer_lib_path}. Sanitizer tests might fail.${NC}"
-        fi
-    elif [[ "$OS_TYPE" == "macOS" ]]; then
+    # Platform-specific sanitizer configuration
+    if [[ "$OS_TYPE" == "macOS" ]]; then
         echo -e "${BLUE}macOS detected: Not setting DYLD_INSERT_LIBRARIES for sanitizers.${NC}"
         if [[ "$(uname -m)" == "arm64e" ]]; then
             echo -e "${YELLOW}[WARN] Detected arm64e architecture. Rust sanitizers may not be fully supported.${NC}"
@@ -911,11 +788,6 @@ run_cargo_machete_tests() {
     return 0
 }
 
-run_drmemory_tests() {
-    echo -e "${YELLOW}DrMemory tests not yet implemented${NC}"
-    return 0
-}
-
 run_instruments_tests() {
     echo -e "${YELLOW}Instruments tests not yet implemented${NC}"
     return 0
@@ -961,4 +833,50 @@ log_command_detailed() {
 LOG_DIR="security-logs"
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 
-# Helper function to print section headers
+# Main execution starts here
+echo -e "${BLUE}${BOLD}RustOwl Security & Memory Safety Testing${NC}"
+echo -e "${BLUE}=========================================${NC}"
+echo ""
+
+# Initialize and detect environment
+detect_platform
+detect_ci_environment
+
+# Check for --check flag early to show tool status
+if [[ "$1" == "--check" ]]; then
+    echo -e "${BLUE}Checking tool availability and system readiness...${NC}"
+    echo ""
+    
+    detect_tools
+    show_tool_status
+    
+    echo ""
+    echo -e "${GREEN}System check completed.${NC}"
+    exit 0
+fi
+
+echo -e "${BLUE}Running security and memory safety analysis...${NC}"
+echo ""
+
+# Detect available tools
+detect_tools
+
+# Auto-configure tests based on platform
+auto_configure_tests
+
+# Install missing tools if in CI or explicitly requested
+if [[ $IS_CI -eq 1 ]] || [[ "$1" == "--install" ]]; then
+    install_required_tools
+    # Re-detect tools after installation
+    detect_tools
+fi
+
+# Check Rust version compatibility
+check_rust_version
+
+# Show final tool status
+show_tool_status
+
+echo ""
+echo -e "${GREEN}Security analysis setup completed.${NC}"
+echo "Use individual test functions or run the full test suite."

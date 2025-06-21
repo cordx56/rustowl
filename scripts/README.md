@@ -43,7 +43,7 @@ Comprehensive security and memory safety testing framework.
 
 **Features:**
 - Multi-tool testing (Miri, Sanitizers, Valgrind, Audit)
-- Cross-platform support (Linux, macOS, Windows, ARM64)
+- Cross-platform support (Linux, macOS, ARM64)
 - Graceful degradation when tools unavailable
 - Configurable test categories and timeouts
 - Color-coded output with progress indicators
@@ -107,10 +107,6 @@ sudo apt-get install -y valgrind bc gnuplot build-essential
 brew install gnuplot
 # Optional: brew install valgrind (limited support)
 ```
-
-#### Windows
-- Visual Studio Build Tools
-- Optional: Install gnuplot for enhanced benchmark reports
 
 ## Integration with CI
 
