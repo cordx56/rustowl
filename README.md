@@ -9,7 +9,7 @@
         Visualize ownership and lifetimes in Rust for debugging and optimization
     </p>
     <p>
-        [![Crates.io Version](https://img.shields.io/crates/v/rustowl?style=for-the-badge)](https://crates.io/crates/rustowl)
+        [![Crates.io Version](https://img.shields.io/crates/v/rustowl?style=for-the-badge )](https://crates.io/crates/rustowl)
         [![AUR Version](https://img.shields.io/aur/version/rustowl-bin?style=for-the-badge)](https://aur.archlinux.org/packages/rustowl-bin)
         ![WinGet Package Version](https://img.shields.io/winget/v/Cordx56.Rustowl?style=for-the-badge)
     </p>
