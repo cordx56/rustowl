@@ -9,6 +9,18 @@
         Visualize ownership and lifetimes in Rust for debugging and optimization
     </p>
     <p>
+        [![Crates.io Version](https://img.shields.io/crates/v/rustowl?style=for-the-badge)](https://crates.io/crates/rustowl)
+        [![AUR Version](https://img.shields.io/aur/version/rustowl-bin?style=for-the-badge)](https://aur.archlinux.org/packages/rustowl-bin)
+        ![WinGet Package Version](https://img.shields.io/winget/v/Cordx56.Rustowl?style=for-the-badge)
+    </p>
+    <p>
+        [![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/cordx56.rustowl-vscode?style=for-the-badge)](https://marketplace.visualstudio.com/items?itemName=cordx56.rustowl-vscode)
+        [![Open VSX Version](https://img.shields.io/open-vsx/v/cordx56/rustowl-vscode?style=for-the-badge)](https://open-vsx.org/extension/cordx56/rustowl-vscode)
+    </p>
+    <p>
+        [![Discord](https://img.shields.io/discord/1379759912942436372?style=for-the-badge&logo=discord)](https://discord.gg/XbxN949dpG)
+    </p>
+    <p>
         <img src="docs/assets/readme-screenshot-3.png" />
     </p>
 </div>
@@ -32,9 +44,6 @@ Currently, we offer VSCode extension, Neovim plugin and Emacs package.
 For these editors, move the text cursor over the variable or function call you want to inspect and wait for 2 seconds to visualize the information.
 We implemented LSP server with an extended protocol.
 So, RustOwl can be used easily from other editor.
-
-We have a [Discord server](https://discord.gg/XbxN949dpG).
-Feel free to join us.
 
 ## Support
 
