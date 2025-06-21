@@ -61,7 +61,7 @@ RustOwl will be installed automatically when the extension is activated.
 
 ### Vscodium
 
-You can install VS Code extension from [this link](https://open-vsx.org/extension/cordx56/rustowl-vscode).
+You can install Vscodium extension from [this link](https://open-vsx.org/extension/cordx56/rustowl-vscode).
 RustOwl will be installed automatically when the extension is activated.
 
 After installation, the extension will automatically run RustOwl when you save any Rust program in cargo workspace.
