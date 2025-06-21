@@ -58,7 +58,7 @@ fi
 
 # 4. Update aur/PKGBUILD-BIN only for stable releases
 if [ "$IS_PRERELEASE" = false ] && [ -f aur/PKGBUILD-BIN ]; then
-  echo "Updating aur/PKGBUILD..."
+  echo "Updating aur/PKGBUILD-BIN..."
   # Use sed to replace the pkgver line
   $sed -i "s/^pkgver=.*/pkgver=$VERSION_WITHOUT_V/" aur/PKGBUILD-BIN
 elif [ -f aur/PKGBUILD-BIN ]; then
