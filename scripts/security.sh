@@ -256,12 +256,12 @@ auto_configure_tests() {
             echo "  Disabling Sanitizers (compatibility issues on Apple Silicon)"
             echo "  Disabling ThreadSanitizer (also problematic on Apple Silicon)"
             echo "  Enabling cargo-machete for unused dependency detection"
-            echo "  Instruments will be attempted after Xcode setup in CI"
+            echo "  Disabling Instruments (complex Xcode setup required)"
             RUN_VALGRIND=0
             RUN_SANITIZERS=0  # Disable AddressSanitizer
             RUN_THREAD_SANITIZER=0  # Also disable ThreadSanitizer
             RUN_CARGO_MACHETE=1  # Detect unused dependencies
-            RUN_INSTRUMENTS=1  # Enable Instruments (will try to install Xcode in CI)
+            RUN_INSTRUMENTS=0  # Disable by default (complex setup required)
             ;;
         *)
             echo "  Unknown platform: Enabling basic tests only"
@@ -296,7 +296,7 @@ usage() {
     echo ""
     echo "Platform Support:"
     echo "  Linux:   Miri, Valgrind, Sanitizers, cargo-audit"
-    echo "  macOS:   Miri, Sanitizers, cargo-audit, Instruments"
+    echo "  macOS:   Miri, cargo-audit, cargo-machete"
     echo ""
     echo "CI Environment:"
     echo "  The script automatically detects CI environments and installs missing tools."
@@ -310,7 +310,6 @@ usage() {
     echo "  - ThreadSanitizer: Data race detection" 
     echo "  - MemorySanitizer: Uninitialized memory detection"
     echo "  - cargo-audit: Security vulnerability scanning"
-    echo "  - Instruments: Performance and memory analysis (macOS)"
     echo ""
     echo "Examples:"
     echo "  $0                   # Auto-detect platform and run appropriate tests"
@@ -878,5 +877,60 @@ check_rust_version
 show_tool_status
 
 echo ""
-echo -e "${GREEN}Security analysis setup completed.${NC}"
-echo "Use individual test functions or run the full test suite."
+echo -e "${BLUE}Running security tests...${NC}"
+echo ""
+
+# Create security summary
+create_security_summary
+
+# Run the actual security tests
+test_failures=0
+
+# Run Miri tests
+if ! run_miri_tests; then
+    test_failures=$((test_failures + 1))
+fi
+
+# Run Valgrind tests (Linux only)
+if [[ "$OS_TYPE" == "Linux" ]] && [[ $RUN_VALGRIND -eq 1 ]]; then
+    if ! run_valgrind_tests; then
+        test_failures=$((test_failures + 1))
+    fi
+fi
+
+# Run sanitizer tests
+if ! run_sanitizer_tests; then
+    test_failures=$((test_failures + 1))
+fi
+
+# Run cargo audit
+if ! run_audit_check; then
+    test_failures=$((test_failures + 1))
+fi
+
+# Run cargo machete if available
+if [[ $HAS_CARGO_MACHETE -eq 1 ]] && [[ $RUN_CARGO_MACHETE -eq 1 ]]; then
+    if ! run_cargo_machete_tests; then
+        test_failures=$((test_failures + 1))
+    fi
+fi
+
+# Run Instruments tests (macOS only)
+if [[ "$OS_TYPE" == "macOS" ]] && [[ $RUN_INSTRUMENTS -eq 1 ]] && [[ $HAS_INSTRUMENTS -eq 1 ]]; then
+    if ! run_instruments_tests; then
+        test_failures=$((test_failures + 1))
+    fi
+fi
+
+# Final summary
+echo ""
+if [[ $test_failures -eq 0 ]]; then
+    echo -e "${GREEN}${BOLD}All security tests passed!${NC}"
+    echo -e "${GREEN}No security issues detected.${NC}"
+    exit 0
+else
+    echo -e "${RED}${BOLD}Security tests failed!${NC}"
+    echo -e "${RED}$test_failures test suite(s) failed.${NC}"
+    echo -e "${BLUE}Check logs in $LOG_DIR/ for details.${NC}"
+    exit 1
+fi
