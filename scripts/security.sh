@@ -30,7 +30,6 @@ CI_AUTO_INSTALL=0
 # Test flags (can be overridden via command line options)
 RUN_MIRI=1
 RUN_VALGRIND=1
-RUN_SANITIZERS=1
 RUN_AUDIT=1
 RUN_INSTRUMENTS=1
 RUN_THREAD_SANITIZER=0
@@ -247,19 +246,16 @@ auto_configure_tests() {
     case "$OS_TYPE" in
         "Linux")
             # Linux: Full test suite available
-            echo "  Linux detected: Enabling Miri, Valgrind, Sanitizers, and Audit"
+            echo "  Linux detected: Enabling Miri, Valgrind, and Audit"
             ;;
         "macOS")
             # macOS: Focus on Rust-native tools and macOS-compatible alternatives
             echo "  macOS detected: Enabling Miri, Audit, and macOS-compatible tools"
             echo "  Disabling Valgrind (unreliable on macOS)"
-            echo "  Disabling Sanitizers (compatibility issues on Apple Silicon)"
-            echo "  Disabling ThreadSanitizer (also problematic on Apple Silicon)"
             echo "  Enabling cargo-machete for unused dependency detection"
             echo "  Disabling Instruments (complex Xcode setup required)"
             RUN_VALGRIND=0
-            RUN_SANITIZERS=0  # Disable AddressSanitizer
-            RUN_THREAD_SANITIZER=0  # Also disable ThreadSanitizer
+            RUN_THREAD_SANITIZER=0
             RUN_CARGO_MACHETE=1  # Detect unused dependencies
             RUN_INSTRUMENTS=0  # Disable by default (complex setup required)
             ;;
@@ -269,7 +265,6 @@ auto_configure_tests() {
             RUN_INSTRUMENTS=0
             # Also disable nightly-dependent features on unknown platforms
             RUN_MIRI=0
-            RUN_SANITIZERS=0
             ;;
     esac
     
@@ -290,12 +285,11 @@ usage() {
     echo "  --no-auto-install    Disable automatic installation in CI"
     echo "  --no-miri            Skip Miri tests"
     echo "  --no-valgrind        Skip Valgrind tests"
-    echo "  --no-sanitizers      Skip sanitizer tests"
     echo "  --no-audit           Skip cargo audit security check"
     echo "  --no-instruments     Skip Instruments tests"
     echo ""
     echo "Platform Support:"
-    echo "  Linux:   Miri, Valgrind, Sanitizers, cargo-audit"
+    echo "  Linux:   Miri, Valgrind, cargo-audit"
     echo "  macOS:   Miri, cargo-audit, cargo-machete"
     echo ""
     echo "CI Environment:"
@@ -306,9 +300,6 @@ usage() {
     echo "Tests performed:"
     echo "  - Miri: Detects undefined behavior in Rust code"
     echo "  - Valgrind: Memory error detection (Linux)"
-    echo "  - AddressSanitizer: Memory error detection"
-    echo "  - ThreadSanitizer: Data race detection" 
-    echo "  - MemorySanitizer: Uninitialized memory detection"
     echo "  - cargo-audit: Security vulnerability scanning"
     echo ""
     echo "Examples:"
@@ -350,10 +341,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-valgrind)
             RUN_VALGRIND=0
-            shift
-            ;;
-        --no-sanitizers)
-            RUN_SANITIZERS=0
             shift
             ;;
         --no-audit)
@@ -528,24 +515,21 @@ show_tool_status() {
     
     echo ""
     
-    # Check nightly toolchain for sanitizers
+    # Check nightly toolchain for other advanced features
     local current_toolchain=$(rustup show active-toolchain | cut -d' ' -f1)
-    echo "Sanitizer Support:"
+    echo "Advanced Features:"
     if [[ "$current_toolchain" == *"nightly"* ]]; then
         echo -e "  Nightly toolchain:             ${GREEN}[OK] Available${NC}"
-        echo -e "  AddressSanitizer:              ${GREEN}[OK] Supported${NC}"
-        echo -e "  ThreadSanitizer:               ${GREEN}[OK] Supported${NC}"
-        echo -e "  MemorySanitizer:               ${GREEN}[OK] Supported${NC}"
+        echo -e "  Advanced features:             ${GREEN}[OK] Supported${NC}"
     else
         echo -e "  Nightly toolchain:             ${YELLOW}! Stable toolchain active${NC}"
-        echo -e "  Sanitizers:                    ${YELLOW}! Require nightly${NC}"
+        echo -e "  Advanced features:             ${YELLOW}! Require nightly${NC}"
     fi
     
     echo ""
     echo "Test Configuration:"
     echo -e "  Run Miri:       $([ $RUN_MIRI -eq 1 ] && echo -e "${GREEN}Enabled${NC}" || echo -e "${YELLOW}Disabled${NC}")"
     echo -e "  Run Valgrind:   $([ $RUN_VALGRIND -eq 1 ] && echo -e "${GREEN}Enabled${NC}" || echo -e "${YELLOW}Disabled${NC}")"
-    echo -e "  Run Sanitizers: $([ $RUN_SANITIZERS -eq 1 ] && echo -e "${GREEN}Enabled${NC}" || echo -e "${YELLOW}Disabled${NC}")"
     echo -e "  Run Audit:      $([ $RUN_AUDIT -eq 1 ] && echo -e "${GREEN}Enabled${NC}" || echo -e "${YELLOW}Disabled${NC}")"
     echo -e "  Run Instruments: $([ $RUN_INSTRUMENTS -eq 1 ] && echo -e "${GREEN}Enabled${NC}" || echo -e "${YELLOW}Disabled${NC}")"
     
@@ -738,104 +722,8 @@ run_valgrind_tests() {
     echo ""
 }
 
-run_sanitizer_tests() {
-    if [[ $RUN_SANITIZERS -eq 0 ]]; then
-        echo -e "${YELLOW}Skipping sanitizer tests (disabled for this platform)${NC}"
-        return 0
-    fi
-
-    echo -e "${BLUE}Running RustOwl sanitizer tests...${NC}"
-
-    local current_target
-    local toolchain_name
-
-    # Determine the appropriate target for this platform
-    case "$OS_TYPE" in
-        "Linux")
-            arch=$(uname -m)
-            if [[ "$arch" == "x86_64" ]]; then
-                current_target="x86_64-unknown-linux-gnu"
-            elif [[ "$arch" == "aarch64" ]]; then
-                current_target="aarch64-unknown-linux-gnu"
-            else
-                echo -e "${YELLOW}Unsupported Linux architecture: $arch. Sanitizer tests might not run correctly.${NC}"
-                current_target="x86_64-unknown-linux-gnu" # Fallback
-            fi
-            ;;
-        "macOS")
-            arch=$(uname -m)
-            if [[ "$arch" == "x86_64" ]]; then
-                current_target="x86_64-apple-darwin"
-            elif [[ "$arch" == "arm64" ]]; then
-                current_target="aarch64-apple-darwin"
-            else
-                 echo -e "${YELLOW}Unsupported macOS architecture: $arch. Sanitizer tests might not run correctly.${NC}"
-                current_target="x86_64-apple-darwin" # Fallback
-            fi
-            ;;
-        *)
-            echo -e "${RED}[FAIL] Unsupported OS for sanitizer tests: $OS_TYPE${NC}"
-            return 1
-            ;;
-    esac
-
-    # Get the *installed* nightly toolchain name (not necessarily active)
-    toolchain_name=$(rustup toolchain list | grep "nightly" | head -n 1 | awk '{print $1}')
-    if [[ -z "$toolchain_name" ]]; then
-        echo -e "${RED}[FAIL] No nightly toolchain found. Cannot run sanitizer tests. Please ensure 'nightly' is installed.${NC}"
-        return 1
-    fi
-
-    local rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
-
-    # Platform-specific sanitizer configuration
-    if [[ "$OS_TYPE" == "macOS" ]]; then
-        echo -e "${BLUE}macOS detected: Not setting DYLD_INSERT_LIBRARIES for sanitizers.${NC}"
-        if [[ "$(uname -m)" == "arm64e" ]]; then
-            echo -e "${YELLOW}[WARN] Detected arm64e architecture. Rust sanitizers may not be fully supported.${NC}"
-        fi
-    fi
-
-    # Define common RUSTFLAGS for sanitizers
-    # Note: Cannot use +crt-static with sanitizers (incompatible with statically linked libc)
-    local RUSTFLAGS_COMMON="-Zsanitizer=address -Zsanitizer-recover=address"
-
-    # Test RustOwl's main functionality with AddressSanitizer
-    echo -e "${BLUE}Running RustOwl analysis with AddressSanitizer...${NC}"
-    echo -e "${BLUE}Using RUSTFLAGS: ${RUSTFLAGS_COMMON}${NC}"
-    if [ -d "$TEST_TARGET_PATH" ]; then
-        if RUSTFLAGS="${RUSTFLAGS_COMMON}" log_command_detailed "asan_rustowl_analysis" "cargo +nightly run --bin rustowl -- check $TEST_TARGET_PATH"; then
-            echo -e "${GREEN}[OK] RustOwl analysis completed with AddressSanitizer${NC}"
-        else
-            echo -e "${YELLOW}[WARN] AddressSanitizer compilation failed (dependency issues)${NC}"
-            echo -e "${YELLOW}  This is known to happen with some dependency combinations${NC}"
-            echo -e "${YELLOW}  Skipping AddressSanitizer tests for this run${NC}"
-            echo -e "${BLUE}  Full output captured in: $LOG_DIR/asan_rustowl_analysis_${TIMESTAMP}.log${NC}"
-            
-            # Check if it's a proc-macro dependency issue
-            if grep -q "can't find crate.*derive\|undefined symbol.*asan" "$LOG_DIR/asan_rustowl_analysis_${TIMESTAMP}.log" 2>/dev/null; then
-                echo -e "${YELLOW}  Note: This appears to be a proc-macro/derive dependency compatibility issue${NC}"
-                echo -e "${YELLOW}        AddressSanitizer can conflict with certain macro dependencies on some platforms${NC}"
-            fi
-            
-            # Don't fail the entire test suite - this is a known issue
-            echo -e "${BLUE}Falling back to basic execution test without AddressSanitizer...${NC}"
-        fi
-    else
-        echo -e "${YELLOW}[WARN] No test target found at $TEST_TARGET_PATH${NC}"
-        echo -e "${BLUE}Fallback: Testing basic RustOwl execution with AddressSanitizer...${NC}"
-        if RUSTFLAGS="${RUSTFLAGS_COMMON}" log_command_detailed "asan_basic_execution" "cargo +nightly run --bin rustowl -- --help"; then
-            echo -e "${GREEN}[OK] RustOwl basic execution passed with AddressSanitizer${NC}"
-        else
-            echo -e "${YELLOW}[WARN] AddressSanitizer compilation failed (dependency issues)${NC}"
-            echo -e "${YELLOW}  This is known to happen with some dependency combinations${NC}"
-            echo -e "${YELLOW}  Skipping AddressSanitizer tests for this run${NC}"
-            echo -e "${BLUE}  Full output captured in: $LOG_DIR/asan_basic_execution_${TIMESTAMP}.log${NC}"
-        fi
-    fi
-
-    echo ""
-}
+# AddressSanitizer removed - incompatible with RustOwl's proc-macro dependencies
+# Alternative memory safety checking is provided by Valgrind and Miri
 
 run_audit_check() {
     if [[ $RUN_AUDIT -eq 0 ]] || [[ $HAS_CARGO_AUDIT -eq 0 ]]; then
@@ -857,8 +745,54 @@ run_audit_check() {
 }
 
 run_cargo_machete_tests() {
-    echo -e "${YELLOW}cargo-machete tests not yet implemented${NC}"
-    return 0
+    if [[ $RUN_CARGO_MACHETE -eq 0 ]]; then
+        return 0
+    fi
+    
+    if [[ $HAS_CARGO_MACHETE -eq 0 ]]; then
+        echo -e "${YELLOW}Skipping cargo-machete tests (not installed)${NC}"
+        return 0
+    fi
+    
+    echo -e "${BLUE}${BOLD}Running cargo-machete Tests${NC}"
+    echo -e "${BLUE}================================${NC}"
+    echo "cargo-machete detects unused dependencies in Cargo.toml"
+    echo ""
+    
+    echo -e "${BLUE}Scanning for unused dependencies...${NC}"
+    
+    # Run cargo-machete and capture output
+    if log_command_detailed "cargo_machete_analysis" "cargo machete"; then
+        echo -e "${GREEN}[OK] cargo-machete analysis completed${NC}"
+        echo -e "${BLUE}  Full output captured in: $LOG_DIR/cargo_machete_analysis_${TIMESTAMP}.log${NC}"
+        
+        # Check the log for unused dependencies
+        local log_file="$LOG_DIR/cargo_machete_analysis_${TIMESTAMP}.log"
+        if grep -q "unused dependencies" "$log_file" 2>/dev/null; then
+            local unused_count=$(grep -c "unused dependencies" "$log_file" 2>/dev/null || echo "0")
+            if [[ "$unused_count" -gt 0 ]]; then
+                echo -e "${YELLOW}[WARN] Found potential unused dependencies - check log for details${NC}"
+                echo -e "${YELLOW}  Note: cargo-machete may report false positives for conditionally used deps${NC}"
+            else
+                echo -e "${GREEN}[OK] No unused dependencies detected${NC}"
+            fi
+        else
+            echo -e "${GREEN}[OK] No unused dependencies detected${NC}"
+        fi
+    else
+        # cargo-machete exits with non-zero when it finds unused dependencies
+        echo -e "${YELLOW}[INFO] cargo-machete found potential issues${NC}"
+        echo -e "${BLUE}  Full output captured in: $LOG_DIR/cargo_machete_analysis_${TIMESTAMP}.log${NC}"
+        
+        # Don't fail the test suite for this - unused deps are warnings, not errors
+        local log_file="$LOG_DIR/cargo_machete_analysis_${TIMESTAMP}.log"
+        if [[ -f "$log_file" ]]; then
+            echo -e "${YELLOW}  Check the log file to review any unused dependencies${NC}"
+            echo -e "${YELLOW}  Note: Some dependencies may be used conditionally (features, targets, etc.)${NC}"
+        fi
+    fi
+    
+    echo ""
 }
 
 run_instruments_tests() {
@@ -970,11 +904,6 @@ if [[ "$OS_TYPE" == "Linux" ]] && [[ $RUN_VALGRIND -eq 1 ]]; then
     if ! run_valgrind_tests; then
         test_failures=$((test_failures + 1))
     fi
-fi
-
-# Run sanitizer tests
-if ! run_sanitizer_tests; then
-    test_failures=$((test_failures + 1))
 fi
 
 # Run cargo audit
