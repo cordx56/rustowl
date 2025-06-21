@@ -60,6 +60,26 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
+  vscodium-release:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - meta
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Release ovsx
+        if: needs.meta.outputs.pre_release != 'true'
+        run: |
+          yarn install --frozen-locked
+          yarn ovsx publish
+        working-directory: ./vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
   winget-release:
     runs-on: windows-latest
     needs:
