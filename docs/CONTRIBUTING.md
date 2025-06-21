@@ -117,14 +117,15 @@ Run comprehensive security analysis before submitting:
 
 # Run specific test categories
 ./scripts/security.sh --no-miri        # Skip Miri tests
-./scripts/security.sh --no-sanitizers # Skip sanitizer tests
+./scripts/security.sh --no-valgrind    # Skip Valgrind tests
+./scripts/security.sh --no-audit       # Skip cargo-audit
 ```
 
 The security script includes:
 - **Miri**: Undefined behavior detection
-- **Sanitizers**: AddressSanitizer, ThreadSanitizer, MemorySanitizer
 - **Valgrind**: Memory error detection (Linux)
 - **cargo-audit**: Security vulnerability scanning
+- **cargo-machete**: Unused dependency detection (macOS)
 - **Platform-specific tools**: Instruments (macOS)
 
 ### Performance Testing

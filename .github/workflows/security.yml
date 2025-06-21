@@ -83,29 +83,12 @@ jobs:
             ls -la security-logs/
             echo "Total log directory size: $(du -sh security-logs 2>/dev/null | cut -f1 || echo 'N/A')"
           fi
-          
-          # Clean up large build artifacts but preserve logs
-          if [ -d "target/sanitizer" ]; then
-            echo "Cleaning up sanitizer build artifacts..."
-            find target/sanitizer -name "*.rlib" -delete 2>/dev/null || true
-            find target/sanitizer -name "*.rmeta" -delete 2>/dev/null || true
-            find target/sanitizer -name "deps" -type d -exec rm -rf {} + 2>/dev/null || true
-            find target/sanitizer -name "incremental" -type d -exec rm -rf {} + 2>/dev/null || true
-          fi
 
       - name: Cleanup build artifacts (on success)
         if: success()
         shell: bash
         run: |
           echo "Security tests passed! Cleaning up build artifacts..."
-          # Clean up large build artifacts since we don't need them on success
-          if [ -d "target/sanitizer" ]; then
-            echo "Cleaning up sanitizer build artifacts..."
-            find target/sanitizer -name "*.rlib" -delete 2>/dev/null || true
-            find target/sanitizer -name "*.rmeta" -delete 2>/dev/null || true
-            find target/sanitizer -name "deps" -type d -exec rm -rf {} + 2>/dev/null || true
-            find target/sanitizer -name "incremental" -type d -exec rm -rf {} + 2>/dev/null || true
-          fi
           # Remove security logs on success to save space
           if [ -d "security-logs" ]; then
             echo "Removing security logs (tests passed)"

@@ -42,7 +42,7 @@ Analyzes binary size changes to detect bloat and track optimization efforts.
 Comprehensive security and memory safety testing framework.
 
 **Features:**
-- Multi-tool testing (Miri, Sanitizers, Valgrind, Audit)
+- Multi-tool testing (Miri, Valgrind, cargo-audit, cargo-machete)
 - Cross-platform support (Linux, macOS, ARM64)
 - Graceful degradation when tools unavailable
 - Configurable test categories and timeouts
@@ -54,12 +54,12 @@ Comprehensive security and memory safety testing framework.
 ./scripts/security.sh
 
 # Run specific test categories
-./scripts/security.sh --miri-only
-./scripts/security.sh --sanitizers-only
-./scripts/security.sh --audit-only
+./scripts/security.sh --no-miri
+./scripts/security.sh --no-valgrind
+./scripts/security.sh --no-audit
 
-# Platform-specific testing
-./scripts/security.sh --platform linux --timeout 300
+# Check available tools and configuration
+./scripts/security.sh --check
 ```
 
 ### 📊 `bench.sh` 
