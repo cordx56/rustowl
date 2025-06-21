@@ -15,9 +15,7 @@
         <a href="https://aur.archlinux.org/packages/rustowl-bin">
             <img alt="AUR Version" src="https://img.shields.io/aur/version/rustowl-bin?style=for-the-badge">
         </a>
-        <a>
-            <img alt="WinGet Package Version" src="https://img.shields.io/winget/v/Cordx56.Rustowl?style=for-the-badge">
-        </a>
+        <img alt="WinGet Package Version" src="https://img.shields.io/winget/v/Cordx56.Rustowl?style=for-the-badge">
     </p>
     <p>
         <a href="https://marketplace.visualstudio.com/items?itemName=cordx56.rustowl-vscode">
