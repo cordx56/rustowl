@@ -11,7 +11,7 @@ makedepends=('git' 'rustup' 'zig=0.13.0')
 arch=('any')
 source=("git+https://github.com/cordx56/rustowl.git")
 sha256sums=('SKIP')
-conflicts=('rustowl-bin')
+conflicts=('rustowl-bin' 'rustowl')
 
 pkgver() {
     cd "$srcdir/rustowl"
