@@ -40,7 +40,7 @@ tikv-jemalloc-sys = "0.6"
 tar = "0.4.44"
 
 [target.'cfg(windows)'.dependencies]
-zip = "4.0.0"
+zip = "4.2.0"
 
 [profile.release]
 opt-level = 3
