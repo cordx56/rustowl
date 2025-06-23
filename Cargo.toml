@@ -22,7 +22,6 @@ process_alive = "0.1"
 cargo_metadata = "0.20"
 uuid = { version = "1", features = ["v4"] }
 clap = { version = "4", features = ["cargo", "derive"] }
-tar = "0.4"
 flate2 = "1"
 reqwest = { version = "0.12", default-features = false, features = ["http2", "rustls-tls-native-roots"] }
 clap_complete_nushell = "4"
@@ -41,6 +40,7 @@ criterion = { version = "0.6", features = ["html_reports"] }
 tikv-jemallocator = "0.6"
 libc = "0.2"
 tikv-jemalloc-sys = "0.6"
+tar = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 zip = "4"
