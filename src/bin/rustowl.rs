@@ -11,11 +11,11 @@ use tower_lsp::{LspService, Server};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
+#[cfg(not(miri))]
 use mimalloc::MiMalloc;
 
 // Use mimalloc by default, but fall back to system allocator for Miri
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
+#[cfg(not(miri))]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
