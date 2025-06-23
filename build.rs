@@ -9,13 +9,16 @@ include!("src/cli.rs");
 include!("src/shells.rs");
 
 fn main() -> Result<(), Error> {
+    // Declare custom cfg flags to avoid warnings
+    println!("cargo::rustc-check-cfg=cfg(miri)");
+
     println!("cargo::rustc-env=RUSTOWL_TOOLCHAIN={}", get_toolchain());
 
-    #[cfg(not(windows))]
-    let tarball_name = format!("rustowl-{}.tar.gz", get_host_tuple().unwrap());
-
-    #[cfg(windows)]
-    let tarball_name = format!("rustowl-{}.zip", get_host_tuple().unwrap());
+    let tarball_name = if cfg!(windows) {
+        format!("rustowl-{}.zip", get_host_tuple().unwrap())
+    } else {
+        format!("rustowl-{}.tar.gz", get_host_tuple().unwrap())
+    };
 
     println!("cargo::rustc-env=RUSTOWL_ARCHIVE_NAME={tarball_name}");
 
