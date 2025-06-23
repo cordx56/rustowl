@@ -9,6 +9,31 @@
         Visualize ownership and lifetimes in Rust for debugging and optimization
     </p>
     <p>
+        <a href="https://crates.io/crates/rustowl">
+            <img alt="Crates.io Version" src="https://img.shields.io/crates/v/rustowl?style=for-the-badge">
+        </a>
+        <a href="https://aur.archlinux.org/packages/rustowl-bin">
+            <img alt="AUR Version" src="https://img.shields.io/aur/version/rustowl-bin?style=for-the-badge">
+        </a>
+        <img alt="WinGet Package Version" src="https://img.shields.io/winget/v/Cordx56.Rustowl?style=for-the-badge">
+    </p>
+    <p>
+        <a href="https://marketplace.visualstudio.com/items?itemName=cordx56.rustowl-vscode">
+            <img alt="Visual Studio Marketplace Version" src="https://img.shields.io/visual-studio-marketplace/v/cordx56.rustowl-vscode?style=for-the-badge&label=VS%20Code">
+        </a>
+        <a href="https://open-vsx.org/extension/cordx56/rustowl-vscode">
+            <img alt="Open VSX Version" src="https://img.shields.io/open-vsx/v/cordx56/rustowl-vscode?style=for-the-badge">
+        </a>
+        <a href="https://github.com/siketyan/intellij-rustowl">
+            <img alt="JetBrains Plugin Version" src="https://img.shields.io/jetbrains/plugin/v/26504-rustowl?style=for-the-badge">
+        </a>
+    </p>
+    <p>
+        <a href="https://discord.gg/XbxN949dpG">
+            <img alt="Discord" src="https://img.shields.io/discord/1379759912942436372?style=for-the-badge&logo=discord">
+        </a>
+    </p>
+    <p>
         <img src="docs/assets/readme-screenshot-3.png" />
     </p>
 </div>
@@ -32,9 +57,6 @@ Currently, we offer VSCode extension, Neovim plugin and Emacs package.
 For these editors, move the text cursor over the variable or function call you want to inspect and wait for 2 seconds to visualize the information.
 We implemented LSP server with an extended protocol.
 So, RustOwl can be used easily from other editor.
-
-We have a [Discord server](https://discord.gg/XbxN949dpG).
-Feel free to join us.
 
 ## Support
 
