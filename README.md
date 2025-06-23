@@ -24,6 +24,9 @@
         <a href="https://open-vsx.org/extension/cordx56/rustowl-vscode">
             <img alt="Open VSX Version" src="https://img.shields.io/open-vsx/v/cordx56/rustowl-vscode?style=for-the-badge">
         </a>
+        <a href="https://github.com/siketyan/intellij-rustowl">
+            <img alt="JetBrains Plugin Version" src="https://img.shields.io/jetbrains/plugin/v/26504-rustowl?style=for-the-badge">
+        </a>
     </p>
     <p>
         <a href="https://discord.gg/XbxN949dpG">
