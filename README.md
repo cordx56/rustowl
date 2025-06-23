@@ -58,6 +58,32 @@ For these editors, move the text cursor over the variable or function call you w
 We implemented LSP server with an extended protocol.
 So, RustOwl can be used easily from other editor.
 
+## Table Of Contents
+
+<!--toc:start-->
+- [Support](#support)
+- [Quick Start](#quick-start)
+  - [Prerequisite](#prerequisite)
+  - [VS Code](#vs-code)
+  - [Vscodium](#vscodium)
+- [Other editor support](#other-editor-support)
+  - [Neovim](#neovim)
+  - [Emacs](#emacs)
+  - [RustRover / IntelliJ IDEs](#rustrover-intellij-ides)
+- [Architecture / OS / package repositories](#architecture-os-package-repositories)
+  - [Windows](#windows)
+  - [Archlinux](#archlinux)
+  - [Nix flake](#nix-flake)
+- [Build manually](#build-manually)
+  - [RustOwl](#rustowl)
+    - [Prerequisite](#prerequisite)
+    - [Build & Run](#build-run)
+  - [VSCode extension](#vscode-extension)
+    - [Prerequisite](#prerequisite)
+    - [Build & Run](#build-run)
+- [Note](#note)
+<!--toc:end-->
+
 ## Support
 
 If you're looking for support, please consider checking all issues, existing discussions, and [starting a discussion](https://github.com/cordx56/rustowl/discussions/new?category=q-a) first!
