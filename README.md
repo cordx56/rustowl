@@ -8,7 +8,7 @@
     <p>
         Visualize ownership and lifetimes in Rust for debugging and optimization
     </p>
-    <p>
+    <h4>
         <a href="https://crates.io/crates/rustowl">
             <img alt="Crates.io Version" src="https://img.shields.io/crates/v/rustowl?style=for-the-badge">
         </a>
@@ -16,8 +16,8 @@
             <img alt="AUR Version" src="https://img.shields.io/aur/version/rustowl-bin?style=for-the-badge">
         </a>
         <img alt="WinGet Package Version" src="https://img.shields.io/winget/v/Cordx56.Rustowl?style=for-the-badge">
-    </p>
-    <p>
+    </h4>
+    <h4>
         <a href="https://marketplace.visualstudio.com/items?itemName=cordx56.rustowl-vscode">
             <img alt="Visual Studio Marketplace Version" src="https://img.shields.io/visual-studio-marketplace/v/cordx56.rustowl-vscode?style=for-the-badge&label=VS%20Code">
         </a>
@@ -27,12 +27,12 @@
         <a href="https://github.com/siketyan/intellij-rustowl">
             <img alt="JetBrains Plugin Version" src="https://img.shields.io/jetbrains/plugin/v/26504-rustowl?style=for-the-badge">
         </a>
-    </p>
-    <p>
+    </h4>
+    <h4>
         <a href="https://discord.gg/XbxN949dpG">
             <img alt="Discord" src="https://img.shields.io/discord/1379759912942436372?style=for-the-badge&logo=discord">
         </a>
-    </p>
+    </h4>
     <p>
         <img src="docs/assets/readme-screenshot-3.png" />
     </p>
