@@ -30,7 +30,7 @@ flate2 = "1.1.2"
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 mimalloc = { version = "0.1", default-features = false, features = ['extended'] }
 libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended'] }
-libc = "0.2.169"
+libc = "0.2"
 tar = "0.4.44"
 
 [target.'cfg(target_env = "msvc")'.dependencies]
