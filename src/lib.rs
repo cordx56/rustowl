@@ -10,3 +10,7 @@ pub mod toolchain;
 pub mod utils;
 
 pub use lsp::backend::Backend;
+
+// Miri-specific memory safety tests
+#[cfg(test)]
+mod miri_tests;

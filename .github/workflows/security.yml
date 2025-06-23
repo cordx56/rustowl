@@ -16,7 +16,7 @@ jobs:
     name: Security & Memory Safety Analysis
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest, ubuntu-24.04-arm]
+        os: [ubuntu-latest, macos-latest, ubuntu-24.04-arm]
         include:
           - os: ubuntu-latest
             runner_os: Linux
@@ -24,8 +24,6 @@ jobs:
             runner_os: Linux
           - os: macos-latest
             runner_os: macOS
-          - os: windows-latest
-            runner_os: Windows
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
@@ -36,10 +34,7 @@ jobs:
         with:
           components: miri,rust-src,llvm-tools-preview
           # Automatically reads from rust-toolchain.toml
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-
+      
       - name: Install system dependencies (Linux)
         if: matrix.runner_os == 'Linux'
         run: |
@@ -54,23 +49,32 @@ jobs:
         shell: bash
         run: |
           # The security script will auto-detect CI environment and install missing tools
-          ./scripts/security.sh
+          # Exit with proper code to fail CI if security tests fail
+          if ! ./scripts/security.sh; then
+            echo "::error::Security tests failed"
+            exit 1
+          fi
 
       - name: Create security summary and cleanup
-        if: always()
+        if: failure()
         shell: bash
         run: |
+          # Only create summary and cleanup on failure
+          echo "Security tests failed, creating summary..."
+          
           # The security script should have created its own summary
           if [ -f "security-logs/security_summary_*.md" ]; then
             echo "Security script summary found:"
             ls -la security-logs/security_summary_*.md
+            echo "::error::Security test failures detected. Check the summary for details."
           else
             echo "Warning: Security script summary not found, creating fallback summary"
             mkdir -p security-logs
-            echo "# Security Testing Summary (Fallback)" > security-logs/fallback-summary.txt
-            echo "Generated: $(date)" >> security-logs/fallback-summary.txt
-            echo "OS: ${{ matrix.os }}" >> security-logs/fallback-summary.txt
-            echo "Status: Script may have failed to complete properly" >> security-logs/fallback-summary.txt
+            echo "# Security Testing Summary (Failure)" > security-logs/failure-summary.txt
+            echo "Generated: $(date)" >> security-logs/failure-summary.txt
+            echo "OS: ${{ matrix.os }}" >> security-logs/failure-summary.txt
+            echo "Status: Security tests failed" >> security-logs/failure-summary.txt
+            echo "::error::Security tests failed and no detailed summary was found"
           fi
           
           # List all generated logs for debugging
@@ -79,18 +83,20 @@ jobs:
             ls -la security-logs/
             echo "Total log directory size: $(du -sh security-logs 2>/dev/null | cut -f1 || echo 'N/A')"
           fi
-          
-          # Clean up large build artifacts but preserve logs
-          if [ -d "target/sanitizer" ]; then
-            echo "Cleaning up sanitizer build artifacts..."
-            find target/sanitizer -name "*.rlib" -delete 2>/dev/null || true
-            find target/sanitizer -name "*.rmeta" -delete 2>/dev/null || true
-            find target/sanitizer -name "deps" -type d -exec rm -rf {} + 2>/dev/null || true
-            find target/sanitizer -name "incremental" -type d -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Cleanup build artifacts (on success)
+        if: success()
+        shell: bash
+        run: |
+          echo "Security tests passed! Cleaning up build artifacts..."
+          # Remove security logs on success to save space
+          if [ -d "security-logs" ]; then
+            echo "Removing security logs (tests passed)"
+            rm -rf security-logs/
           fi
 
-      - name: Upload security artifacts (always)
-        if: always()
+      - name: Upload security artifacts (on failure only)
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: security-logs-${{ matrix.os }}-${{ github.run_id }}

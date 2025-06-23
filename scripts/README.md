@@ -42,8 +42,8 @@ Analyzes binary size changes to detect bloat and track optimization efforts.
 Comprehensive security and memory safety testing framework.
 
 **Features:**
-- Multi-tool testing (Miri, Sanitizers, Valgrind, Audit)
-- Cross-platform support (Linux, macOS, Windows, ARM64)
+- Multi-tool testing (Miri, Valgrind, cargo-audit, cargo-machete)
+- Cross-platform support (Linux, macOS, ARM64)
 - Graceful degradation when tools unavailable
 - Configurable test categories and timeouts
 - Color-coded output with progress indicators
@@ -54,12 +54,12 @@ Comprehensive security and memory safety testing framework.
 ./scripts/security.sh
 
 # Run specific test categories
-./scripts/security.sh --miri-only
-./scripts/security.sh --sanitizers-only
-./scripts/security.sh --audit-only
+./scripts/security.sh --no-miri
+./scripts/security.sh --no-valgrind
+./scripts/security.sh --no-audit
 
-# Platform-specific testing
-./scripts/security.sh --platform linux --timeout 300
+# Check available tools and configuration
+./scripts/security.sh --check
 ```
 
 ### 📊 `bench.sh` 
@@ -107,10 +107,6 @@ sudo apt-get install -y valgrind bc gnuplot build-essential
 brew install gnuplot
 # Optional: brew install valgrind (limited support)
 ```
-
-#### Windows
-- Visual Studio Build Tools
-- Optional: Install gnuplot for enhanced benchmark reports
 
 ## Integration with CI
 
