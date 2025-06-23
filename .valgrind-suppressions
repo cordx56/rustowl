@@ -1,0 +1,51 @@
+{
+   tokio_thread_pool_cleanup
+   Memcheck:Leak
+   match-leak-kinds: possible,reachable
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create*
+   ...
+   fun:*tokio*
+}
+
+{
+   rust_thread_local_destructors
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:__cxa_thread_atexit_impl
+   fun:*std*thread_local*destructors*
+}
+
+{
+   glibc_thread_local_storage
+   Memcheck:Leak
+   match-leak-kinds: possible,reachable
+   fun:calloc
+   ...
+   fun:*std*sys*thread_local*
+}
+
+{
+   tokio_runtime_cleanup
+   Memcheck:Leak
+   match-leak-kinds: possible,reachable
+   fun:calloc
+   ...
+   fun:*tokio*runtime*
+}
+
+{
+   clap_uninitialized_memory
+   Memcheck:Cond
+   fun:*clap_builder*parser*validator*Conflicts*gather_conflicts*
+}
+
+{
+   clap_uninitialized_memory_alt
+   Memcheck:Value8
+   fun:*clap_builder*parser*validator*
+}

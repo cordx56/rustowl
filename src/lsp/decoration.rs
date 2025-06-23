@@ -602,6 +602,7 @@ impl utils::MirVisitor for CalcDecos {
             }
         }
     }
+
     fn visit_stmt(&mut self, stmt: &MirStatement) {
         if let MirStatement::Assign { rval, .. } = stmt {
             match rval {
@@ -646,6 +647,7 @@ impl utils::MirVisitor for CalcDecos {
             }
         }
     }
+
     fn visit_term(&mut self, term: &MirTerminator) {
         if let MirTerminator::Call {
             destination_local,

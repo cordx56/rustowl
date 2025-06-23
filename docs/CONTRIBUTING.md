@@ -13,10 +13,39 @@ In this document we describe how to contribute our project, as follows:
 
 Here we describe how to set up your development environment.
 
+### Manual Development Setup
+
+Set up your development environment manually by installing the required tools for your platform.
+
+#### Prerequisites
+
+**Common Requirements:**
+- Rust toolchain (automatically managed via `rust-toolchain.toml`)
+- Basic build tools
+
+**Platform-Specific Tools:**
+
+**Linux:**
+```bash
+sudo apt-get update
+sudo apt-get install -y valgrind bc gnuplot build-essential
+```
+
+**macOS:**
+```bash
+brew install gnuplot
+# Optional: brew install valgrind (limited support)
+```
+
+**Node.js Development (for VS Code extension):**
+- Node.js and yarn for VS Code extension development
+
 ### Rust code
 
 In the Rust code, we utilize nightly compiler features, which require some tweaks.
 Before starting this section, you might be required to install `rustup` since our project requires nightly compiler.
+
+Our project uses `rust-toolchain.toml` to automatically manage the correct Rust version.
 
 #### Build and test using the nightly environment
 
@@ -55,68 +84,167 @@ yarn install
 
 Before submitting PR, you have to check below:
 
-### Rust code correctness and formatting
+### Development Checks
 
-- Correctly formatted by `cargo fmt`
-- Linted using Clippy by `cargo clippy`
+We provide a comprehensive development checks script that validates code quality:
 
-### VS Code extension Style
+```bash
+# Run all development checks
+./scripts/dev-checks.sh
 
-- Correctly formatted by `yarn fmt`
+# Run checks and automatically fix issues where possible
+./scripts/dev-checks.sh --fix
+```
+
+This script performs:
+- Rust version compatibility check
+- Code formatting validation (`cargo fmt`)
+- Linting with Clippy (`cargo clippy`)
+- Build verification
+- Unit test execution
+- VS Code extension checks (formatting, linting, type checking)
+
+### Security and Memory Safety Testing
+
+Run comprehensive security analysis before submitting:
+
+```bash
+# Run all available security tests
+./scripts/security.sh
+
+# Check which security tools are available
+./scripts/security.sh --check
+
+# Run specific test categories
+./scripts/security.sh --no-miri        # Skip Miri tests
+./scripts/security.sh --no-valgrind    # Skip Valgrind tests
+./scripts/security.sh --no-audit       # Skip cargo-audit
+```
+
+The security script includes:
+- **Miri**: Undefined behavior detection
+- **Valgrind**: Memory error detection (Linux)
+- **cargo-audit**: Security vulnerability scanning
+- **cargo-machete**: Unused dependency detection (macOS)
+- **Platform-specific tools**: Instruments (macOS)
 
 ### Performance Testing
 
-Use the performance testing script to validate the performance characteristics of your changes:
+Validate that your changes don't introduce performance regressions:
 
 ```bash
-./scripts/perf-tests.sh --test
+# Run performance benchmarks
+./scripts/bench.sh
+
+# Create a baseline for comparison
+./scripts/bench.sh --save my-baseline
+
+# Compare against a baseline with custom threshold
+./scripts/bench.sh --load my-baseline --threshold 3%
+
+# Clean build and open HTML report
+./scripts/bench.sh --clean --open
 ```
 
-The script measures various performance metrics of the current code state, including execution time, memory usage, binary size, symbol counts, and more.
+Performance testing features:
+- Criterion benchmark integration
+- Baseline creation and comparison
+- Configurable regression thresholds (default: 5%)
+- Automatic test package detection
+- HTML report generation
 
-#### Basic Usage
+### Binary Size Monitoring
 
-- `./scripts/perf-tests.sh --test` - Run performance measurements (default mode)
-- `./scripts/perf-tests.sh --verify` - Check system readiness and tool availability
-- `./scripts/perf-tests.sh --help` - See all options
-
-#### Common Testing Scenarios
+Check for binary size regressions:
 
 ```bash
-# Basic performance test with default metrics (size + time)
-./scripts/perf-tests.sh --test
+# Analyze current binary sizes
+./scripts/size-check.sh
 
-# Comprehensive testing with all available metrics
-./scripts/perf-tests.sh --test --full
+# Compare against a saved baseline
+./scripts/size-check.sh --load previous-baseline
 
-# Test with comprehensive RustOwl analysis (all targets and features)
-./scripts/perf-tests.sh --test --all-targets --all-features
-
-# Memory-focused testing with multiple runs
-./scripts/perf-tests.sh --test --memory --symbols --runs 5
-
-# Save results to markdown for documentation
-./scripts/perf-tests.sh --test --markdown results.md
-
-# Compare with previous results
-./scripts/perf-tests.sh --test --compare previous-results.md
-
-# Benchmark performance impact of comprehensive analysis vs default
-./scripts/perf-tests.sh --test --runs 5 --markdown default-analysis.md
-./scripts/perf-tests.sh --test --all-targets --all-features --runs 5 --markdown comprehensive-analysis.md
+# Save current sizes as baseline
+./scripts/size-check.sh --save new-baseline
 ```
 
-#### Metrics Available
+### Manual Checks
 
-- **Binary Analysis**: Size, symbol count, debug symbol overhead
-- **Runtime Performance**: Execution time, memory usage, page faults, context switches
-- **Advanced Analysis**: Static analysis, memory profiling, CPU profiling recommendations
+If the automated scripts are not available, ensure:
 
-#### Performance Considerations
+#### Rust code correctness and formatting
+- Correctly formatted by `cargo fmt`
+- Linted using Clippy by `cargo clippy`
+- All tests pass with `cargo test`
 
-System caches can affect measurements. Use `--cold` (default) to clear caches between tests for consistent results, or `--warm` to test with realistic cached performance.
+#### VS Code extension Style
+- Correctly formatted by `yarn prettier --write src`
+- Linting passes with `yarn lint`
+- Type checking passes with `yarn check-types`
 
-**Requirements:** `git`, `cargo`, `bc`  
-**Optional:** `hyperfine`, `valgrind`, `nm`, `perf` for enhanced analysis
+## Development Workflow
 
-See the detailed (perf-tests.md)[./perf-tests.md] for more info.
+### Recommended Development Process
+
+1. **Before making changes**:
+   ```bash
+   # Create performance baseline
+   ./scripts/bench.sh --save before-changes
+   ```
+
+2. **During development**:
+   ```bash
+   # Run quick checks frequently
+   ./scripts/dev-checks.sh --fix
+   ```
+
+3. **Before committing**:
+   ```bash
+   # Run comprehensive validation
+   ./scripts/dev-checks.sh
+   ./scripts/security.sh
+   ./scripts/bench.sh --load before-changes
+   ./scripts/size-check.sh
+   ```
+
+### Integration with CI
+
+Our scripts are designed to match CI workflows:
+- **`security.sh`** ↔ **`.github/workflows/security.yml`**
+- **`bench.sh`** ↔ **`.github/workflows/bench-performance.yml`**
+- **`dev-checks.sh`** ↔ **`.github/workflows/checks.yml`**
+
+This ensures local testing provides the same results as CI.
+
+## Troubleshooting
+
+### Script Permissions
+```bash
+chmod +x scripts/*.sh
+```
+
+### Missing Tools
+
+Install the required tools manually using the platform-specific commands in the Prerequisites section above.
+
+### Platform-Specific Issues
+
+#### Linux
+```bash
+sudo apt-get update
+sudo apt-get install -y valgrind bc gnuplot build-essential
+```
+
+#### macOS
+```bash
+brew install gnuplot
+# Valgrind has limited support on macOS
+```
+
+### CI Failures
+- Check workflow logs for specific error messages
+- Verify `rust-toolchain.toml` compatibility
+- Ensure scripts have execution permissions
+- Test locally with the same script used in CI
+
+For more detailed information about the scripts, see [`scripts/README.md`](../scripts/README.md).

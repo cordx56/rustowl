@@ -9,6 +9,31 @@
         Visualize ownership and lifetimes in Rust for debugging and optimization
     </p>
     <p>
+        <a href="https://crates.io/crates/rustowl">
+            <img alt="Crates.io Version" src="https://img.shields.io/crates/v/rustowl?style=for-the-badge">
+        </a>
+        <a href="https://aur.archlinux.org/packages/rustowl-bin">
+            <img alt="AUR Version" src="https://img.shields.io/aur/version/rustowl-bin?style=for-the-badge">
+        </a>
+        <img alt="WinGet Package Version" src="https://img.shields.io/winget/v/Cordx56.Rustowl?style=for-the-badge">
+    </p>
+    <p>
+        <a href="https://marketplace.visualstudio.com/items?itemName=cordx56.rustowl-vscode">
+            <img alt="Visual Studio Marketplace Version" src="https://img.shields.io/visual-studio-marketplace/v/cordx56.rustowl-vscode?style=for-the-badge&label=VS%20Code">
+        </a>
+        <a href="https://open-vsx.org/extension/cordx56/rustowl-vscode">
+            <img alt="Open VSX Version" src="https://img.shields.io/open-vsx/v/cordx56/rustowl-vscode?style=for-the-badge">
+        </a>
+        <a href="https://github.com/siketyan/intellij-rustowl">
+            <img alt="JetBrains Plugin Version" src="https://img.shields.io/jetbrains/plugin/v/26504-rustowl?style=for-the-badge">
+        </a>
+    </p>
+    <p>
+        <a href="https://discord.gg/XbxN949dpG">
+            <img alt="Discord" src="https://img.shields.io/discord/1379759912942436372?style=for-the-badge&logo=discord">
+        </a>
+    </p>
+    <p>
         <img src="docs/assets/readme-screenshot-3.png" />
     </p>
 </div>
@@ -37,6 +62,8 @@ So, RustOwl can be used easily from other editor.
 
 If you're looking for support, please consider checking all issues, existing discussions, and [starting a discussion](https://github.com/cordx56/rustowl/discussions/new?category=q-a) first!
 
+Also, you can reach out to us on the Discord server provided above.
+
 ## Quick Start
 
 Here we describe how to start using RustOwl with VS Code.
@@ -52,6 +79,11 @@ We tested this guide on macOS Sequoia 15.3.2 on arm64 architecture with VS Code 
 ### VS Code
 
 You can install VS Code extension from [this link](https://marketplace.visualstudio.com/items?itemName=cordx56.rustowl-vscode).
+RustOwl will be installed automatically when the extension is activated.
+
+### Vscodium
+
+You can install Vscodium extension from [this link](https://open-vsx.org/extension/cordx56/rustowl-vscode).
 RustOwl will be installed automatically when the extension is activated.
 
 After installation, the extension will automatically run RustOwl when you save any Rust program in cargo workspace.

@@ -60,6 +60,26 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
+  vscodium-release:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - meta
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Release ovsx
+        if: needs.meta.outputs.pre_release != 'true'
+        run: |
+          yarn install --frozen-locked
+          yarn ovsx publish
+        working-directory: ./vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
   winget-release:
     runs-on: windows-latest
     needs:
@@ -122,11 +142,10 @@ jobs:
           pattern: rustowl-*
           merge-multiple: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-ids: ${{ needs.build.outputs.run_id }}
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
           draft: true
           body_path: release.md
-          prerelease: ${{ needs.meta.outputs.pre_release == 'true' }}
+          prerelease: ${{ needs.meta.outputs.pre_release == 'true' }} 
