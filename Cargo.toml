@@ -27,6 +27,17 @@ reqwest = { version = "0.12", default-features = false, features = ["http2", "ru
 clap_complete_nushell = "4"
 clap_complete = "4"
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+mimalloc = { version = "0.1", default-features = false, features = ['extended'] }
+libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended'] }
+libc = "0.2"
+tar = "0.4.44"
+
+[target.'cfg(target_env = "msvc")'.dependencies]
+zip = "4.0.0"
+mimalloc = { version = "0.1", default-features = false, features = ['extended', 'override'] }
+libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended', 'override'] }
+
 [build-dependencies]
 clap_complete_nushell = "4"
 clap_complete = "4"
@@ -35,15 +46,6 @@ clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 criterion = { version = "0.6", features = ["html_reports"] }
-
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.6"
-libc = "0.2"
-tikv-jemalloc-sys = "0.6"
-tar = "0.4"
-
-[target.'cfg(windows)'.dependencies]
-zip = "4"
 
 [[bench]]
 name = "rustowl_bench_simple"
