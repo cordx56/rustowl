@@ -11,13 +11,13 @@ use tower_lsp::{LspService, Server};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
-use tikv_jemallocator::Jemalloc;
+#[cfg(not(miri))]
+use mimalloc::MiMalloc;
 
-// Use jemalloc by default, but fall back to system allocator for Miri
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
+// Use mimalloc by default, but fall back to system allocator for Miri
+#[cfg(not(miri))]
 #[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn set_log_level(default: log::LevelFilter) {
     log::set_max_level(

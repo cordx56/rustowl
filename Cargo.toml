@@ -27,20 +27,22 @@ clap_complete_nushell = "4.5.7"
 clap_complete = "4.5.54"
 flate2 = "1.1.2"
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+mimalloc = { version = "0.1", default-features = false, features = ['extended'] }
+libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended'] }
+libc = "0.2"
+tar = "0.4.44"
+
+[target.'cfg(target_env = "msvc")'.dependencies]
+zip = "4.0.0"
+mimalloc = { version = "0.1", default-features = false, features = ['extended', 'override'] }
+libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended', 'override'] }
+
 [build-dependencies]
 clap_complete_nushell = "4.5.7"
 clap_complete = "4.5.54"
 clap_mangen = "0.2.27"
 clap = { version = "4.5.40", features = ["derive"] }
-
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.6"
-libc = "0.2.172"
-tikv-jemalloc-sys = "0.6"
-tar = "0.4.44"
-
-[target.'cfg(windows)'.dependencies]
-zip = "4.0.0"
 
 [profile.release]
 opt-level = 3
