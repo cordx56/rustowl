@@ -9,7 +9,7 @@ fn bench_rustowl_check(c: &mut Criterion) {
     let mut group = c.benchmark_group("rustowl_check");
     group
         .sample_size(10)
-        .measurement_time(Duration::from_secs(50)) 
+        .measurement_time(Duration::from_secs(50))
         .warm_up_time(Duration::from_secs(3));
 
     // Ensure rustowl binary is built
