@@ -213,8 +213,21 @@ Our scripts are designed to match CI workflows:
 - **`security.sh`** ↔ **`.github/workflows/security.yml`**
 - **`bench.sh`** ↔ **`.github/workflows/bench-performance.yml`**
 - **`dev-checks.sh`** ↔ **`.github/workflows/checks.yml`**
+- **Arch Linux validation** ↔ **`.github/workflows/archlinux-validation.yml`**
 
 This ensures local testing provides the same results as CI.
+
+### Arch Linux Container Validation
+
+For testing workflow changes and AUR package builds, we use an Arch Linux container:
+
+```bash
+# The workflow automatically triggers on changes to:
+# - .github/workflows/**
+# - aur/**
+```
+
+This validation ensures that workflow changes don't break the CI process and validates AUR package builds in a clean Arch Linux environment.
 
 ## Troubleshooting
 

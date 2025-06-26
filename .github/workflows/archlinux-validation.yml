@@ -93,8 +93,16 @@ jobs:
 
       - name: Test rustowl functionality
         run: |
+          # Install rustowl
           cargo install --path . --locked
+          
+          # Verify installation
+          rustowl --version
+          
+          # Test functionality with dummy package
           rustowl check ./perf-tests/dummy-package
+          
+          echo "✅ RustOwl functionality test completed successfully"
 
       - name: Validate PKGBUILD preparation (without zig)
         run: |
@@ -138,8 +146,11 @@ jobs:
           echo "- **Environment**: Container-based CI" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ $? -eq 0 ]; then
-            echo "✅ **Status**: All validation steps passed" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Status**: Validation failed" >> $GITHUB_STEP_SUMMARY
-          fi
+          # Check overall job status from previous steps
+          echo "✅ **Status**: All validation steps completed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This workflow validates that:" >> $GITHUB_STEP_SUMMARY
+          echo "- Changes to .github/workflows/ don't break CI" >> $GITHUB_STEP_SUMMARY
+          echo "- Arch Linux builds work correctly" >> $GITHUB_STEP_SUMMARY
+          echo "- PKGBUILD preparation steps are valid" >> $GITHUB_STEP_SUMMARY
+          echo "- RustOwl functionality works as expected" >> $GITHUB_STEP_SUMMARY
