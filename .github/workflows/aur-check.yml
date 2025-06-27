@@ -26,14 +26,8 @@ jobs:
           pacman -Syu --noconfirm
           
           pacman -S --noconfirm \
-            base-devel \
-            git \
-            curl \
-            which \
-            pkg-config \
             namcap \
-            shellcheck \
-            sudo
+            shellcheck
             
       - name: Setup build user
         run: |
