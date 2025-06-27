@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
-makedepends=('rustup' 'clang' 'perl')
+makedepends=('rustup' 'perl' 'gcc')
 depends=()
 conflicts=('rustowl-git' 'rustowl-bin')
 arch=('any')
@@ -16,9 +16,6 @@ sha256sums=('fa120643aeb48061eb32a7c993dabff88aa4e9d0b32f8ab0f3289b3fb2cf5744')
 
 prepare() {
     cd rustowl-${pkgver}
-    export RUSTFLAGS="-Cforce-frame-pointers=yes -Clinker=clang"
-    export CC=clang
-    export CXX=clang++
     export RUSTC_BOOTSTRAP=1
     export RUSTUP_TOOLCHAIN=1.87.0
     rustup component add rust-src rustc-dev llvm-tools
@@ -27,9 +24,6 @@ prepare() {
 
 build() {
     cd rustowl-${pkgver}
-    export RUSTFLAGS="-Cforce-frame-pointers=yes -Clinker=clang"
-    export CC=clang
-    export CXX=clang++
     export CARGO_TARGET_DIR=target
     export RUSTC_BOOTSTRAP=1
     export RUSTUP_TOOLCHAIN=1.87.0
@@ -38,9 +32,6 @@ build() {
 }
 
 check() {
-    export RUSTFLAGS="-Cforce-frame-pointers=yes -Clinker=clang"
-    export CC=clang
-    export CXX=clang++
     cd rustowl-${pkgver}
     export RUSTC_BOOTSTRAP=1
     export RUSTUP_TOOLCHAIN=1.87.0
@@ -48,9 +39,6 @@ check() {
 }
 
 package() {
-    export RUSTFLAGS="-Cforce-frame-pointers=yes -Clinker=clang"
-    export CC=clang
-    export CXX=clang++
     cd rustowl-${pkgver}
     find target -type d | grep -E 'rustowl-build-time-out$' | xargs -I % cp -r % ./
     mkdir sysroot
