@@ -66,7 +66,7 @@ jobs:
               echo -e "${CYAN}============ Validating [${NC}${filename}${CYAN}] ============${NC}\n\n"
               
               echo -e "${YELLOW}============ Running Shellcheck On${NC} ${filename} ${YELLOW}============${NC}\n"
-              if shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "${pkgbuild}"; then
+              if shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "${pathname}"; then
                 echo -e "${GREEN}✅ Shellcheck passed${NC}"
               else
                 echo -e "${RED}❌ Shellcheck failed${NC}"
@@ -77,7 +77,7 @@ jobs:
               chown -R builder:builder "${dirname}"
               
               echo -e "${BLUE}============ Running Namcap On${NC} ${filename} ${BLUE}============${NC}\n"
-              if namcap "${pkgbuild}"; then
+              if namcap "${pathname}"; then
                 echo -e "${GREEN}✅ Namcap passed${NC}"
               else
                 echo -e "${RED}❌ Namcap failed${NC}"
