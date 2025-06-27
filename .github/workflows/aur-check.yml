@@ -72,6 +72,7 @@ jobs:
               
               chown -R builder:builder "${pkgbuild}"
               chown -R builder:builder "$(dirname ${pkgbuild})"
+              chown -R builder:builder .
               
               echo -e "${BLUE}============ Running Namcap ============${NC}"
               if namcap "${pkgbuild}"; then
