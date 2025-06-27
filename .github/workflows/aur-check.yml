@@ -11,9 +11,6 @@ on:
       - 'aur/**'
   workflow_dispatch:
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   archlinux-validation:
     name: Arch Linux Container Build & Test
