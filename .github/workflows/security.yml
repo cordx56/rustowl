@@ -34,6 +34,7 @@ jobs:
         with:
           components: miri,rust-src,llvm-tools-preview,rustc-dev
           # Automatically reads from rust-toolchain.toml
+          cache: false
       
       - name: Install system dependencies (Linux)
         if: matrix.runner_os == 'Linux'
