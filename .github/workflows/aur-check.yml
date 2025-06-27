@@ -47,28 +47,56 @@ jobs:
 
       - name: Validate PKGBUILD files
         run: |
+          # Color codes
+          RED='\033[0;31m'
+          GREEN='\033[0;32m'
+          YELLOW='\033[1;33m'
+          BLUE='\033[0;34m'
+          MAGENTA='\033[0;35m'
+          CYAN='\033[0;36m'
+          WHITE='\033[1;37m'
+          NC='\033[0m' # No Color
+          
           for pkgbuild in aur/PKGBUILD*; do
             if [ -f "$pkgbuild" ]; then
-              echo "Validating $pkgbuild"
-
-              echo "============ Running Shellcheck ============"
-              shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "$pkgbuild"
+              echo -e "${CYAN}============ Validating${NC} ${WHITE}$pkgbuild${NC} ${CYAN}============${NC}"
+              
+              echo -e "${YELLOW}============ Running Shellcheck ============${NC}"
+              if shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "$pkgbuild"; then
+                echo -e "${GREEN}✅ Shellcheck passed${NC}"
+              else
+                echo -e "${RED}❌ Shellcheck failed${NC}"
+                exit 1
+              fi
               
               temp_dir=$(mktemp -d)
               cp "$pkgbuild" "$temp_dir/PKGBUILD"
               chown -R builder:builder "$temp_dir"
-
-              echo "============ Running Namcap ============"
-              namcap "$pkgbuild"
-
-              echo "============ Running Makepkg ============"
-              sudo -u builder bash -c "
+              
+              echo -e "${BLUE}============ Running Namcap ============${NC}"
+              if namcap "$pkgbuild"; then
+                echo -e "${GREEN}✅ Namcap passed${NC}"
+              else
+                echo -e "${RED}❌ Namcap failed${NC}"
+                exit 1
+              fi
+              
+              echo -e "${MAGENTA}============ Running Makepkg ============${NC}"
+              if sudo -u builder bash -c "
                 cd '$temp_dir'
                 makepkg -si --noconfirm
-              "
+              "; then
+                echo -e "${GREEN}✅ Makepkg completed successfully${NC}"
+              else
+                echo -e "${RED}❌ Makepkg failed${NC}"
+                exit 1
+              fi
               
               rm -rf "$temp_dir"
               
-              echo "✅ $pkgbuild validation completed"
+              echo -e "${GREEN}🎉 $pkgbuild validation completed successfully!${NC}"
+              echo ""
             fi
           done
+          
+          echo -e "${GREEN}🚀 All PKGBUILD files validated successfully!${NC}"
