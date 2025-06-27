@@ -33,7 +33,14 @@ jobs:
             which \
             pkg-config \
             namcap \
-            shellcheck
+            shellcheck \
+            sudo
+            
+      - name: Setup build user
+        run: |
+          useradd -m -s /bin/bash builder
+          
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
             
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -43,18 +50,23 @@ jobs:
           for pkgbuild in aur/PKGBUILD*; do
             if [ -f "$pkgbuild" ]; then
               echo "Validating $pkgbuild"
-              
+
+              echo "============ Running Shellcheck ============"
               shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "$pkgbuild"
               
               temp_dir=$(mktemp -d)
               cp "$pkgbuild" "$temp_dir/PKGBUILD"
-              cd "$temp_dir"
+              chown -R builder:builder "$temp_dir"
+
+              echo "============ Running Namcap ============"
+              namcap "$pkgbuild"
+
+              echo "============ Running Makepkg ============"
+              sudo -u builder bash -c "
+                cd '$temp_dir'
+                makepkg -si --noconfirm
+              "
               
-              namcap PKGBUILD
-              
-              makepkg -si --noconfirm
-              
-              cd /
               rm -rf "$temp_dir"
               
               echo "✅ $pkgbuild validation completed"
