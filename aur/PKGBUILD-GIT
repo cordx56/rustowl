@@ -32,7 +32,7 @@ build() {
     export RUSTC_BOOTSTRAP=1
     export RUSTUP_TOOLCHAIN=1.87.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
-    cargo build --frozen --release --all-features --target $(rustc --print=host-tuple)
+    cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)"
 }
 
 check() {
@@ -47,7 +47,7 @@ package() {
     find target -type d | grep -E 'rustowl-build-time-out$' | xargs -I % cp -r % ./
     mkdir sysroot
     ACTIVE_TOOLCHAIN="$(rustup show active-toolchain | awk '{ print $1 }')"
-    cp -r "$(rustc --print=sysroot)" sysroot/$ACTIVE_TOOLCHAIN
+    cp -r "$(rustc --print=sysroot)" sysroot/"$ACTIVE_TOOLCHAIN"
     find sysroot -type f | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf
     find sysroot -depth -type d -empty -exec rm -rf {} \;
     install -d -m 755 "$pkgdir/opt/rustowl"
