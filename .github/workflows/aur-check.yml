@@ -58,11 +58,14 @@ jobs:
           WHITE='\033[1;37m'
           NC='\033[0m' # No Color
           
-          for pkgbuild in aur/PKGBUILD*; do
-            if [ -f "${pkgbuild}" ]; then
-              echo -e "${CYAN}============ Validating [${NC}${pkgbuild}${CYAN}] ============${NC}"
+          for pathname in aur/PKGBUILD*; do
+            if [ -f "${pathname}" ]; then
+              filename=$(basename ${pathname})
+              dirname=$(dirname ${pathname})
               
-              echo -e "${YELLOW}============ Running Shellcheck ============${NC}"
+              echo -e "${CYAN}============ Validating [${NC}${filename}${CYAN}] ============${NC}\n\n"
+              
+              echo -e "${YELLOW}============ Running Shellcheck On${NC} ${filename} ${YELLOW}============${NC}\n"
               if shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "${pkgbuild}"; then
                 echo -e "${GREEN}✅ Shellcheck passed${NC}"
               else
@@ -70,10 +73,10 @@ jobs:
                 exit 1
               fi
               
-              chown -R builder:builder "${pkgbuild}"
-              chown -R builder:builder "$(dirname ${pkgbuild})"
+              chown -R builder:builder "${pathname}"
+              chown -R builder:builder "${dirname}"
               
-              echo -e "${BLUE}============ Running Namcap ============${NC}"
+              echo -e "${BLUE}============ Running Namcap On${NC} ${filename} ${BLUE}============${NC}\n"
               if namcap "${pkgbuild}"; then
                 echo -e "${GREEN}✅ Namcap passed${NC}"
               else
@@ -81,12 +84,12 @@ jobs:
                 exit 1
               fi
               
-              echo -e "${MAGENTA}============ Running Makepkg ============${NC}"
+              echo -e "${MAGENTA}============ Running Makepkg On${NC} ${filename} ${MAGENTA}============${NC}"
 
               if sudo -u builder bash -c "
                 set -e
-                cd "$(dirname ${pkgbuild})"
-                makepkg -scf --noconfirm -p "$(basename ${pkgbuild})"
+                cd "${dirname}"
+                makepkg -scf --noconfirm -p "${filename}"
               "; then
                 echo -e "${GREEN}✅ Makepkg completed successfully${NC}"
               else
@@ -95,7 +98,7 @@ jobs:
               fi
               
               
-              echo -e "${GREEN}🎉 $pkgbuild validation completed successfully!${NC}"
+              echo -e "${GREEN}🎉 ${filename} Validation Completed Successfully!${NC}"
               echo ""
             fi
           done
