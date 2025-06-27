@@ -72,7 +72,6 @@ jobs:
               
               chown -R builder:builder "${pkgbuild}"
               chown -R builder:builder "$(dirname ${pkgbuild})"
-              chown -R builder:builder .
               
               echo -e "${BLUE}============ Running Namcap ============${NC}"
               if namcap "${pkgbuild}"; then
@@ -86,7 +85,8 @@ jobs:
 
               if sudo -u builder bash -c "
                 set -e
-                makepkg -scf --noconfirm -p ${pkgbuild}
+                cd "$(dirname ${pkgbuild})"
+                makepkg -scf --noconfirm -p "$(basename ${pkgbuild})"
               "; then
                 echo -e "${GREEN}✅ Makepkg completed successfully${NC}"
               else
