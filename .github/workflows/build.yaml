@@ -32,6 +32,7 @@ jobs:
     env:
       RUSTUP_TOOLCHAIN: 1.87.0
       RUSTC_BOOTSTRAP: rustowlc
+      RUSTOWL_SYSROOTS: "/opt/rustowl"
 
     steps:
       - name: Checkout
