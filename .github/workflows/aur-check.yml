@@ -27,7 +27,8 @@ jobs:
           
           pacman -S --noconfirm \
             namcap \
-            shellcheck
+            shellcheck \
+            sudo
             
       - name: Setup build user
         run: |
