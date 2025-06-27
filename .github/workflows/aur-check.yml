@@ -9,6 +9,8 @@ on:
     paths:
       - '.github/workflows/aur-check.yml'
       - 'aur/**'
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -44,6 +46,8 @@ jobs:
 
       - name: Validate PKGBUILD files
         run: |
+          set -e
+          
           # Color codes
           RED='\033[0;31m'
           GREEN='\033[0;32m'
@@ -55,23 +59,21 @@ jobs:
           NC='\033[0m' # No Color
           
           for pkgbuild in aur/PKGBUILD*; do
-            if [ -f "$pkgbuild" ]; then
-              echo -e "${CYAN}============ Validating${NC} ${WHITE}$pkgbuild${NC} ${CYAN}============${NC}"
+            if [ -f "${pkgbuild}" ]; then
+              echo -e "${CYAN}============ Validating [${NC}${pkgbuild}${CYAN}] ============${NC}"
               
               echo -e "${YELLOW}============ Running Shellcheck ============${NC}"
-              if shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "$pkgbuild"; then
+              if shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "${pkgbuild}"; then
                 echo -e "${GREEN}✅ Shellcheck passed${NC}"
               else
                 echo -e "${RED}❌ Shellcheck failed${NC}"
                 exit 1
               fi
               
-              temp_dir=$(mktemp -d)
-              cp "$pkgbuild" "$temp_dir/PKGBUILD"
-              chown -R builder:builder "$temp_dir"
+              chown -R builder:builder "${pkgbuild}"
               
               echo -e "${BLUE}============ Running Namcap ============${NC}"
-              if namcap "$pkgbuild"; then
+              if namcap "${pkgbuild}"; then
                 echo -e "${GREEN}✅ Namcap passed${NC}"
               else
                 echo -e "${RED}❌ Namcap failed${NC}"
@@ -79,9 +81,10 @@ jobs:
               fi
               
               echo -e "${MAGENTA}============ Running Makepkg ============${NC}"
+
               if sudo -u builder bash -c "
-                cd '$temp_dir'
-                makepkg -si --noconfirm
+                set -e
+                makepkg -scf --noconfirm -p ${pkgbuild}
               "; then
                 echo -e "${GREEN}✅ Makepkg completed successfully${NC}"
               else
@@ -89,7 +92,6 @@ jobs:
                 exit 1
               fi
               
-              rm -rf "$temp_dir"
               
               echo -e "${GREEN}🎉 $pkgbuild validation completed successfully!${NC}"
               echo ""
