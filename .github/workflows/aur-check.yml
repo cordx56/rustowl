@@ -28,6 +28,8 @@ jobs:
           pacman -S --noconfirm \
             namcap \
             shellcheck \
+            debugedit \
+            fakeroot \
             sudo
             
       - name: Setup build user
