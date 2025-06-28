@@ -35,7 +35,7 @@ jobs:
             fakeroot \
             # For testing
             openssl \
-            pkg-config \
+            pkgconf \
             nasm \
             sudo
 
