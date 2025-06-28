@@ -33,7 +33,6 @@ jobs:
             shellcheck \
             debugedit \
             fakeroot \
-            # For testing
             openssl \
             pkgconf \
             nasm \
