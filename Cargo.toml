@@ -12,14 +12,14 @@ keywords = ["visualization", "ownership", "lifetime", "lsp"]
 categories = ["development-tools", "visualization"]
 
 [dependencies]
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-log = "0.4.27"
-simple_logger = { version = "5.0.0", features = ["stderr"] }
-tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "process", "fs"] }
-tower-lsp = "0.20.0"
-process_alive = "0.1.1"
-cargo_metadata = "0.20.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+simple_logger = { version = "5", features = ["stderr"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "process", "fs"] }
+tower-lsp = "0.20"
+process_alive = "0.1"
+cargo_metadata = "0.20"
 uuid = { version = "1", features = ["v4"] }
 clap = { version = "4.5.40", features = ["cargo", "derive"] }
 reqwest = { version = "0.12.19", default-features = false, features = ["http2", "native-tls-vendored"] }
@@ -39,10 +39,17 @@ mimalloc = { version = "0.1", default-features = false, features = ['extended', 
 libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended', 'override'] }
 
 [build-dependencies]
-clap_complete_nushell = "4.5.7"
-clap_complete = "4.5.54"
-clap_mangen = "0.2.27"
-clap = { version = "4.5.40", features = ["derive"] }
+clap_complete_nushell = "4"
+clap_complete = "4"
+clap_mangen = "0.2"
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+criterion = { version = "0.6", features = ["html_reports"] }
+
+[[bench]]
+name = "rustowl_bench_simple"
+harness = false
 
 [profile.release]
 opt-level = 3
@@ -59,7 +66,7 @@ inherits = "release"
 lto = "off"
 
 [profile.security]
-inherits = "dev"
+inherits = "release"
 debug = true
 debug-assertions = true
 overflow-checks = true
