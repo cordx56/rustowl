@@ -21,11 +21,11 @@ tower-lsp = "0.20"
 process_alive = "0.1"
 cargo_metadata = "0.20"
 uuid = { version = "1", features = ["v4"] }
-clap = { version = "4.5.40", features = ["cargo", "derive"] }
-clap_complete_nushell = "4.5.7"
-clap_complete = "4.5.54"
-flate2 = "1.1.2"
-reqwest = { version = "0.12.20", default-features = false, features = ["native-tls-vendored", "http2"] }
+clap = { version = "4", features = ["cargo", "derive"] }
+clap_complete_nushell = "4"
+clap_complete = "4"
+flate2 = "1"
+reqwest = { version = "0.12", default-features = false, features = ["native-tls-vendored", "http2"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 mimalloc = { version = "0.1", default-features = false, features = ['extended'] }
