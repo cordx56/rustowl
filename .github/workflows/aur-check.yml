@@ -35,10 +35,18 @@ jobs:
             fakeroot \
             # For testing
             openssl \
-            openssl-devel \
             pkg-config \
             nasm \
             sudo
+
+      - name: Cache Pacman Dependencies
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/pacman/pkg
+          key: ${{ runner.os }}-pacman-${{ hashFiles('/etc/pacman.conf', '/etc/makepkg.config', '/etc/makepkg/rust.conf') }}
+          restore-keys: |
+            ${{ runner.os }}-pacman-
+
 
       - name: Setup build user
         run: |
