@@ -21,6 +21,9 @@ jobs:
       image: archlinux:latest
     
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install base dependencies
         run: |
           pacman -Syu --noconfirm
@@ -30,21 +33,23 @@ jobs:
             shellcheck \
             debugedit \
             fakeroot \
+            # For testing
+            openssl \
+            openssl-devel \
+            pkg-config \
+            nasm \
             sudo
-            
+
       - name: Setup build user
         run: |
           useradd -m -s /bin/bash builder
-          
+
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-            
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
       - name: Validate PKGBUILD files
         run: |
           set -e
-          
+
           # Color codes
           RED='\033[0;31m'
           GREEN='\033[0;32m'
@@ -54,14 +59,14 @@ jobs:
           CYAN='\033[0;36m'
           WHITE='\033[1;37m'
           NC='\033[0m' # No Color
-          
+
           for pathname in aur/PKGBUILD*; do
             if [ -f "${pathname}" ]; then
               filename=$(basename ${pathname})
               dirname=$(dirname ${pathname})
-              
+
               echo -e "${CYAN}============ Validating [${NC}${filename}${CYAN}] ============${NC}\n\n"
-              
+
               echo -e "${YELLOW}============ Running Shellcheck On${NC} ${filename} ${YELLOW}============${NC}\n"
               if shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "${pathname}"; then
                 echo -e "${GREEN}✅ Shellcheck passed${NC}"
@@ -69,10 +74,10 @@ jobs:
                 echo -e "${RED}❌ Shellcheck failed${NC}"
                 exit 1
               fi
-              
+
               chown -R builder:builder "${pathname}"
               chown -R builder:builder "${dirname}"
-              
+
               echo -e "${BLUE}============ Running Namcap On${NC} ${filename} ${BLUE}============${NC}\n"
               if namcap "${pathname}"; then
                 echo -e "${GREEN}✅ Namcap passed${NC}"
@@ -80,7 +85,7 @@ jobs:
                 echo -e "${RED}❌ Namcap failed${NC}"
                 exit 1
               fi
-              
+
               echo -e "${MAGENTA}============ Running Makepkg On${NC} ${filename} ${MAGENTA}============${NC}"
 
               if sudo -u builder bash -c "
@@ -93,11 +98,10 @@ jobs:
                 echo -e "${RED}❌ Makepkg failed${NC}"
                 exit 1
               fi
-              
-              
+
               echo -e "${GREEN}🎉 ${filename} Validation Completed Successfully!${NC}"
               echo ""
             fi
           done
-          
+
           echo -e "${GREEN}🚀 All PKGBUILD files validated successfully!${NC}"
