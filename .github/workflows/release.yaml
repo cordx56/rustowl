@@ -14,6 +14,7 @@ jobs:
     uses: ./.github/workflows/build.yaml
 
   meta:
+    name: Check Version
     runs-on: ubuntu-latest
     outputs:
       pre_release: ${{ steps.pre-release.outputs.pre_release }}
@@ -28,6 +29,7 @@ jobs:
           fi
 
   crates-io-release:
+    name: Create Crates.io release
     runs-on: ubuntu-latest
     needs:
       - build
@@ -41,6 +43,7 @@ jobs:
           cargo publish
 
   vscode-release:
+    name: Create Vscode Release
     runs-on: ubuntu-latest
     needs:
       - build
@@ -61,6 +64,7 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
   vscodium-release:
+    name: Create Vscodium Release
     runs-on: ubuntu-latest
     needs:
       - build
@@ -81,6 +85,7 @@ jobs:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
   winget-release:
+    name: Create Winget Release
     runs-on: windows-latest
     needs:
       - build
@@ -93,6 +98,7 @@ jobs:
           token: ${{ secrets.WINGET_TOKEN }}
 
   aur-release:
+    name: Create AUR Release
     runs-on: ubuntu-latest
     needs:
       - build
@@ -134,6 +140,7 @@ jobs:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
 
   github-release:
+    name: Create A GitHub Release
     runs-on: ubuntu-latest
     needs:
       - build
@@ -165,3 +172,33 @@ jobs:
           draft: true
           body_path: release.md
           prerelease: ${{ needs.meta.outputs.pre_release == 'true' }} 
+
+  docker:
+    name: Release To GitHub Container Registry
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
