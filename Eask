@@ -9,7 +9,7 @@
 
 (package-file "emacs/rustowl.el")
 
-(script "test" "eask test ert emacs/eask-test.el")
+(script "test" "eask test ert emacs/test.el")
 
 (source "gnu")
 (source "melpa")

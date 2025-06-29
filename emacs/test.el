@@ -1,4 +1,4 @@
-;;; eask-test.el --- Tests for rustowl.el using Eask and ert -*- lexical-binding: t; -*-
+;;; test.el --- Tests for rustowl.el using Eask and ert -*- lexical-binding: t; -*-
 
 (require 'ert)
 (require 'rustowl)
@@ -48,4 +48,5 @@
         (rustowl-clear-overlays)
         (should (= (length rustowl-overlays) 0))))))
 
-(provide 'eask-test)
+(provide 'test)
+;;; test.el ends here
