@@ -28,7 +28,8 @@
 (eval-after-load 'lsp-mode
   '(lsp-register-client
     (make-lsp-client
-     :new-connection (lsp-stdio-connection '("rustowl"))
+     :new-connection
+     (lsp-stdio-connection '("rustowl"))
      :major-modes '(rust-mode)
      :server-id 'rustowl
      :priority -1
@@ -37,8 +38,7 @@
 (defun rustowl-cursor (params)
   "Request and visualize Rust ownership/lifetime overlays for PARAMS."
   (lsp-request-async
-   "rustowl/cursor"
-   params
+   "rustowl/cursor" params
    (lambda (response)
      (let ((decorations (gethash "decorations" response)))
        (mapc
@@ -52,8 +52,7 @@
                    (gethash "character" start)))
                  (end-pos
                   (rustowl-line-col-to-pos
-                   (gethash "line" end)
-                   (gethash "character" end)))
+                   (gethash "line" end) (gethash "character" end)))
                  (overlapped (gethash "overlapped" deco)))
             (unless overlapped
               (cond
@@ -89,7 +88,8 @@
         (column (rustowl-current-column))
         (uri (lsp--buffer-uri)))
     (rustowl-cursor
-     `(:position (:line ,line :character ,column)
+     `(:position
+       (:line ,line :character ,column)
        :document (:uri ,uri)))))
 
 ;;;###autoload
@@ -107,7 +107,8 @@
     (cancel-timer rustowl-cursor-timer))
   (rustowl-clear-overlays)
   (setq rustowl-cursor-timer
-        (run-with-idle-timer rustowl-cursor-timeout nil #'rustowl-cursor-call)))
+        (run-with-idle-timer
+         rustowl-cursor-timeout nil #'rustowl-cursor-call)))
 
 ;;;###autoload
 (defun rustowl-enable-cursor ()
@@ -136,7 +137,8 @@
 (defun rustowl-underline (start end color)
   "Underline region from START to END with COLOR."
   (let ((overlay (make-overlay start end)))
-    (overlay-put overlay 'face `(:underline (:color ,color :style wave)))
+    (overlay-put
+     overlay 'face `(:underline (:color ,color :style wave)))
     (push overlay rustowl-overlays)
     overlay))
 
