@@ -1,0 +1,52 @@
+name: NeoVim Checks
+
+on:
+  pull_request:
+    paths:
+      - lua
+      - ftplugin
+      - .luacheckrc
+      - .stylua.toml
+      - selene.toml
+      - vim.yml
+      - .github/workflows/neovim-checks.yml
+  push:
+    branches:
+      - main
+    paths:
+      - lua
+      - ftplugin
+      - .luacheckrc
+      - .stylua.toml
+      - selene.toml
+      - vim.yml
+      - .github/workflows/neovim-checks.yml
+
+jobs:
+  stylecheck:
+    name: Check Styling Using Stylua
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Stylua
+        uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: --check .
+
+  lintcheck:
+    name: Lint Code Using Selene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint Lua code with Selene
+        uses: YoloWingPixie/selene-lua-linter-action@v1
+        with:
+          config-path: 'selene.toml'
+          working-directory: '.'
+          report-as-annotations: 'true'
