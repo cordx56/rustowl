@@ -8,9 +8,9 @@ fn bench_rustowl_check(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("rustowl_check");
     group
-        .sample_size(10)
-        .measurement_time(Duration::from_secs(50))
-        .warm_up_time(Duration::from_secs(3));
+        .sample_size(20)
+        .measurement_time(Duration::from_secs(300))
+        .warm_up_time(Duration::from_secs(5));
 
     // Ensure rustowl binary is built
     let output = Command::new("cargo")
@@ -66,9 +66,9 @@ fn bench_rustowl_comprehensive(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("rustowl_comprehensive");
     group
-        .sample_size(10)
-        .measurement_time(Duration::from_secs(50))
-        .warm_up_time(Duration::from_secs(3));
+        .sample_size(20)
+        .measurement_time(Duration::from_secs(200))
+        .warm_up_time(Duration::from_secs(5));
 
     group.bench_function("comprehensive", |b| {
         b.iter(|| {
