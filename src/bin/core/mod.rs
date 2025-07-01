@@ -26,11 +26,15 @@ static ATOMIC_TRUE: AtomicBool = AtomicBool::new(true);
 static TASKS: LazyLock<Mutex<JoinSet<MirAnalyzer<'static>>>> =
     LazyLock::new(|| Mutex::new(JoinSet::new()));
 static RUNTIME: LazyLock<Mutex<Runtime>> = LazyLock::new(|| {
+    let worker_threads = std::thread::available_parallelism()
+        .map(|n| (n.get() / 2).clamp(2, 8))
+        .unwrap_or(4);
+
     Mutex::new(
         Builder::new_multi_thread()
             .enable_all()
-            .worker_threads(8)
-            .thread_stack_size(1024 * 1024 * 1024)
+            .worker_threads(worker_threads)
+            .thread_stack_size(128 * 1024 * 1024)
             .build()
             .unwrap(),
     )
