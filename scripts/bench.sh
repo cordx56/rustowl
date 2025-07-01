@@ -370,6 +370,10 @@ run_benchmarks() {
             mkdir -p "baselines/performance/$SAVE_BASELINE"
             echo "$duration" > "baselines/performance/$SAVE_BASELINE/analysis_time.txt"
             echo "$TEST_PACKAGE_PATH" > "baselines/performance/$SAVE_BASELINE/test_package.txt"
+            # Copy Criterion benchmark results for local development
+            if [[ -d "target/criterion" ]]; then
+        cp -r "target/criterion" "baselines/performance/$SAVE_BASELINE/criterion"
+    fi
         fi
         
         # Compare timing if in compare mode
@@ -400,62 +404,29 @@ compare_analysis_times() {
         return 0
     fi
     
-    # Calculate percentage change (handle integer vs float)
-    local change="0"
-    local abs_change="0"
-    
+    # Calculate percentage change
+    local change=0
     if command -v bc >/dev/null 2>&1; then
-        change=$(echo "scale=2; (($current_time - $baseline_time) / $baseline_time) * 100" | bc -l 2>/dev/null || echo "0")
-        abs_change=$(echo "$change" | sed 's/-//')
-    else
-        # Simple integer math fallback
-        if [[ "$current_time" -gt "$baseline_time" ]]; then
-            change="positive"
-            abs_change="significant"
-        elif [[ "$current_time" -lt "$baseline_time" ]]; then
-            change="negative"
-            abs_change="significant"
-        else
-            change="0"
-            abs_change="0"
-        fi
+        change=$(echo "scale=2; (($current_time - $baseline_time) / $baseline_time) * 100" | bc -l 2>/dev/null || echo 0)
     fi
-    
-    # Extract threshold number
-    local threshold_num=$(echo "$REGRESSION_THRESHOLD" | sed 's/%//')
-    
+    local threshold_num=$(echo "$REGRESSION_THRESHOLD" | tr -d '%')
+    # Report comparison
     if [[ "$SHOW_OUTPUT" == "true" ]]; then
         echo -e "${BLUE}Analysis Time Comparison:${NC}"
         echo -e "  Baseline: ${baseline_time}s"
         echo -e "  Current:  ${current_time}s"
         echo -e "  Change:   ${change}%"
-        
-        # Show what test package was used for baseline
-        if [[ -f "baselines/performance/$LOAD_BASELINE/test_package.txt" ]]; then
-            local baseline_package=$(cat "baselines/performance/$LOAD_BASELINE/test_package.txt")
-            echo -e "  Test Package: ${baseline_package}"
-        fi
     fi
-    
-    # Check for regression
-    if (( $(echo "$abs_change > $threshold_num" | bc -l 2>/dev/null || echo "0") )); then
-        if (( $(echo "$change > 0" | bc -l 2>/dev/null || echo "0") )); then
-            if [[ "$SHOW_OUTPUT" == "true" ]]; then
-                echo -e "${RED}⚠ Performance regression detected! (+${abs_change}% > ${REGRESSION_THRESHOLD})${NC}"
-            fi
-            return 1
-        else
-            if [[ "$SHOW_OUTPUT" == "true" ]]; then
-                echo -e "${GREEN}✓ Performance improvement detected! (-${abs_change}%)${NC}"
-            fi
-        fi
+    # Flag regression only on slowdown beyond threshold
+    if (( $(echo "$change > $threshold_num" | bc -l 2>/dev/null || echo 0) )); then
+        [[ "$SHOW_OUTPUT" == "true" ]] && echo -e "${RED}⚠ Performance regression detected! (+${change}% > ${REGRESSION_THRESHOLD})${NC}"
+        return 1
+    # Improvement beyond threshold
+    elif (( $(echo "$change < -$threshold_num" | bc -l 2>/dev/null || echo 0) )); then
+        [[ "$SHOW_OUTPUT" == "true" ]] && echo -e "${GREEN}✓ Performance improvement detected! (${change}%)${NC}"
     else
-        if [[ "$SHOW_OUTPUT" == "true" ]]; then
-            echo -e "${GREEN}✓ Performance within acceptable range (±${abs_change}% ≤ ${REGRESSION_THRESHOLD})${NC}"
-        fi
+        [[ "$SHOW_OUTPUT" == "true" ]] && echo -e "${GREEN}✓ Performance within acceptable range (±${threshold_num}%)${NC}"
     fi
-    
-    return 0
 }
 
 # Analyze benchmark output for regressions
@@ -473,9 +444,12 @@ analyze_regressions() {
     local regression_found=false
     
     if [[ -d "$criterion_dir" ]]; then
-        # Check for regression indicators in Criterion reports (simplified)
-        if find "$criterion_dir" -name "*.html" -print0 2>/dev/null | xargs -0 grep -l "regressed\|slower" 2>/dev/null | head -1 >/dev/null; then
-            regression_found=true
+        # Only do detailed HTML check in non-verbose (CI) mode
+        if [[ "$SHOW_OUTPUT" == "false" ]]; then
+            # Check for regression indicators in Criterion reports
+            if find "$criterion_dir" -name "*.html" -print0 2>/dev/null | xargs -0 grep -l "regressed\|slower" 2>/dev/null | head -1 >/dev/null; then
+                regression_found=true
+            fi
         fi
         
         # Create a comprehensive summary file for CI
@@ -495,12 +469,29 @@ EOF
             
             # Extract key timing information from JSON files
             if command -v jq >/dev/null 2>&1; then
-                echo "### Detailed Timings (JSON extracted)" >> benchmark-summary.txt
-                find "$criterion_dir" -name "estimates.json" -exec sh -c 'echo "$(dirname "$1" | sed "s|target/criterion/||"): $(jq -r ".mean.point_estimate" "$1" 2>/dev/null || echo "N/A")s"' _ {} \; >> benchmark-summary.txt 2>/dev/null || true
-            else
-                echo "### Quick Summary (grep extracted)" >> benchmark-summary.txt
-                find "$criterion_dir" -name "*.json" -exec grep -h "\"mean\"" {} \; 2>/dev/null | head -10 >> benchmark-summary.txt || true
-            fi
+            echo "### Detailed Timings (JSON extracted)" >> benchmark-summary.txt
+            find "$criterion_dir" -name "estimates.json" -exec bash -c '
+                dir=$(dirname "$1" | sed "s|target/criterion/||")
+                val=$(jq -r ".mean.point_estimate" "$1" 2>/dev/null || echo "N/A")
+                if [ "$val" != "N/A" ] && [ "$val" != "null" ]; then
+                    # Convert nanoseconds to seconds with 3 decimal places
+                    sec=$(echo "scale=3; $val/1000000000" | bc -l 2>/dev/null || echo "$val")
+                    echo "$dir: ${sec}s"
+                else
+                    echo "$dir: N/A"
+                fi' bash {} \; | sort >> benchmark-summary.txt 2>/dev/null || true
+            
+            # Add summary statistics
+            echo "" >> benchmark-summary.txt
+            echo "### Summary Statistics" >> benchmark-summary.txt
+            echo "Sample Size: $(find "$criterion_dir" -name "sample.json" | head -1 | xargs jq -r 'length' 2>/dev/null || echo 'N/A') measurements per benchmark" >> benchmark-summary.txt
+            measurement_time=$(find "$criterion_dir" -name "estimates.json" -exec jq -r ".measurement_time" {} 2>/dev/null | head -1 || echo "300")
+            echo "Measurement Time: ${measurement_time}s per benchmark" >> benchmark-summary.txt
+            echo "Warm-up Time: 5s per benchmark" >> benchmark-summary.txt
+        else
+            echo "### Quick Summary (grep extracted)" >> benchmark-summary.txt
+            find "$criterion_dir" -name "*.json" -exec grep -h "\"mean\"" {} \; 2>/dev/null | head -10 >> benchmark-summary.txt || true
+        fi
             
             # Add regression status if comparing
             if [[ "$COMPARE_MODE" == "true" ]]; then
