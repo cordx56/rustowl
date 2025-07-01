@@ -1781,6 +1781,7 @@ dependencies = [
  "libmimalloc-sys",
  "log",
  "mimalloc",
+ "once_cell",
  "process_alive",
  "reqwest",
  "serde",
