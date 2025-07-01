@@ -1,11 +1,12 @@
 use crate::{lsp::progress, models::*, utils};
-use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use tower_lsp::lsp_types;
 
-static ASYNC_MIR_VARS: Lazy<Vec<&'static str>> = Lazy::new(|| vec!["_task_context", "__awaitee"]);
-static ASYNC_RESUME_TY: Lazy<Vec<&'static str>> = Lazy::new(|| {
+static ASYNC_MIR_VARS: LazyLock<Vec<&'static str>> =
+    LazyLock::new(|| vec!["_task_context", "__awaitee"]);
+static ASYNC_RESUME_TY: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
     vec![
         "std::future::ResumeTy",
         "impl std::future::Future<Output = ()>",
