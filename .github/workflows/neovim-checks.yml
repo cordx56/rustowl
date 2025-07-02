@@ -26,6 +26,11 @@ on:
       - scripts/run_nvim_tests.sh
       - .github/workflows/neovim-checks.yml
 
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: 1.88.0
+  RUSTC_BOOTSTRAP: 1
+
 jobs:
   test:
     name: Run Tests
@@ -38,13 +43,16 @@ jobs:
         uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
+          version: 0.11.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
 
       - name: Setup RustOwl
         run: |
-          export RUSTC_BOOTSTRAP=1
-          export RUSTUP_TOOLCHAIN=1.88.0
-          rustup install
-          rustup component add rust-src rustc-dev llvm-tools
           cargo build --release
           cargo install --path .
 
