@@ -216,10 +216,8 @@ T['user_command_calls_correct_functions'] = function()
     start = function()
       lsp_start_called = true
     end,
-    stop = function()
-    end,
-    restart = function()
-    end,
+    stop = function() end,
+    restart = function() end,
     get_rustowl_clients = function()
       return {}
     end,
