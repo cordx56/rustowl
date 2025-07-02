@@ -68,7 +68,7 @@ impl Backend {
                     let path = metadata.workspace_root;
                     let mut write = self.roots.write().await;
                     if !write.contains_key(path.as_std_path()) {
-                        log::info!("add {} to watch list", path);
+                        log::info!("add {path} to watch list");
 
                         let target = metadata
                             .target_directory
@@ -158,7 +158,7 @@ impl Backend {
 
             let sysroot = toolchain::get_sysroot().await;
             let mut command = if let Ok(cargo_path) = &env::var("CARGO") {
-                log::info!("using toolchain cargo: {}", cargo_path);
+                log::info!("using toolchain cargo: {cargo_path}");
                 process::Command::new(cargo_path)
             } else {
                 log::info!("using default cargo");
