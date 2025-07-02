@@ -3,8 +3,12 @@ local expect, eq = MiniTest.expect, MiniTest.expect.equality
 
 local function monkeypatch_vim_lsp_config()
   -- Patch: ensure vim.lsp and vim.lsp.config exist and are tables, and rustowl is a table
-  if not vim.lsp then vim.lsp = {} end
-  if not vim.lsp.config then vim.lsp.config = {} end
+  if not vim.lsp then
+    vim.lsp = {}
+  end
+  if not vim.lsp.config then
+    vim.lsp.config = {}
+  end
   -- This is what the config module wants!
   if vim.g.rustowl_as_lsp_config then
     vim.lsp.config.rustowl = vim.g.rustowl_as_lsp_config
@@ -13,7 +17,7 @@ local function monkeypatch_vim_lsp_config()
   end
 end
 
-local T = MiniTest.new_set({
+local T = MiniTest.new_set {
   hooks = {
     pre_case = function()
       vim.g.rustowl = nil
@@ -32,8 +36,8 @@ local T = MiniTest.new_set({
       vim.g.rustowl = nil
       vim.g.rustowl_as_lsp_config = nil
     end,
-  }
-})
+  },
+}
 
 T['default_config_values'] = function()
   vim.g.rustowl_as_lsp_config = nil
@@ -55,7 +59,7 @@ T['user_config_override'] = function()
     auto_attach = false,
     auto_enable = true,
     idle_time = 1000,
-    highlight_style = 'underline'
+    highlight_style = 'underline',
   }
   monkeypatch_vim_lsp_config()
   local config = require('rustowl.config')
@@ -69,7 +73,7 @@ T['function_based_user_config'] = function()
   vim.g.rustowl_as_lsp_config = (function()
     return {
       auto_attach = false,
-      idle_time = 2000
+      idle_time = 2000,
     }
   end)()
   monkeypatch_vim_lsp_config()
@@ -83,8 +87,8 @@ T['lsp_config_override'] = function()
   vim.g.rustowl_as_lsp_config = {
     auto_attach = false,
     client = {
-      cmd = { 'custom-rustowl' }
-    }
+      cmd = { 'custom-rustowl' },
+    },
   }
   monkeypatch_vim_lsp_config()
   local config = require('rustowl.config')

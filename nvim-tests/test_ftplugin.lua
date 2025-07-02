@@ -1,7 +1,7 @@
 local MiniTest = require('mini.test')
 local expect = MiniTest.expect
 
-local T = MiniTest.new_set({
+local T = MiniTest.new_set {
   hooks = {
     pre_case = function()
       vim.g.loaded_rustowl = nil
@@ -28,20 +28,31 @@ local T = MiniTest.new_set({
       package.loaded['rustowl.config'] = nil
       package.loaded['rustowl.highlight'] = nil
       package.loaded['rustowl.show-on-hover'] = nil
-    end
-  }
-})
+    end,
+  },
+}
 
 T['ftplugin_creates_highlight_groups'] = function()
   package.loaded['rustowl.config'] = {
     highlight_style = 'undercurl',
     auto_enable = false,
     auto_attach = false,
-    client = { name = 'rustowl', cmd = {'rustowl'}, root_dir = function() return vim.fn.getcwd() end }
+    client = {
+      name = 'rustowl',
+      cmd = { 'rustowl' },
+      root_dir = function()
+        return vim.fn.getcwd()
+      end,
+    },
   }
   vim.cmd('source ftplugin/rust.lua')
   local highlight_groups = {
-    'lifetime', 'imm_borrow', 'mut_borrow', 'move', 'call', 'outlive'
+    'lifetime',
+    'imm_borrow',
+    'mut_borrow',
+    'move',
+    'call',
+    'outlive',
   }
   for _, hl_name in ipairs(highlight_groups) do
     local hl = vim.api.nvim_get_hl(0, { name = hl_name })
@@ -54,22 +65,32 @@ T['ftplugin_creates_user_command'] = function()
   package.loaded['rustowl.config'] = {
     auto_enable = false,
     auto_attach = false,
-    client = { name = 'rustowl', cmd = {'rustowl'}, root_dir = function() return vim.fn.getcwd() end }
+    client = {
+      name = 'rustowl',
+      cmd = { 'rustowl' },
+      root_dir = function()
+        return vim.fn.getcwd()
+      end,
+    },
   }
   package.loaded['rustowl.lsp'] = {
     start = function() end,
     stop = function() end,
     restart = function() end,
-    get_rustowl_clients = function() return {} end
+    get_rustowl_clients = function()
+      return {}
+    end,
   }
   package.loaded['rustowl'] = {
     enable = function() end,
     disable = function() end,
     toggle = function() end,
-    is_enabled = function() return false end
+    is_enabled = function()
+      return false
+    end,
   }
   vim.cmd('source ftplugin/rust.lua')
-  local commands = vim.api.nvim_get_commands({})
+  local commands = vim.api.nvim_get_commands {}
   expect.equality(commands.Rustowl ~= nil, true)
 end
 
@@ -77,10 +98,18 @@ T['user_command_errors_on_non_rust_buffer'] = function()
   package.loaded['rustowl.config'] = {
     auto_enable = false,
     auto_attach = false,
-    client = { name = 'rustowl', cmd = {'rustowl'}, root_dir = function() return vim.fn.getcwd() end }
+    client = {
+      name = 'rustowl',
+      cmd = { 'rustowl' },
+      root_dir = function()
+        return vim.fn.getcwd()
+      end,
+    },
   }
   package.loaded['rustowl.lsp'] = {
-    get_rustowl_clients = function() return {} end
+    get_rustowl_clients = function()
+      return {}
+    end,
   }
   vim.bo.filetype = 'python'
   vim.cmd('source ftplugin/rust.lua')
@@ -106,11 +135,21 @@ T['auto_attach_starts_lsp'] = function()
   package.loaded['rustowl.config'] = {
     auto_enable = false,
     auto_attach = true,
-    client = { name = 'rustowl', cmd = {'rustowl'}, root_dir = function() return vim.fn.getcwd() end }
+    client = {
+      name = 'rustowl',
+      cmd = { 'rustowl' },
+      root_dir = function()
+        return vim.fn.getcwd()
+      end,
+    },
   }
   package.loaded['rustowl.lsp'] = {
-    start = function() lsp_start_called = true end,
-    get_rustowl_clients = function() return {} end
+    start = function()
+      lsp_start_called = true
+    end,
+    get_rustowl_clients = function()
+      return {}
+    end,
   }
   vim.cmd('source ftplugin/rust.lua')
   expect.equality(lsp_start_called, true)
@@ -121,7 +160,13 @@ T['ftplugin_loads_without_error'] = function()
     highlight_style = 'undercurl',
     auto_enable = false,
     auto_attach = false,
-    client = { name = 'rustowl', cmd = {'rustowl'}, root_dir = function() return vim.fn.getcwd() end }
+    client = {
+      name = 'rustowl',
+      cmd = { 'rustowl' },
+      root_dir = function()
+        return vim.fn.getcwd()
+      end,
+    },
   }
   vim.bo.filetype = 'rust'
   expect.no_error(function()
@@ -135,7 +180,13 @@ T['ftplugin_creates_underline_highlights'] = function()
     highlight_style = 'underline',
     auto_enable = false,
     auto_attach = false,
-    client = { name = 'rustowl', cmd = {'rustowl'}, root_dir = function() return vim.fn.getcwd() end }
+    client = {
+      name = 'rustowl',
+      cmd = { 'rustowl' },
+      root_dir = function()
+        return vim.fn.getcwd()
+      end,
+    },
   }
   vim.bo.filetype = 'rust'
   vim.cmd('source ftplugin/rust.lua')
@@ -155,19 +206,41 @@ T['user_command_calls_correct_functions'] = function()
   package.loaded['rustowl.config'] = {
     auto_enable = false,
     auto_attach = false,
-    client = { name = 'rustowl', cmd = {'rustowl'}, root_dir = function() return vim.fn.getcwd() end }
+    client = {
+      name = 'rustowl',
+      cmd = { 'rustowl' },
+      root_dir = function()
+        return vim.fn.getcwd()
+      end,
+    },
   }
   package.loaded['rustowl.lsp'] = {
-    start = function() lsp_start_called = true end,
-    stop = function() lsp_stop_called = true end,
-    restart = function() lsp_restart_called = true end,
-    get_rustowl_clients = function() return {} end
+    start = function()
+      lsp_start_called = true
+    end,
+    stop = function()
+      lsp_stop_called = true
+    end,
+    restart = function()
+      lsp_restart_called = true
+    end,
+    get_rustowl_clients = function()
+      return {}
+    end,
   }
   package.loaded['rustowl'] = {
-    enable = function() rustowl_enable_called = true end,
-    disable = function() rustowl_disable_called = true end,
-    toggle = function() rustowl_toggle_called = true end,
-    is_enabled = function() return false end
+    enable = function()
+      rustowl_enable_called = true
+    end,
+    disable = function()
+      rustowl_disable_called = true
+    end,
+    toggle = function()
+      rustowl_toggle_called = true
+    end,
+    is_enabled = function()
+      return false
+    end,
   }
   vim.bo.filetype = 'rust'
   vim.cmd('source ftplugin/rust.lua')
@@ -187,12 +260,18 @@ T['auto_enable_enables_on_lsp_attach'] = function()
   package.loaded['rustowl.config'] = {
     auto_enable = true,
     auto_attach = false,
-    client = { name = 'rustowl', cmd = {'rustowl'}, root_dir = function() return vim.fn.getcwd() end }
+    client = {
+      name = 'rustowl',
+      cmd = { 'rustowl' },
+      root_dir = function()
+        return vim.fn.getcwd()
+      end,
+    },
   }
   package.loaded['rustowl.show-on-hover'] = {
     enable_on_lsp_attach = function()
       enable_on_lsp_attach_called = true
-    end
+    end,
   }
   vim.bo.filetype = 'rust'
   vim.cmd('source ftplugin/rust.lua')

@@ -1,7 +1,7 @@
 local MiniTest = require('mini.test')
 local expect = MiniTest.expect
 
-local T = MiniTest.new_set({
+local T = MiniTest.new_set {
   hooks = {
     pre_case = function()
       if vim.lsp and vim.lsp.config then
@@ -12,13 +12,13 @@ local T = MiniTest.new_set({
       vim.api.nvim_buf_set_lines(0, 0, -1, false, {
         'fn main() {',
         '    let x = 5;',
-        '    println!(\"{}\", x);',
-        '}'
+        '    println!("{}", x);',
+        '}',
       })
-    package.loaded['rustowl.lsp'] = nil
-    package.loaded['rustowl.config'] = nil
-    package.loaded['rustowl.highlight'] = nil
-    package.loaded['rustowl.show-on-hover'] = nil
+      package.loaded['rustowl.lsp'] = nil
+      package.loaded['rustowl.config'] = nil
+      package.loaded['rustowl.highlight'] = nil
+      package.loaded['rustowl.show-on-hover'] = nil
     end,
     post_case = function()
       vim.cmd('bwipe!')
@@ -26,9 +26,9 @@ local T = MiniTest.new_set({
       package.loaded['rustowl.config'] = nil
       package.loaded['rustowl.highlight'] = nil
       package.loaded['rustowl.show-on-hover'] = nil
-    end
-  }
-})
+    end,
+  },
+}
 
 T['can_require_highlight_module'] = function()
   local highlight = require('rustowl.highlight')
@@ -42,7 +42,7 @@ T['enable_function_accepts_parameters'] = function()
   package.loaded['rustowl.lsp'] = {
     get_rustowl_clients = function()
       return {}
-    end
+    end,
   }
   expect.no_error(function()
     highlight.enable(1, 0, vim.api.nvim_get_current_buf())
@@ -66,13 +66,13 @@ T['enable_function_with_mock_client'] = function()
           type = 'lifetime',
           range = {
             start = { line = 0, character = 0 },
-            ['end'] = { line = 0, character = 5 }
+            ['end'] = { line = 0, character = 5 },
           },
-          overlapped = false
-        }
-      }
+          overlapped = false,
+        },
+      },
     }
-    if type(callback) == "function" then
+    if type(callback) == 'function' then
       callback(nil, result, nil)
     end
   end
@@ -87,20 +87,22 @@ T['enable_function_with_mock_client'] = function()
             type = 'lifetime',
             range = {
               start = { line = 0, character = 0 },
-              ['end'] = { line = 0, character = 5 }
+              ['end'] = { line = 0, character = 5 },
             },
-            overlapped = false
-          }
-        }
+            overlapped = false,
+          },
+        },
       }
-      if type(callback) == "function" then
+      if type(callback) == 'function' then
         callback(nil, result, nil)
       end
-    end
+    end,
   })
 
   package.loaded['rustowl.lsp'] = {
-    get_rustowl_clients = function() return { mock_client } end
+    get_rustowl_clients = function()
+      return { mock_client }
+    end,
   }
   local highlight = require('rustowl.highlight')
   highlight.enable(1, 0, vim.api.nvim_get_current_buf())
@@ -144,21 +146,21 @@ T['enable_function_ignores_overlapped_decorations'] = function()
             type = 'lifetime',
             range = {
               start = { line = 0, character = 0 },
-              ['end'] = { line = 0, character = 5 }
+              ['end'] = { line = 0, character = 5 },
             },
-            overlapped = true
-          }
-        }
+            overlapped = true,
+          },
+        },
       }
-      if type(callback) == "function" then
+      if type(callback) == 'function' then
         callback(nil, result, nil)
       end
-    end
+    end,
   }
   package.loaded['rustowl.lsp'] = {
     get_rustowl_clients = function()
       return { mock_client }
-    end
+    end,
   }
   highlight = require('rustowl.highlight')
   highlight.enable(1, 0, vim.api.nvim_get_current_buf())
