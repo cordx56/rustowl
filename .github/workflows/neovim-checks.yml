@@ -41,6 +41,7 @@ jobs:
           export RUSTUP_TOOLCHAIN=1.88.0
           rustup install --profile minimal
           rustup component add rust-src rustc-dev llvm-tools
+          cargo build --release
           cargo install --path .
 
       - name: Run Tests
