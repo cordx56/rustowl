@@ -16,6 +16,9 @@ This directory contains utility scripts for local development and testing that c
 
 # Run performance benchmarks
 ./scripts/bench.sh
+
+# Run Neovim Tests
+./scripts/run_nvim_tests.sh
 ```
 
 ## Script Overview
@@ -88,11 +91,23 @@ Local performance benchmarking with regression detection.
 
 **Note:** Benchmarks are designed for local development only. CI environments introduce too much variability for reliable performance measurement.
 
+### `run_nvim_tests.sh`
+
+Run tests defined in `[nvim-tests](../nvim-tests)` directory.
+
+**Usage**
+```bash
+./scripts/run_nvim_tests.sh
+```
+
+In uses `[mini.test](https://github.com/echasnovski/mini.test)` plugin to test.
+
 ## Prerequisites
 
 ### Common Requirements
 - Rust toolchain (automatically managed via `rust-toolchain.toml`)
 - Basic build tools
+- Neovim (Only For The Tests And If You Are Changing Neovim Specific Things)
 
 ### Platform-Specific Tools
 
@@ -142,6 +157,9 @@ The scripts integrate with workflows where appropriate:
 
 # Check binary size impact
 ./scripts/size-check.sh
+
+# If you changed any neovim specific things (like lua files)
+./scripts/run_nvim_tests.sh
 ```
 
 ### Setting Up New Environment

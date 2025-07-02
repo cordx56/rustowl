@@ -23,7 +23,30 @@ on:
       - .github/workflows/neovim-checks.yml
 
 jobs:
-  stylecheck:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+
+      - name: Setup RustOwl
+        run: |
+          export RUSTC_BOOTSTRAP=1
+          export RUSTUP_TOOLCHAIN=1.88.0
+          rustup install --profile minimal
+          rustup component add rust-src rustc-dev llvm-tools
+          cargo install --path .
+
+      - name: Run Tests
+        run: ./scripts/run_nvim_tests.sh
+
+  style:
     name: Check Styling Using Stylua
     runs-on: ubuntu-latest
     steps:
@@ -37,7 +60,7 @@ jobs:
           version: latest
           args: --check .
 
-  lintcheck:
+  lint:
     name: Lint Code Using Selene
     runs-on: ubuntu-latest
     steps:
