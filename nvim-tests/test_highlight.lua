@@ -56,7 +56,7 @@ T['enable_function_with_mock_client'] = function()
   local request_method = nil
 
   local mock_client = {}
-  function mock_client:request(method, params, callback, bufnr)
+  function mock_client:request(method, params, callback, _)
     request_called = true
     request_method = method
     request_params = params
@@ -77,7 +77,7 @@ T['enable_function_with_mock_client'] = function()
     end
   end
   setmetatable(mock_client, {
-    __call = function(_, method, params, callback, bufnr)
+    __call = function(_, method, params, callback, _)
       request_called = true
       request_method = method
       request_params = params
@@ -126,7 +126,7 @@ T['disable_function_clears_highlights'] = function()
 end
 
 T['highlight_namespace_exists'] = function()
-  local highlight = require('rustowl.highlight')
+  require('rustowl.highlight')
   local namespaces = vim.api.nvim_get_namespaces()
   expect.equality(type(namespaces.rustowl), 'number')
 end
@@ -135,11 +135,11 @@ T['enable_function_ignores_overlapped_decorations'] = function()
   local highlight = require('rustowl.highlight')
   local highlight_range_called = false
   local original_highlight_range = vim.highlight.range
-  vim.highlight.range = function(...)
+  vim.highlight.range = function()
     highlight_range_called = true
   end
   local mock_client = {
-    request = function(method, params, callback, bufnr)
+    request = function(callback)
       local result = {
         decorations = {
           {

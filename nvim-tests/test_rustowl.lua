@@ -1,6 +1,6 @@
 -- Tests for the main rustowl module (lua/rustowl/init.lua)
 local MiniTest = require('mini.test')
-local expect, eq = MiniTest.expect, MiniTest.expect.equality
+local expect = MiniTest.expect
 
 -- Create a test set
 local T = MiniTest.new_set {

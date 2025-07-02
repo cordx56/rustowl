@@ -1,6 +1,6 @@
 -- Tests for the show-on-hover module (lua/rustowl/show-on-hover.lua)
 local MiniTest = require('mini.test')
-local expect, eq = MiniTest.expect, MiniTest.expect.equality
+local expect = MiniTest.expect
 
 local T = MiniTest.new_set {
   hooks = {

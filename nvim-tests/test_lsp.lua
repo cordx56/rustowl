@@ -1,6 +1,6 @@
 -- Tests for the LSP module (lua/rustowl/lsp.lua)
 local MiniTest = require('mini.test')
-local expect, eq = MiniTest.expect, MiniTest.expect.equality
+local expect = MiniTest.expect
 
 local T = MiniTest.new_set {
   hooks = {
@@ -64,14 +64,9 @@ T['start_function_handles_no_root_dir'] = function()
   }
 
   -- Capture vim.notify calls
-  local notify_called = false
-  local notify_message = nil
-  local notify_level = nil
   local original_notify = vim.notify
-  vim.notify = function(msg, level)
-    notify_called = true
-    notify_message = msg
-    notify_level = level
+  vim.notify = function()
+    -- Just a placeholder for the mock
   end
 
   local result = lsp.start()

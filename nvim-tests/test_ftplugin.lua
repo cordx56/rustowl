@@ -198,8 +198,6 @@ end
 T['user_command_calls_correct_functions'] = function()
   -- Patch: all mocks set before sourcing ftplugin!
   local lsp_start_called = false
-  local lsp_stop_called = false
-  local lsp_restart_called = false
   local rustowl_enable_called = false
   local rustowl_disable_called = false
   local rustowl_toggle_called = false
@@ -219,10 +217,8 @@ T['user_command_calls_correct_functions'] = function()
       lsp_start_called = true
     end,
     stop = function()
-      lsp_stop_called = true
     end,
     restart = function()
-      lsp_restart_called = true
     end,
     get_rustowl_clients = function()
       return {}

@@ -1,5 +1,5 @@
 local MiniTest = require('mini.test')
-local expect, eq = MiniTest.expect, MiniTest.expect.equality
+local expect = MiniTest.expect
 
 local function monkeypatch_vim_lsp_config()
   -- Patch: ensure vim.lsp and vim.lsp.config exist and are tables, and rustowl is a table
