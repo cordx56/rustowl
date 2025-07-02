@@ -578,13 +578,13 @@ impl utils::MirVisitor for CalcDecos {
         self.current_fn_id = local.fn_id;
         if self.locals.contains(&local) {
             let var_str = match name {
-                Some(_name) => {
+                Some(mir_var_name) => {
                     if ASYNC_RESUME_TY.contains(&ty.as_str())
-                        && ASYNC_MIR_VARS.contains(&_name.as_str())
+                        && ASYNC_MIR_VARS.contains(&mir_var_name.as_str())
                     {
                         return;
                     }
-                    format!("variable `{_name}`")
+                    format!("variable `{mir_var_name}`")
                 }
                 None => "anonymus variable".to_owned(),
             };
