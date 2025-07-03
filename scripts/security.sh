@@ -16,7 +16,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Configuration
-MIN_RUST_VERSION="1.87.0"
+MIN_RUST_VERSION="1.88.0"
 TEST_TARGET_PATH="./perf-tests/dummy-package"
 
 # Output logging configuration
