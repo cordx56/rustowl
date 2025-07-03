@@ -67,7 +67,15 @@ else
   echo "Warning: aur/PKGBUILD-BIN not found"
 fi
 
-# 5. Create a git tag
+# 5. Update Dockerfile
+if [ "$IS_PRERELEASE" = false ] && [ -f Dockerfile ]; then
+  echo "Updating Dockerfile..."
+  $sed -i 's/^\(ENV RUSTOWL_VERSION=\).*/\1'${VERSION_WITHOUT_V}'/' Dockerfile
+else
+  echo "Dockerfile not found. Skipping."
+fi
+
+# 6. Create a git tag
 echo "Creating git tag: $VERSION"
 git tag $VERSION
 
