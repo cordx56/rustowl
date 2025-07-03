@@ -43,6 +43,14 @@ fn main() {
             libmimalloc_sys::mi_realloc;
         #[used]
         static _F6: unsafe extern "C" fn(*mut c_void) = libmimalloc_sys::mi_free;
+        {
+            unsafe extern "C" {
+                fn _mi_macros_override_malloc();
+            }
+
+            #[used]
+            static _F7: unsafe extern "C" fn() = _mi_macros_override_malloc;
+        }
     }
 
     simple_logger::SimpleLogger::new()

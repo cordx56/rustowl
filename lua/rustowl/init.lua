@@ -24,7 +24,7 @@ M.is_enabled = function()
 end
 
 ---@param opts? rustowl.Config
-function M.setup(opts)
+M.setup = function(opts)
   vim.g.rustowl = opts
 end
 

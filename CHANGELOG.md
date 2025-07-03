@@ -1,8 +1,28 @@
 <a name="unreleased"></a>
 ## [Unreleased]
 
+### ♻️ Code Refactoring
+- **alloc:** move to mimalloc because of jemalloc archive ([#230](https://github.com/cordx56/rustowl/issues/230))
+
 ### 🎨 Chores
+- update lockfiles and deps ([#267](https://github.com/cordx56/rustowl/issues/267))
+- add ovsx to release script and docs about extension ([#266](https://github.com/cordx56/rustowl/issues/266))
+- add performance test to the repo ([#219](https://github.com/cordx56/rustowl/issues/219))
+- update changelog ([#211](https://github.com/cordx56/rustowl/issues/211))
+- **README:** Add Discord server link ([#239](https://github.com/cordx56/rustowl/issues/239))
 - **aur:** bump rustup toolchain version ([#177](https://github.com/cordx56/rustowl/issues/177))
+- **docs:** add badges to README ([#268](https://github.com/cordx56/rustowl/issues/268))
+
+### 🐞 Bug Fixes
+- **benchmarks:** increase measurement and warm-up time for benchmark tests
+- **deps:** update tar dependency to version 0.4
+
+### 🚀 Features
+- enhance CLI command handling with options for all targets and features ([#225](https://github.com/cordx56/rustowl/issues/225))
+- Add security and memory safety testing workflow ([#234](https://github.com/cordx56/rustowl/issues/234))
+- consolidate and enhance CI workflows by replacing check.yaml with checks.yml and adding a development checks script ([#233](https://github.com/cordx56/rustowl/issues/233))
+- winget package ([#178](https://github.com/cordx56/rustowl/issues/178))
+- **perf-tests:** Memory fixes ([#226](https://github.com/cordx56/rustowl/issues/226))
 
 
 <a name="v0.3.4"></a>

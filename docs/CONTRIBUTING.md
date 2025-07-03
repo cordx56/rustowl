@@ -63,10 +63,10 @@ Note: Using this method is strongly discouraged officially. See [Unstable Book](
 
 To compile `rustowlc` with stable compiler, you should set environment variable as `RUSTC_BOOTSTRAP=1`.
 
-For example building with stable 1.87.0 Rust compiler:
+For example building with stable 1.88.0 Rust compiler:
 
 ```bash
-RUSTC_BOOTSTRAP=1 rustup run 1.87.0 cargo build --release
+RUSTC_BOOTSTRAP=1 rustup run 1.88.0 cargo build --release
 ```
 
 Note that by using normal `cargo` command RustOwl will be built with nightly compiler since there is a `rust-toolchain.toml` which specifies nightly compiler for development environment.
