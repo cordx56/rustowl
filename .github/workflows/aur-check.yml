@@ -94,7 +94,10 @@ jobs:
               if sudo -u builder bash -c "
                 set -e
                 cd "${dirname}"
+                export RUSTFLAGS="-C link-arg=-Wl,--allow-multiple-definition"
                 makepkg -scf --noconfirm -p "${filename}"
+                find target/ -name "libmimalloc*.a" -ls
+                nm target/release/build/libmimalloc-sys-*/out/libmimalloc.a | grep mi_
               "; then
                 echo -e "${GREEN}✅ Makepkg completed successfully${NC}"
               else
