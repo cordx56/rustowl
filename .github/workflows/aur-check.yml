@@ -45,7 +45,7 @@ jobs:
             binutils \
             libcap \
             base-devel sudo git curl wget unzip tar gzip which openssh jq tree xz bzip2 p7zip \
-            python python-pip go ruby rust java-runtime-openjdk java-environment-openjdk maven dotnet-sdk \
+            python python-pip go ruby java-runtime-openjdk java-environment-openjdk maven dotnet-sdk \
             gcc clang php sqlite postgresql tk upx xorg-server-xvfb fakeroot libtool libyaml openssl \
             iproute2 iputils net-tools netcat parallel patchelf shellcheck swig zip zsync nodejs npm \
             autoconf automake dbus dnsutils dpkg fakeroot gnupg iproute2 iputils mercurial p7zip pkgconf \
