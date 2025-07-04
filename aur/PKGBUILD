@@ -28,6 +28,17 @@ build() {
     export RUSTC_BOOTSTRAP=1
     export RUSTUP_TOOLCHAIN=1.87.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
+
+    # First, build only the C dependency (mimalloc)
+    cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)" -p libmimalloc-sys
+
+    # Find the path to the compiled mimalloc library
+    MIMALLOC_PATH=$(find "$PWD/target" -name "libmimalloc.a" -printf "%h")
+
+    # Set RUSTFLAGS to include the library path for the linker
+    export RUSTFLAGS="-L native=${MIMALLOC_PATH}"
+
+    # Now, build the full project
     cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)"
 }
 
