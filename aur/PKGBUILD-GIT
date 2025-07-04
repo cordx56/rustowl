@@ -9,7 +9,7 @@ url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
 makedepends=('git' 'rustup' 'gcc')
 arch=('any')
-source=("git+https://github.com/cordx56/rustowl#branch=MuntasirSZN-patch-1")
+source=("git+https://github.com/cordx56/rustowl.git")
 sha256sums=('SKIP')
 conflicts=('rustowl-bin' 'rustowl')
 
