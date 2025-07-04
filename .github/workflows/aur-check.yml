@@ -18,7 +18,7 @@ jobs:
     name: Arch Linux Container Build & Test
     runs-on: ubuntu-latest
     container:
-      image: archlinux:latest
+      image: archlinux/archlinux:base-devel
     
     steps:
       - name: Checkout repository
