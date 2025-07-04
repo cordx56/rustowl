@@ -63,7 +63,7 @@ jobs:
           WHITE='\033[1;37m'
           NC='\033[0m' # No Color
 
-          for pathname in aur/PKGBUILD*; do
+          for pathname in aur/PKGBUILD-GIT*; do
             if [ -f "${pathname}" ]; then
               filename=$(basename ${pathname})
               dirname=$(dirname ${pathname})
