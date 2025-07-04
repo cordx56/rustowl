@@ -18,7 +18,7 @@ jobs:
     name: Arch Linux Container Build & Test
     runs-on: ubuntu-latest
     container:
-      image: archlinux/archlinux:base-devel
+      image: archlinux/archlinux:latest
     
     steps:
       - name: Checkout repository
@@ -41,7 +41,9 @@ jobs:
             shellcheck \
             debugedit \
             fakeroot \
-            sudo
+            sudo \
+            binutils \
+            libcap
 
       - name: Setup build user
         run: |
@@ -94,14 +96,11 @@ jobs:
               if sudo -u builder bash -c "
                 set -e
                 cd '${dirname}'
-                export RUSTFLAGS='-C link-arg=-Wl,--allow-multiple-definition'
                 makepkg -scf --noconfirm -p '${filename}'
               "; then
                 echo -e "${GREEN}✅ Makepkg completed successfully${NC}"
               else
                 echo -e "${RED}❌ Makepkg failed${NC}"
-                find target/ -name "libmimalloc*.a" -ls
-                nm target/release/build/libmimalloc-sys-*/out/libmimalloc.a | grep mi_
                 exit 1
               fi
 
