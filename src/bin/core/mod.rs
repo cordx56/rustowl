@@ -25,6 +25,7 @@ impl rustc_driver::Callbacks for RustcCallback {}
 static ATOMIC_TRUE: AtomicBool = AtomicBool::new(true);
 static TASKS: LazyLock<Mutex<JoinSet<MirAnalyzer<'static>>>> =
     LazyLock::new(|| Mutex::new(JoinSet::new()));
+// make tokio runtime
 static RUNTIME: LazyLock<Mutex<Runtime>> = LazyLock::new(|| {
     let worker_threads = std::thread::available_parallelism()
         .map(|n| (n.get() / 2).clamp(2, 8))
@@ -39,6 +40,7 @@ static RUNTIME: LazyLock<Mutex<Runtime>> = LazyLock::new(|| {
             .unwrap(),
     )
 });
+// tokio runtime handler
 static HANDLE: LazyLock<Handle> = LazyLock::new(|| RUNTIME.lock().unwrap().handle().clone());
 static ANALYZED: LazyLock<Mutex<Vec<LocalDefId>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
@@ -49,8 +51,11 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
     log::info!("start borrowck of {def_id:?}");
 
     let analyzer = MirAnalyzer::new(
+        // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
+        // This can be done since the TyCtxt object lives until the analysis tasks joined
+        // in after_analysis method.
         unsafe {
-            std::mem::transmute::<rustc_middle::ty::TyCtxt<'_>, rustc_middle::ty::TyCtxt<'_>>(tcx)
+            std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx)
         },
         def_id,
     );
@@ -85,11 +90,14 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         config.override_queries = Some(override_queries);
         config.make_codegen_backend = None;
     }
+
+    /// join all tasks after all analysis finished
     fn after_analysis<'tcx>(
         &mut self,
         _compiler: &interface::Compiler,
         tcx: TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
+        // get currently-compiling crate name
         let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
         RUNTIME.lock().unwrap().block_on(async move {
             while let Some(task) = { TASKS.lock().unwrap().join_next().await } {
@@ -111,6 +119,10 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
 
 pub fn run_compiler() -> i32 {
     let mut args: Vec<String> = env::args().collect();
+    // by using `RUSTC_WORKSPACE_WRAPPER`, arguments will be as follows:
+    // For dependencies: rustowlc [args...]
+    // For user workspace: rustowlc rustowlc [args...]
+    // So we skip analysis if currently-compiling crate is one of the dependencies
     if args.first() == args.get(1) {
         args = args.into_iter().skip(1).collect();
     } else {
@@ -120,6 +132,7 @@ pub fn run_compiler() -> i32 {
     }
 
     for arg in &args {
+        // utilize default rustc to avoid unexpected behavior if these arguments are passed
         if arg == "-vV" || arg == "--version" || arg.starts_with("--print") {
             return rustc_driver::catch_with_exit_code(|| {
                 rustc_driver::run_compiler(&args, &mut RustcCallback)
