@@ -653,27 +653,24 @@ impl utils::MirVisitor for CalcDecos {
             destination_local,
             fn_span,
         } = term
-        {
-            if self.locals.contains(destination_local) {
+            && self.locals.contains(destination_local) {
                 let mut i = 0;
                 for deco in &self.decorations {
-                    if let Deco::Call { range, .. } = deco {
-                        if utils::is_super_range(*fn_span, *range) {
+                    if let Deco::Call { range, .. } = deco
+                        && utils::is_super_range(*fn_span, *range) {
                             return;
                         }
-                    }
                 }
                 while i < self.decorations.len() {
                     let range = match &self.decorations[i] {
                         Deco::Call { range, .. } => Some(range),
                         _ => None,
                     };
-                    if let Some(range) = range {
-                        if utils::is_super_range(*range, *fn_span) {
+                    if let Some(range) = range
+                        && utils::is_super_range(*range, *fn_span) {
                             self.decorations.remove(i);
                             continue;
                         }
-                    }
                     i += 1;
                 }
                 self.decorations.push(Deco::Call {
@@ -683,6 +680,5 @@ impl utils::MirVisitor for CalcDecos {
                     overlapped: false,
                 });
             }
-        }
     }
 }

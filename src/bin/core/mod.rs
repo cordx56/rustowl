@@ -1,3 +1,5 @@
+#![allow(clippy::await_holding_lock)]
+
 mod analyze;
 
 use analyze::MirAnalyzer;
@@ -65,7 +67,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
             .into_iter()
             .filter(|v| tcx.hir_node_by_def_id(**v).body_id().is_some())
             .count();
-        log::info!("borrow checked: {} / {}", current, mir_len);
+        log::info!("borrow checked: {current} / {mir_len}");
     }
 
     Ok(tcx
@@ -92,7 +94,7 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         RUNTIME.lock().unwrap().block_on(async move {
             while let Some(task) = { TASKS.lock().unwrap().join_next().await } {
                 let (filename, analyzed) = task.unwrap().analyze();
-                log::info!("analyzed one item of {}", filename);
+                log::info!("analyzed one item of {filename}");
                 let krate = Crate(HashMap::from([(
                     filename,
                     File {
