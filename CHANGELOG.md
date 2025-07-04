@@ -16,6 +16,7 @@
 ### 🐞 Bug Fixes
 - **benchmarks:** increase measurement and warm-up time for benchmark tests
 - **deps:** update tar dependency to version 0.4
+- **lsp-core:** fix lifetime range visualization in async functions.
 
 ### 🚀 Features
 - enhance CLI command handling with options for all targets and features ([#225](https://github.com/cordx56/rustowl/issues/225))
