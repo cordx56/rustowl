@@ -93,9 +93,9 @@ jobs:
 
               if sudo -u builder bash -c "
                 set -e
-                cd "${dirname}"
-                export RUSTFLAGS="-C link-arg=-Wl,--allow-multiple-definition"
-                makepkg -scf --noconfirm -p "${filename}"
+                cd '${dirname}'
+                export RUSTFLAGS='-C link-arg=-Wl,--allow-multiple-definition'
+                makepkg -scf --noconfirm -p '${filename}'
               "; then
                 echo -e "${GREEN}✅ Makepkg completed successfully${NC}"
               else
