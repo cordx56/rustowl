@@ -94,7 +94,7 @@ impl MirAnalyzer<'_> {
         let filename = source_map.span_to_filename(facts.body.span);
         let source_file = source_map.get_source_file(&filename).unwrap();
         let offset = source_file.start_pos.0;
-        let filename = source_map.path_mapping().to_local_embeddable_absolute_path(
+        let filename = source_map.path_mapping().to_embeddable_absolute_path(
             rustc_span::RealFileName::LocalPath(filename.into_local_path().unwrap()),
             &rustc_span::RealFileName::LocalPath(std::env::current_dir().unwrap()),
         );

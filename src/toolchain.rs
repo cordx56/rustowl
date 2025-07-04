@@ -153,20 +153,17 @@ pub async fn get_sysroot() -> PathBuf {
         .args(["run", TOOLCHAIN, "rustc", "--print=sysroot"])
         .stdout(Stdio::piped())
         .spawn()
-    {
-        if let Ok(sysroot) = child
+        && let Ok(sysroot) = child
             .wait_with_output()
             .await
             .map(|v| PathBuf::from(String::from_utf8_lossy(&v.stdout).trim()))
-        {
-            if is_valid_sysroot(&sysroot) {
-                log::info!(
-                    "select sysroot dir from rustup installed: {}",
-                    sysroot.display(),
-                );
-                return sysroot;
-            }
-        }
+        && is_valid_sysroot(&sysroot)
+    {
+        log::info!(
+            "select sysroot dir from rustup installed: {}",
+            sysroot.display(),
+        );
+        return sysroot;
     }
 
     // fallback sysroot

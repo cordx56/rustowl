@@ -30,7 +30,7 @@ jobs:
       run:
         shell: bash
     env:
-      RUSTUP_TOOLCHAIN: 1.87.0
+      RUSTUP_TOOLCHAIN: 1.88.0
       RUSTC_BOOTSTRAP: rustowlc
       RUSTOWL_SYSROOTS: "/opt/rustowl"
 

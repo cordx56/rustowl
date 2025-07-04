@@ -6,7 +6,7 @@ use analyze::MirAnalyzer;
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
 use rustc_middle::{
-    mir::BorrowCheckResult, query::queries::mir_borrowck::ProvidedValue, ty::TyCtxt,
+    mir::ConcreteOpaqueTypes, query::queries::mir_borrowck::ProvidedValue, ty::TyCtxt,
     util::Providers,
 };
 use rustc_session::config;
@@ -58,7 +58,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
         let mut locked = TASKS.lock().unwrap();
         locked.spawn_on(analyzer, &HANDLE);
     }
-    let (current, mir_len) = {
+    {
         let mut locked = ANALYZED.lock().unwrap();
         locked.push(def_id);
         let current = locked.len();
@@ -67,35 +67,12 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
             .into_iter()
             .filter(|v| tcx.hir_node_by_def_id(**v).body_id().is_some())
             .count();
-        log::info!("borrow checked: {} / {}", current, mir_len);
-        (current, mir_len)
-    };
-    let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
-    if current == mir_len {
-        RUNTIME.lock().unwrap().block_on(async move {
-            while let Some(task) = { TASKS.lock().unwrap().join_next().await } {
-                let (filename, analyzed) = task.unwrap().analyze();
-                log::info!("analyzed one item of {}", filename);
-                let krate = Crate(HashMap::from([(
-                    filename,
-                    File {
-                        items: vec![analyzed],
-                    },
-                )]));
-                let ws = Workspace(HashMap::from([(crate_name.clone(), krate)]));
-                println!("{}", serde_json::to_string(&ws).unwrap());
-            }
-        })
+        log::info!("borrow checked: {current} / {mir_len}");
     }
 
-    let result = BorrowCheckResult {
-        concrete_opaque_types: indexmap::IndexMap::default(),
-        closure_requirements: None,
-        used_mut_upvars: smallvec::SmallVec::new(),
-        tainted_by_errors: None,
-    };
-
-    tcx.arena.alloc(result)
+    Ok(tcx
+        .arena
+        .alloc(ConcreteOpaqueTypes(indexmap::IndexMap::default())))
 }
 
 pub struct AnalyzerCallback;
@@ -107,6 +84,28 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         config.opts.incremental = None;
         config.override_queries = Some(override_queries);
         config.make_codegen_backend = None;
+    }
+    fn after_analysis<'tcx>(
+        &mut self,
+        _compiler: &interface::Compiler,
+        tcx: TyCtxt<'tcx>,
+    ) -> rustc_driver::Compilation {
+        let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
+        RUNTIME.lock().unwrap().block_on(async move {
+            while let Some(task) = { TASKS.lock().unwrap().join_next().await } {
+                let (filename, analyzed) = task.unwrap().analyze();
+                log::info!("analyzed one item of {filename}");
+                let krate = Crate(HashMap::from([(
+                    filename,
+                    File {
+                        items: vec![analyzed],
+                    },
+                )]));
+                let ws = Workspace(HashMap::from([(crate_name.clone(), krate)]));
+                println!("{}", serde_json::to_string(&ws).unwrap());
+            }
+        });
+        rustc_driver::Compilation::Continue
     }
 }
 

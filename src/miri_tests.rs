@@ -268,7 +268,7 @@ mod miri_memory_safety_tests {
 
         // Test various string operations
         for i in 0..50 {
-            let s = format!("test_string_{}", i);
+            let s = format!("test_string_{i}");
             strings.push(s);
         }
 
@@ -296,7 +296,7 @@ mod miri_memory_safety_tests {
 
         // Insert data with complex nesting
         for i in 0..20 {
-            let key = format!("key_{}", i);
+            let key = format!("key_{i}");
             let mut vec = Vec::new();
 
             for j in 0..5 {
@@ -350,10 +350,10 @@ mod miri_memory_safety_tests {
         assert_eq!(fn_local, fn_local_clone);
 
         // Test Debug formatting (without actually printing)
-        let debug_string = format!("{:?}", range);
+        let debug_string = format!("{range:?}");
         assert!(debug_string.contains("Range"));
 
-        let debug_fn_local = format!("{:?}", fn_local);
+        let debug_fn_local = format!("{fn_local:?}");
         assert!(debug_fn_local.contains("FnLocal"));
     }
 }
