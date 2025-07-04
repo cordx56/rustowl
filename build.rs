@@ -53,7 +53,7 @@ fn get_toolchain() -> String {
 fn get_host_tuple() -> Option<String> {
     match Command::new(env::var("RUSTC").unwrap_or("rustc".to_string()))
         .arg("--print")
-        .arg("target-triple")
+        .arg("host-tuple")
         .output()
     {
         Ok(v) => Some(String::from_utf8(v.stdout).unwrap().trim().to_string()),
