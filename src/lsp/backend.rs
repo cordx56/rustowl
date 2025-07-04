@@ -64,23 +64,23 @@ impl Backend {
                 && let Ok(metadata) = cargo_metadata::MetadataCommand::new()
                     .current_dir(&dir)
                     .exec()
-                {
-                    let path = metadata.workspace_root;
-                    let mut write = self.roots.write().await;
-                    if !write.contains_key(path.as_std_path()) {
-                        log::info!("add {path} to watch list");
+            {
+                let path = metadata.workspace_root;
+                let mut write = self.roots.write().await;
+                if !write.contains_key(path.as_std_path()) {
+                    log::info!("add {path} to watch list");
 
-                        let target = metadata
-                            .target_directory
-                            .as_std_path()
-                            .to_path_buf()
-                            .join("owl");
-                        tokio::fs::create_dir_all(&target).await.unwrap();
+                    let target = metadata
+                        .target_directory
+                        .as_std_path()
+                        .to_path_buf()
+                        .join("owl");
+                    tokio::fs::create_dir_all(&target).await.unwrap();
 
-                        write.insert(path.as_std_path().to_path_buf(), target);
-                    }
-                    return true;
+                    write.insert(path.as_std_path().to_path_buf(), target);
                 }
+                return true;
+            }
         }
         false
     }
@@ -383,32 +383,33 @@ impl Backend {
         let is_analyzed = self.analyzed.read().await.is_some();
         let status = *self.status.read().await;
         if let Some(path) = params.path()
-            && let Ok(text) = std::fs::read_to_string(&path) {
-                let position = params.position();
-                let pos = Loc(utils::line_char_to_index(
-                    &text,
-                    position.line,
-                    position.character,
-                ));
-                let (decos, status) = match self.decos(&path, pos).await {
-                    Ok(v) => (v, status),
-                    Err(e) => (
-                        Vec::new(),
-                        if status == progress::AnalysisStatus::Finished {
-                            e
-                        } else {
-                            status
-                        },
-                    ),
-                };
-                let decorations = decos.into_iter().map(|v| v.to_lsp_range(&text)).collect();
-                return Ok(decoration::Decorations {
-                    is_analyzed,
-                    status,
-                    path: Some(path),
-                    decorations,
-                });
-            }
+            && let Ok(text) = std::fs::read_to_string(&path)
+        {
+            let position = params.position();
+            let pos = Loc(utils::line_char_to_index(
+                &text,
+                position.line,
+                position.character,
+            ));
+            let (decos, status) = match self.decos(&path, pos).await {
+                Ok(v) => (v, status),
+                Err(e) => (
+                    Vec::new(),
+                    if status == progress::AnalysisStatus::Finished {
+                        e
+                    } else {
+                        status
+                    },
+                ),
+            };
+            let decorations = decos.into_iter().map(|v| v.to_lsp_range(&text)).collect();
+            return Ok(decoration::Decorations {
+                is_analyzed,
+                status,
+                path: Some(path),
+                decorations,
+            });
+        }
         Ok(decoration::Decorations {
             is_analyzed,
             status,
@@ -533,13 +534,14 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
         if let Ok(path) = params.text_document.uri.to_file_path()
-            && params.text_document.language_id == "rust" {
-                if self.set_roots(&path).await {
-                    self.analyze().await;
-                } else {
-                    self.analyze_single_file(&path).await;
-                }
+            && params.text_document.language_id == "rust"
+        {
+            if self.set_roots(&path).await {
+                self.analyze().await;
+            } else {
+                self.analyze_single_file(&path).await;
             }
+        }
     }
 
     async fn did_save(&self, params: lsp_types::DidSaveTextDocumentParams) {

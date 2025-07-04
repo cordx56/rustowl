@@ -157,13 +157,14 @@ pub async fn get_sysroot() -> PathBuf {
             .wait_with_output()
             .await
             .map(|v| PathBuf::from(String::from_utf8_lossy(&v.stdout).trim()))
-            && is_valid_sysroot(&sysroot) {
-                log::info!(
-                    "select sysroot dir from rustup installed: {}",
-                    sysroot.display(),
-                );
-                return sysroot;
-            }
+        && is_valid_sysroot(&sysroot)
+    {
+        log::info!(
+            "select sysroot dir from rustup installed: {}",
+            sysroot.display(),
+        );
+        return sysroot;
+    }
 
     // fallback sysroot
     sysroot_from_runtime(get_runtime_dir().await)

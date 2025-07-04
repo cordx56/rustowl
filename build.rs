@@ -89,12 +89,13 @@ fn set_rustc_driver_path(sysroot: &str) {
     for file in recursive_read_dir(sysroot) {
         if let Some(ext) = file.extension().and_then(|e| e.to_str())
             && matches!(ext, "rlib" | "so" | "dylib" | "dll")
-                && let Ok(rel_path) = file.strip_prefix(sysroot)
-                    && let Some(file_name) = rel_path.file_name() {
-                        let file_name = file_name.to_string_lossy();
-                        if file_name.contains("rustc_driver-") {
-                            println!("cargo::rustc-env=RUSTC_DRIVER_NAME={file_name}");
-                        }
-                    }
+            && let Ok(rel_path) = file.strip_prefix(sysroot)
+            && let Some(file_name) = rel_path.file_name()
+        {
+            let file_name = file_name.to_string_lossy();
+            if file_name.contains("rustc_driver-") {
+                println!("cargo::rustc-env=RUSTC_DRIVER_NAME={file_name}");
+            }
+        }
     }
 }
