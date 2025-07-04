@@ -7,9 +7,9 @@ pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
-makedepends=('git' 'rustup' 'gcc' 'make' 'cmake')
+makedepends=('git' 'rustup' 'gcc' 'make' 'cmake' 'binutils')
 arch=('any')
-source=("git+https://github.com/cordx56/rustowl.git")
+source=("git+https://github.com/cordx56/rustowl#branch=MuntasirSZN-patch-1")
 sha256sums=('SKIP')
 conflicts=('rustowl-bin' 'rustowl')
 
@@ -30,7 +30,7 @@ build() {
     cd "$srcdir/rustowl"
     export CARGO_TARGET_DIR=target
     export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.88.0
+    export RUSTUP_TOOLCHAIN=1.87.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
     cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)"
 }
@@ -38,7 +38,7 @@ build() {
 check() {
     cd "$srcdir/rustowl"
     export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.88.0
+    export RUSTUP_TOOLCHAIN=1.87.0
     cargo test --frozen --all-features
 }
 
