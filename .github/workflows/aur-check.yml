@@ -51,7 +51,7 @@ jobs:
             autoconf automake dbus dnsutils dpkg fakeroot gnupg iproute2 iputils mercurial p7zip pkgconf \
             rpm texinfo tk tree tzdata upx xorg-server-xvfb xz zsync bison brotli coreutils file findutils flex \
             haveged lz4 m4 mediainfo netcat net-tools parallel patchelf pigz rsync shellcheck \
-            sqlite3 sshpass sudo systemd swig telnet time zip
+            sqlite3 sshpass sudo systemd swig time zip
 
       - name: Setup build user
         run: |
