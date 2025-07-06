@@ -7,7 +7,9 @@ updates:
     groups:
       version:
         applies-to: version-updates
-        update-types: minor
+        update-types:
+          - patch
+          - minor
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
@@ -19,4 +21,6 @@ updates:
     groups:
       version:
         applies-to: version-updates
-        update-types: minor
+        update-types:
+          - patch
+          - minor
