@@ -46,12 +46,12 @@ pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
     'outer: while i < ranges.len() {
         let mut j = 0;
         while j < ranges.len() {
-            if i != j {
-                if let Some(merged) = merge_ranges(ranges[i], ranges[j]) {
-                    ranges[i] = merged;
-                    ranges.remove(j);
-                    continue 'outer;
-                }
+            if i != j
+                && let Some(merged) = merge_ranges(ranges[i], ranges[j])
+            {
+                ranges[i] = merged;
+                ranges.remove(j);
+                continue 'outer;
             }
             j += 1;
         }
