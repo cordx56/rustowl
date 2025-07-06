@@ -3,26 +3,26 @@ name: NeoVim Checks
 on:
   pull_request:
     paths:
-      - lua
-      - ftplugin
+      - lua/**/*
+      - ftplugin/**/*
       - .luacheckrc
       - .stylua.toml
       - selene.toml
       - vim.yml
-      - nvim-tests/
+      - nvim-tests/**/*
       - scripts/run_nvim_tests.sh
       - .github/workflows/neovim-checks.yml
   push:
     branches:
       - main
     paths:
-      - lua
-      - ftplugin
+      - lua/**/*
+      - ftplugin/**/*
       - .luacheckrc
       - .stylua.toml
       - selene.toml
       - vim.yml
-      - nvim-tests/
+      - nvim-tests/**/*
       - scripts/run_nvim_tests.sh
       - .github/workflows/neovim-checks.yml
 
