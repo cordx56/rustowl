@@ -3,6 +3,7 @@ FROM rust:1.88.0-slim-trixie
 WORKDIR /app
 
 ENV RUSTC_BOOTSTRAP=1
+ENV RUSTUP_TOOLCHAIN=${RUST_VERSION}
 
 RUN rustup component add llvm-tools rustc-dev rust-src
 
