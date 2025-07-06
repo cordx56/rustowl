@@ -24,3 +24,5 @@ updates:
         update-types:
           - patch
           - minor
+    ignore:
+      - dependency-name: "@types/vscode"
