@@ -173,7 +173,7 @@ jobs:
           body_path: release.md
           prerelease: ${{ needs.meta.outputs.pre_release == 'true' }} 
 
-  docker:
+  docker-release:
     name: Release To GitHub Container Registry
     runs-on: ubuntu-latest
     permissions:
@@ -181,6 +181,7 @@ jobs:
       packages: write
     needs:
       - crates-io-release
+      - github-release
 
     steps:
       - name: Checkout repository
