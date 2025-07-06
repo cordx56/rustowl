@@ -179,6 +179,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    needs:
+      - crates-io-release
 
     steps:
       - name: Checkout repository
