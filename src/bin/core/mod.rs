@@ -1,5 +1,3 @@
-#![allow(clippy::await_holding_lock)]
-
 mod analyze;
 
 use analyze::MirAnalyzer;
@@ -13,9 +11,10 @@ use rustc_session::config;
 use rustowl::models::*;
 use std::collections::HashMap;
 use std::env;
-use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
+use std::sync::{LazyLock, atomic::AtomicBool};
 use tokio::{
     runtime::{Builder, Handle, Runtime},
+    sync::Mutex,
     task::JoinSet,
 };
 
@@ -26,23 +25,20 @@ static ATOMIC_TRUE: AtomicBool = AtomicBool::new(true);
 static TASKS: LazyLock<Mutex<JoinSet<MirAnalyzer<'static>>>> =
     LazyLock::new(|| Mutex::new(JoinSet::new()));
 // make tokio runtime
-static RUNTIME: LazyLock<Mutex<Runtime>> = LazyLock::new(|| {
+static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
     let worker_threads = std::thread::available_parallelism()
         .map(|n| (n.get() / 2).clamp(2, 8))
         .unwrap_or(4);
 
-    Mutex::new(
-        Builder::new_multi_thread()
-            .enable_all()
-            .worker_threads(worker_threads)
-            .thread_stack_size(128 * 1024 * 1024)
-            .build()
-            .unwrap(),
-    )
+    Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(worker_threads)
+        .thread_stack_size(128 * 1024 * 1024)
+        .build()
+        .unwrap()
 });
 // tokio runtime handler
-static HANDLE: LazyLock<Handle> = LazyLock::new(|| RUNTIME.lock().unwrap().handle().clone());
-static ANALYZED: LazyLock<Mutex<Vec<LocalDefId>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static HANDLE: LazyLock<Handle> = LazyLock::new(|| RUNTIME.handle().clone());
 
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
@@ -54,26 +50,13 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
         // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
         // This can be done since the TyCtxt object lives until the analysis tasks joined
         // in after_analysis method.
-        unsafe {
-            std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx)
-        },
+        unsafe { std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx) },
         def_id,
     );
-    {
-        let mut locked = TASKS.lock().unwrap();
+    RUNTIME.block_on(async move {
+        let mut locked = TASKS.lock().await;
         locked.spawn_on(analyzer, &HANDLE);
-    }
-    {
-        let mut locked = ANALYZED.lock().unwrap();
-        locked.push(def_id);
-        let current = locked.len();
-        let mir_len = tcx
-            .mir_keys(())
-            .into_iter()
-            .filter(|v| tcx.hir_node_by_def_id(**v).body_id().is_some())
-            .count();
-        log::info!("borrow checked: {current} / {mir_len}");
-    }
+    });
 
     Ok(tcx
         .arena
@@ -99,8 +82,12 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
     ) -> rustc_driver::Compilation {
         // get currently-compiling crate name
         let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
-        RUNTIME.lock().unwrap().block_on(async move {
-            while let Some(task) = { TASKS.lock().unwrap().join_next().await } {
+        RUNTIME.block_on(async move {
+            let task_len = { TASKS.lock().await.len() };
+            let mut joined = 0;
+            while let Some(task) = { TASKS.lock().await.join_next().await } {
+                joined += 1;
+                log::info!("borrow checked: {joined} / {task_len}");
                 let (filename, analyzed) = task.unwrap().analyze();
                 log::info!("analyzed one item of {filename}");
                 let krate = Crate(HashMap::from([(
