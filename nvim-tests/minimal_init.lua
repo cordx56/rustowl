@@ -6,7 +6,7 @@ if #vim.api.nvim_list_uis() == 0 then
   local mini_path = path_package .. 'pack/deps/start/mini.nvim'
 
   if not vim.loop.fs_stat(mini_path) then
-    vim.cmd('echo "Installing mini.nvim\n\n"')
+    vim.cmd([[echo "Installing mini.nvim\n\n"]])
     vim.fn.system {
       'git',
       'clone',
