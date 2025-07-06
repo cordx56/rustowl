@@ -60,27 +60,26 @@ impl Backend {
             path.as_ref().parent().unwrap().to_path_buf()
         };
         for w in &*self.workspaces.read().await {
-            if dir.starts_with(w) {
-                if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
+            if dir.starts_with(w)
+                && let Ok(metadata) = cargo_metadata::MetadataCommand::new()
                     .current_dir(&dir)
                     .exec()
-                {
-                    let path = metadata.workspace_root;
-                    let mut write = self.roots.write().await;
-                    if !write.contains_key(path.as_std_path()) {
-                        log::info!("add {} to watch list", path);
+            {
+                let path = metadata.workspace_root;
+                let mut write = self.roots.write().await;
+                if !write.contains_key(path.as_std_path()) {
+                    log::info!("add {path} to watch list");
 
-                        let target = metadata
-                            .target_directory
-                            .as_std_path()
-                            .to_path_buf()
-                            .join("owl");
-                        tokio::fs::create_dir_all(&target).await.unwrap();
+                    let target = metadata
+                        .target_directory
+                        .as_std_path()
+                        .to_path_buf()
+                        .join("owl");
+                    tokio::fs::create_dir_all(&target).await.unwrap();
 
-                        write.insert(path.as_std_path().to_path_buf(), target);
-                    }
-                    return true;
+                    write.insert(path.as_std_path().to_path_buf(), target);
                 }
+                return true;
             }
         }
         false
@@ -158,7 +157,7 @@ impl Backend {
 
             let sysroot = toolchain::get_sysroot().await;
             let mut command = if let Ok(cargo_path) = &env::var("CARGO") {
-                log::info!("using toolchain cargo: {}", cargo_path);
+                log::info!("using toolchain cargo: {cargo_path}");
                 process::Command::new(cargo_path)
             } else {
                 log::info!("using default cargo");
@@ -383,33 +382,33 @@ impl Backend {
     ) -> jsonrpc::Result<decoration::Decorations> {
         let is_analyzed = self.analyzed.read().await.is_some();
         let status = *self.status.read().await;
-        if let Some(path) = params.path() {
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                let position = params.position();
-                let pos = Loc(utils::line_char_to_index(
-                    &text,
-                    position.line,
-                    position.character,
-                ));
-                let (decos, status) = match self.decos(&path, pos).await {
-                    Ok(v) => (v, status),
-                    Err(e) => (
-                        Vec::new(),
-                        if status == progress::AnalysisStatus::Finished {
-                            e
-                        } else {
-                            status
-                        },
-                    ),
-                };
-                let decorations = decos.into_iter().map(|v| v.to_lsp_range(&text)).collect();
-                return Ok(decoration::Decorations {
-                    is_analyzed,
-                    status,
-                    path: Some(path),
-                    decorations,
-                });
-            }
+        if let Some(path) = params.path()
+            && let Ok(text) = std::fs::read_to_string(&path)
+        {
+            let position = params.position();
+            let pos = Loc(utils::line_char_to_index(
+                &text,
+                position.line,
+                position.character,
+            ));
+            let (decos, status) = match self.decos(&path, pos).await {
+                Ok(v) => (v, status),
+                Err(e) => (
+                    Vec::new(),
+                    if status == progress::AnalysisStatus::Finished {
+                        e
+                    } else {
+                        status
+                    },
+                ),
+            };
+            let decorations = decos.into_iter().map(|v| v.to_lsp_range(&text)).collect();
+            return Ok(decoration::Decorations {
+                is_analyzed,
+                status,
+                path: Some(path),
+                decorations,
+            });
         }
         Ok(decoration::Decorations {
             is_analyzed,
@@ -534,13 +533,13 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
-        if let Ok(path) = params.text_document.uri.to_file_path() {
-            if params.text_document.language_id == "rust" {
-                if self.set_roots(&path).await {
-                    self.analyze().await;
-                } else {
-                    self.analyze_single_file(&path).await;
-                }
+        if let Ok(path) = params.text_document.uri.to_file_path()
+            && params.text_document.language_id == "rust"
+        {
+            if self.set_roots(&path).await {
+                self.analyze().await;
+            } else {
+                self.analyze_single_file(&path).await;
             }
         }
     }

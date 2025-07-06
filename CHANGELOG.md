@@ -3,22 +3,34 @@
 
 ### ♻️ Code Refactoring
 - **alloc:** move to mimalloc because of jemalloc archive ([#230](https://github.com/cordx56/rustowl/issues/230))
+- **runtime:** refactor the runtime to use more suitable stack size for generic machine, and to use amount of cores counting the existing cores on the machine and using half to not make or get stuck
 
 ### 🎨 Chores
-- update lockfiles and deps ([#267](https://github.com/cordx56/rustowl/issues/267))
-- add ovsx to release script and docs about extension ([#266](https://github.com/cordx56/rustowl/issues/266))
-- add performance test to the repo ([#219](https://github.com/cordx56/rustowl/issues/219))
+- update changelog
 - update changelog ([#211](https://github.com/cordx56/rustowl/issues/211))
+- add performance test to the repo ([#219](https://github.com/cordx56/rustowl/issues/219))
+- add ovsx to release script and docs about extension ([#266](https://github.com/cordx56/rustowl/issues/266))
+- update lockfiles and deps ([#267](https://github.com/cordx56/rustowl/issues/267))
 - **README:** Add Discord server link ([#239](https://github.com/cordx56/rustowl/issues/239))
 - **aur:** bump rustup toolchain version ([#177](https://github.com/cordx56/rustowl/issues/177))
+- **dependabot:** set interval weekly and use grouping ([#310](https://github.com/cordx56/rustowl/issues/310))
+- **dependabot:** fix dependabot error ([#311](https://github.com/cordx56/rustowl/issues/311))
+- **dependabot:** ignore [@types](https://github.com/types)/vscode version update ([#314](https://github.com/cordx56/rustowl/issues/314))
 - **docs:** add badges to README ([#268](https://github.com/cordx56/rustowl/issues/268))
+- **nvim-tests:** add two newlines in minimal init ([#307](https://github.com/cordx56/rustowl/issues/307))
+- **rustc:** bump rustc to 1.88.0 in neovim ci ([#315](https://github.com/cordx56/rustowl/issues/315))
 
 ### 🐞 Bug Fixes
+- call vscode bootstrap only when RustOwl is downloaded ([#309](https://github.com/cordx56/rustowl/issues/309))
+- **alloc:** properly setup mimalloc
 - **benchmarks:** increase measurement and warm-up time for benchmark tests
+- **bencmarks:** fix benchmarks script to calculate result correctly, and increased the amount of iteration for more precise results
 - **deps:** update tar dependency to version 0.4
+- **rustc:** new 1.88.0, bump version in ci ([#300](https://github.com/cordx56/rustowl/issues/300))
 - **lsp-core:** fix lifetime range visualization in async functions.
 
 ### 🚀 Features
+- update to rustc 1.88.0
 - enhance CLI command handling with options for all targets and features ([#225](https://github.com/cordx56/rustowl/issues/225))
 - Add security and memory safety testing workflow ([#234](https://github.com/cordx56/rustowl/issues/234))
 - consolidate and enhance CI workflows by replacing check.yaml with checks.yml and adding a development checks script ([#233](https://github.com/cordx56/rustowl/issues/233))

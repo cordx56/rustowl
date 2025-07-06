@@ -1,7 +1,6 @@
 local config = require('rustowl.config')
 
 if not vim.g.loaded_rustowl then
-  -- Plugin initialization (run only once)
   vim.g.loaded_rustowl = true
 
   local highlight_style = config.highlight_style or 'undercurl'
@@ -17,74 +16,53 @@ if not vim.g.loaded_rustowl then
 
   for hl_name, color in pairs(highlights) do
     local options = { default = true, sp = color }
-
     if highlight_style == 'underline' then
       options.underline = true
     else
-      options.undercurl = true --Default config is undercurl
+      options.undercurl = true
     end
-
     vim.api.nvim_set_hl(0, hl_name, options)
   end
 
-  if config.auto_enable then
-    require('rustowl.show-on-hover').enable_on_lsp_attach()
-  end
-
-  ---@enum rustowl.ClientCmd
-  local RustowlCmd = {
-    start_client = 'start_client',
-    stop_client = 'stop_client',
-    restart_client = 'restart_client',
-    enable = 'enable',
-    disable = 'disable',
-    toggle = 'toggle',
-  }
-
-  local lsp = require('rustowl.lsp')
-  local rustowl = require('rustowl')
-
-  local function rustowl_user_cmd(opts)
+  vim.api.nvim_create_user_command('Rustowl', function(opts)
     if vim.bo[0].filetype ~= 'rust' then
       vim.notify('Rustowl: Current buffer is not a rust file.', vim.log.levels.ERROR)
       return
     end
     local fargs = opts.fargs
     local cmd = fargs[1]
-    ---@cast cmd rustowl.ClientCmd
-    if cmd == RustowlCmd.start_client then
-      lsp.start()
-    elseif cmd == RustowlCmd.stop_client then
-      lsp.stop()
-    elseif cmd == RustowlCmd.restart_client then
-      lsp.restart()
-    elseif cmd == RustowlCmd.enable then
-      rustowl.enable()
-    elseif cmd == RustowlCmd.disable then
-      rustowl.disable()
-    elseif cmd == RustowlCmd.toggle then
-      rustowl.toggle()
+    if cmd == 'start_client' then
+      require('rustowl.lsp').start()
+    elseif cmd == 'stop_client' then
+      require('rustowl.lsp').stop()
+    elseif cmd == 'restart_client' then
+      require('rustowl.lsp').restart()
+    elseif cmd == 'enable' then
+      require('rustowl').enable()
+    elseif cmd == 'disable' then
+      require('rustowl').disable()
+    elseif cmd == 'toggle' then
+      require('rustowl').toggle()
     end
-  end
-
-  vim.api.nvim_create_user_command('Rustowl', rustowl_user_cmd, {
+  end, {
     nargs = '+',
     desc = 'Starts, stops the rustowl LSP client',
     complete = function(arg_lead, cmdline, _)
+      local lsp = require('rustowl.lsp')
+      local rustowl = require('rustowl')
       local clients = lsp.get_rustowl_clients()
-      ---@type rustowl.ClientCmd[]
       local commands = {}
       if #clients == 0 then
-        table.insert(commands, RustowlCmd.start_client)
+        table.insert(commands, 'start_client')
       else
-        table.insert(commands, RustowlCmd.toggle)
+        table.insert(commands, 'toggle')
         if rustowl.is_enabled() then
-          table.insert(commands, RustowlCmd.disable)
+          table.insert(commands, 'disable')
         else
-          table.insert(commands, RustowlCmd.enable)
+          table.insert(commands, 'enable')
         end
-        table.insert(commands, RustowlCmd.stop_client)
-        table.insert(commands, RustowlCmd.restart_client)
+        table.insert(commands, 'stop_client')
+        table.insert(commands, 'restart_client')
       end
       if cmdline:match('^Rustowl%s+%w*$') then
         return vim.tbl_filter(function(command)
@@ -93,6 +71,10 @@ if not vim.g.loaded_rustowl then
       end
     end,
   })
+end
+
+if config.auto_enable then
+  require('rustowl.show-on-hover').enable_on_lsp_attach()
 end
 
 if config.auto_attach then

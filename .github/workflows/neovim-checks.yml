@@ -1,0 +1,88 @@
+name: NeoVim Checks
+
+on:
+  pull_request:
+    paths:
+      - lua/**/*
+      - ftplugin/**/*
+      - .luacheckrc
+      - .stylua.toml
+      - selene.toml
+      - vim.yml
+      - nvim-tests/**/*
+      - scripts/run_nvim_tests.sh
+      - .github/workflows/neovim-checks.yml
+  push:
+    branches:
+      - main
+    paths:
+      - lua/**/*
+      - ftplugin/**/*
+      - .luacheckrc
+      - .stylua.toml
+      - selene.toml
+      - vim.yml
+      - nvim-tests/**/*
+      - scripts/run_nvim_tests.sh
+      - .github/workflows/neovim-checks.yml
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: 1.88.0
+  RUSTC_BOOTSTRAP: 1
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: v0.11.2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
+
+      - name: Setup RustOwl
+        run: |
+          cargo build --release
+          cargo install --path .
+
+      - name: Run Tests
+        run: ./scripts/run_nvim_tests.sh
+
+  style:
+    name: Check Styling Using Stylua
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Stylua
+        uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: --check .
+
+  lint:
+    name: Lint Code Using Selene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint Lua code with Selene
+        uses: YoloWingPixie/selene-lua-linter-action@v1
+        with:
+          config-path: 'selene.toml'
+          working-directory: '.'
+          report-as-annotations: 'true'
