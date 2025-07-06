@@ -3,12 +3,20 @@ updates:
   - package-ecosystem: cargo
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: weekly
+    groups:
+      version:
+        applies-to: version-updates
+        update-types: minor
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: weekly
   - package-ecosystem: npm
     directory: "/vscode"
     schedule:
-      interval: daily
+      interval: weekly
+    groups:
+      version:
+        applies-to: version-updates
+        update-types: minor
