@@ -13,6 +13,13 @@ fn main() -> Result<(), Error> {
     println!("cargo::rustc-check-cfg=cfg(miri)");
 
     println!("cargo::rustc-env=RUSTOWL_TOOLCHAIN={}", get_toolchain());
+    println!("cargo::rustc-env=TOOLCHAIN_CHANNEL={}", get_channel());
+    if let Some(date) = get_toolchain_date() {
+        println!("cargo::rustc-env=TOOLCHAIN_DATE={date}");
+    }
+
+    let host_tuple = get_host_tuple().expect("unable to obtain host-tuple");
+    println!("cargo::rustc-env=HOST_TUPLE={host_tuple}");
 
     let tarball_name = if cfg!(windows) {
         format!("rustowl-{}.zip", get_host_tuple().unwrap())
@@ -50,10 +57,21 @@ fn main() -> Result<(), Error> {
 fn get_toolchain() -> String {
     env::var("RUSTUP_TOOLCHAIN").expect("RUSTUP_TOOLCHAIN unset. Expected version.")
 }
+fn get_channel() -> String {
+    get_toolchain()
+        .split("-")
+        .next()
+        .expect("failed to obtain channel from toolchain")
+        .to_owned()
+}
+fn get_toolchain_date() -> Option<String> {
+    let r = regex::Regex::new(r#"\d\d\d\d-\d\d-\d\d"#).unwrap();
+    r.find(&get_toolchain()).map(|v| v.as_str().to_owned())
+}
 fn get_host_tuple() -> Option<String> {
     match Command::new(env::var("RUSTC").unwrap_or("rustc".to_string()))
         .arg("--print")
-        .arg("target-triple")
+        .arg("host-tuple")
         .output()
     {
         Ok(v) => Some(String::from_utf8(v.stdout).unwrap().trim().to_string()),
@@ -87,16 +105,14 @@ fn recursive_read_dir(path: impl AsRef<Path>) -> Vec<PathBuf> {
 }
 fn set_rustc_driver_path(sysroot: &str) {
     for file in recursive_read_dir(sysroot) {
-        if let Some(ext) = file.extension().and_then(|e| e.to_str()) {
-            if matches!(ext, "rlib" | "so" | "dylib" | "dll") {
-                if let Ok(rel_path) = file.strip_prefix(sysroot) {
-                    if let Some(file_name) = rel_path.file_name() {
-                        let file_name = file_name.to_string_lossy();
-                        if file_name.contains("rustc_driver-") {
-                            println!("cargo::rustc-env=RUSTC_DRIVER_NAME={file_name}");
-                        }
-                    }
-                }
+        if let Some(ext) = file.extension().and_then(|e| e.to_str())
+            && matches!(ext, "rlib" | "so" | "dylib" | "dll")
+            && let Ok(rel_path) = file.strip_prefix(sysroot)
+            && let Some(file_name) = rel_path.file_name()
+        {
+            let file_name = file_name.to_string_lossy();
+            if file_name.contains("rustc_driver-") {
+                println!("cargo::rustc-env=RUSTC_DRIVER_NAME={file_name}");
             }
         }
     }

@@ -30,7 +30,7 @@ jobs:
       run:
         shell: bash
     env:
-      RUSTUP_TOOLCHAIN: 1.87.0
+      RUSTUP_TOOLCHAIN: 1.88.0
       RUSTC_BOOTSTRAP: rustowlc
       RUSTOWL_SYSROOTS: "/opt/rustowl"
 
@@ -100,17 +100,7 @@ jobs:
 
       - name: Setup archive artifacts
         run: |
-          SYSROOT_PATH=sysroot/${{ env.active_toolchain }}
-          rm -rf runtime && mkdir -p runtime/$SYSROOT_PATH
-
-          rm -rf tmp && mkdir tmp
-          RUSTC_NAME="rustc-${{ env.active_toolchain }}"
-          STD_NAME="rust-std-${{ env.active_toolchain }}"
-          curl -L "http://static.rust-lang.org/dist/${RUSTC_NAME}.tar.gz" | tar xzvf - -C tmp/
-          curl -L "http://static.rust-lang.org/dist/${STD_NAME}.tar.gz" | tar xzvf - -C tmp/
-
-          ./tmp/${RUSTC_NAME}/install.sh --destdir=runtime/$SYSROOT_PATH --prefix=
-          ./tmp/${STD_NAME}/install.sh --destdir=runtime/$SYSROOT_PATH --prefix=
+          rm -rf runtime && mkdir -p runtime
 
           if [[ "${{ env.is_linux }}" == "true"  ]]; then
             cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime
@@ -119,6 +109,8 @@ jobs:
             cp target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime
             cp target/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime
           fi
+
+          ./runtime/rustowl${{ env.exec_ext }} toolchain install --path runtime/sysroot/${{ env.active_toolchain }}
 
           cp README.md ./runtime
           cp LICENSE ./runtime
