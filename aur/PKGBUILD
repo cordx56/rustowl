@@ -40,7 +40,7 @@ check() {
 
 package() {
     cd rustowl-${pkgver}
-    ./target/$(rustc --print=host-tuple)/release/rustowl toolchain install --path sysroot/$(rustup show active-toolchain | awk '{ print $1 }')
+    ./target/"$(rustc --print=host-tuple)"/release/rustowl toolchain install --path sysroot/"$(rustup show active-toolchain | awk '{ print $1 }')"
     install -d -m 755 "$pkgdir/opt/rustowl"
     cp -a sysroot/ "$pkgdir/opt/rustowl/"
     install -Dm0755 -t "$pkgdir/usr/bin/" "target/$(rustc --print=host-tuple)/release/rustowl"
