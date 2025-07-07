@@ -29,8 +29,8 @@ RUN apt-get update && \
 COPY --from=builder /app/artifacts/rustowl /usr/local/bin/rustowl
 COPY --from=builder /app/artifacts/rustowlc /usr/local/bin/rustowlc
 
-RUN mkdir -p /opt/rustowl
-COPY --from=builder /app/sysroot /opt/rustowl
+RUN mkdir -p /opt/rustowl/sysroot
+COPY --from=builder /app/sysroot /opt/rustowl/sysroot
 
 ENV PATH="/usr/local/bin:${PATH}"
 
