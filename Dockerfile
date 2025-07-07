@@ -12,15 +12,11 @@ COPY . .
 RUN rm rust-toolchain*
 
 RUN HOST_TUPLE="$(rustc --print=host-tuple)" && \
-    cargo build --release --all-features --target "$HOST_TUPLE" && \
+    cargo build --release --all-features --target "${HOST_TUPLE}" && \
     mkdir -p artifacts && \
-    cp target/"$HOST_TUPLE"/release/rustowl artifacts/rustowl && \
-    cp target/"$HOST_TUPLE"/release/rustowlc artifacts/rustowlc && \
-    ACTIVE_TOOLCHAIN="$(rustup show active-toolchain | awk '{ print $1 }')" && \
-    mkdir -p sysroot/"$ACTIVE_TOOLCHAIN" && \
-    cp -r "$(rustc --print=sysroot)"/* sysroot/"$ACTIVE_TOOLCHAIN"/ && \
-    find sysroot -type f | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf || true && \
-    find sysroot -depth -type d -empty -exec rm -rf {} \;
+    cp target/"${HOST_TUPLE}"/release/rustowl artifacts/rustowl && \
+    cp target/"${HOST_TUPLE}"/release/rustowlc artifacts/rustowlc && \
+    ./artifacts/rustowl toolchain install --path sysroot/$(rustup show active-toolchain | awk '{ print $1 }')
 
 FROM debian:trixie-slim
 
