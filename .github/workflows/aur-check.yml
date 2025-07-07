@@ -44,7 +44,7 @@ jobs:
             sudo \
             binutils \
             glibc \
-            glibc-libs
+            gcc-libs
 
       - name: Setup build user
         run: |
