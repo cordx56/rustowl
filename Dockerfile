@@ -1,27 +1,28 @@
 FROM rust:1.88.0-slim-trixie AS builder
 
 ENV RUSTC_BOOTSTRAP=1
-ENV RUSTUP_TOOLCHAIN="${RUST_VERSION}"
-
 ENV RUSTOWL_RUNTIME_DIRS="/opt/rustowl"
-
-ENV HOST_TUPLE="$(rustc --print=host-tuple)"
-ENV ACTIVE_TOOLCHAIN="$(rustup show active-toolchain | awk '{ print $1 }')"
-
 WORKDIR /app
 
 RUN rustup component add rust-src rustc-dev llvm-tools
 
 COPY . .
 
-RUN cargo build --release --all-features --target "${HOST_TUPLE}"
+# Force 1.88.0
+RUN rm rust-toolchain*
 
-RUN mkdir sysroot \
-    cp -r "$(rustc --print=sysroot)" sysroot/"${ACTIVE_TOOLCHAIN}" \
-    find sysroot -type f | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf \
+RUN HOST_TUPLE="$(rustc --print=host-tuple)" && \
+    cargo build --release --all-features --target "$HOST_TUPLE" && \
+    mkdir -p artifacts && \
+    cp target/"$HOST_TUPLE"/release/rustowl artifacts/rustowl && \
+    cp target/"$HOST_TUPLE"/release/rustowlc artifacts/rustowlc && \
+    ACTIVE_TOOLCHAIN="$(rustup show active-toolchain | awk '{ print $1 }')" && \
+    mkdir -p sysroot/"$ACTIVE_TOOLCHAIN" && \
+    cp -r "$(rustc --print=sysroot)"/* sysroot/"$ACTIVE_TOOLCHAIN"/ && \
+    find sysroot -type f | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf || true && \
     find sysroot -depth -type d -empty -exec rm -rf {} \;
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 WORKDIR /app
 
@@ -29,10 +30,10 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/${HOST_TUPLE}/release/rustowl /usr/local/bin/rustowl
-COPY --from=builder /app/target/${HOST_TUPLE}/release/rustowlc /usr/local/bin/rustowlc
+COPY --from=builder /app/artifacts/rustowl /usr/local/bin/rustowl
+COPY --from=builder /app/artifacts/rustowlc /usr/local/bin/rustowlc
 
-RUN mkdir /opt/rustowl
+RUN mkdir -p /opt/rustowl
 COPY --from=builder /app/sysroot /opt/rustowl
 
 ENV PATH="/usr/local/bin:${PATH}"
