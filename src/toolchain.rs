@@ -4,20 +4,19 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::LazyLock;
 use tokio::{
-    fs::{create_dir_all, remove_dir_all},
+    fs::{create_dir_all, read_to_string, remove_dir_all, rename},
     process,
 };
 
-#[cfg(not(windows))]
 use flate2::read::GzDecoder;
-#[cfg(not(windows))]
 use tar::Archive;
-#[cfg(windows)]
-use zip::ZipArchive;
 
 pub const TOOLCHAIN: &str = env!("RUSTOWL_TOOLCHAIN");
+const HOST_TUPLE: &str = env!("HOST_TUPLE");
+const TOOLCHAIN_CHANNEL: &str = env!("TOOLCHAIN_CHANNEL");
+const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
-static FALLBACK_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
+pub static FALLBACK_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
     let exec_dir = env::current_exe().unwrap().parent().unwrap().to_path_buf();
     vec![exec_dir.join("rustowl-runtime"), exec_dir]
 });
@@ -34,8 +33,6 @@ static CONFIG_SYSROOTS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
         .map(|v| env::split_paths(v).collect())
         .unwrap_or_default()
 });
-
-const ARCHIVE_NAME: &str = env!("RUSTOWL_ARCHIVE_NAME");
 
 const RUSTC_DRIVER_NAME: &str = env!("RUSTC_DRIVER_NAME");
 fn recursive_read_dir(path: impl AsRef<Path>) -> Vec<PathBuf> {
@@ -63,7 +60,7 @@ pub fn rustc_driver_path(sysroot: impl AsRef<Path>) -> Option<PathBuf> {
     None
 }
 
-fn sysroot_from_runtime(runtime: impl AsRef<Path>) -> PathBuf {
+pub fn sysroot_from_runtime(runtime: impl AsRef<Path>) -> PathBuf {
     runtime.as_ref().join("sysroot").join(TOOLCHAIN)
 }
 
@@ -112,12 +109,12 @@ async fn get_runtime_dir() -> PathBuf {
     }
 
     log::info!("rustc_driver not found; start setup toolchain");
-    match setup_toolchain().await {
-        Ok(v) => v,
-        Err(e) => {
-            log::error!("{e:?}");
-            std::process::exit(1);
-        }
+    let fallback = sysroot_from_runtime(&*FALLBACK_RUNTIME_DIRS[0]);
+    if let Err(e) = setup_toolchain(&fallback).await {
+        log::error!("{e:?}");
+        std::process::exit(1);
+    } else {
+        fallback
     }
 }
 
@@ -170,20 +167,12 @@ pub async fn get_sysroot() -> PathBuf {
     sysroot_from_runtime(get_runtime_dir().await)
 }
 
-pub async fn setup_toolchain() -> Result<PathBuf, ()> {
-    log::info!("start downloading {ARCHIVE_NAME}...");
-    let tarball_url = format!(
-        "https://github.com/cordx56/rustowl/releases/download/v{}/{ARCHIVE_NAME}",
-        clap::crate_version!(),
-    );
-
-    let mut resp = match reqwest::get(&tarball_url)
-        .await
-        .and_then(|v| v.error_for_status())
-    {
+async fn download_tarball_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
+    log::info!("start downloading {url}...");
+    let mut resp = match reqwest::get(url).await.and_then(|v| v.error_for_status()) {
         Ok(v) => v,
         Err(e) => {
-            log::error!("failed to download runtime archive");
+            log::error!("failed to download tarball");
             log::error!("{e:?}");
             return Err(());
         }
@@ -209,87 +198,73 @@ pub async fn setup_toolchain() -> Result<PathBuf, ()> {
     }
     log::info!("download finished");
 
-    let fallback = FALLBACK_RUNTIME_DIRS[0].clone();
-    if create_dir_all(&fallback).await.is_err() {
+    let decoder = GzDecoder::new(&*data);
+    let mut archive = Archive::new(decoder);
+    archive.unpack(dest).map_err(|_| {
+        log::error!("failed to unpack runtime tarball");
+    })?;
+    log::info!("successfully unpacked");
+    Ok(())
+}
+
+async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
+    let tempdir = tempfile::tempdir().map_err(|_| ())?;
+    log::info!("temp dir is made: {}", tempdir.path().display());
+
+    let dist_base = "https://static.rust-lang.org/dist";
+    let base_url = match TOOLCHAIN_DATE {
+        Some(v) => format!("{dist_base}/{v}"),
+        None => dist_base.to_owned(),
+    };
+
+    let component_name = format!("{component}-{TOOLCHAIN_CHANNEL}-{HOST_TUPLE}");
+    let tarball_url = format!("{base_url}/{component_name}.tar.gz");
+
+    download_tarball_and_extract(&tarball_url, tempdir.path()).await?;
+
+    let extracted_path = tempdir.path().join(component_name);
+    let components = read_to_string(extracted_path.join("components"))
+        .await
+        .map_err(|_| {
+            log::error!("failed to read components list");
+        })?;
+    let components = components.split_whitespace();
+
+    for component in components {
+        let component_path = extracted_path.join(component);
+        for from in recursive_read_dir(&component_path) {
+            let rel_path = match from.strip_prefix(&component_path) {
+                Ok(v) => v,
+                Err(e) => {
+                    log::error!("path error: {e}");
+                    return Err(());
+                }
+            };
+            let to = dest.join(rel_path);
+            if let Err(e) = create_dir_all(to.parent().unwrap()).await {
+                log::error!("failed to create dir: {e}");
+                return Err(());
+            }
+            if let Err(e) = rename(&from, &to).await {
+                log::error!("file move error: {e}");
+                return Err(());
+            }
+        }
+        log::info!("component {component} successfully installed");
+    }
+    Ok(())
+}
+pub async fn setup_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
+    if create_dir_all(&dest.as_ref()).await.is_err() {
         log::error!("failed to create toolchain directory");
         return Err(());
     }
 
-    #[cfg(windows)]
-    {
-        let cursor = std::io::Cursor::new(&*data);
-        let mut archive = match ZipArchive::new(cursor) {
-            Ok(archive) => archive,
-            Err(e) => {
-                log::error!("failed to read ZIP archive");
-                log::error!("{e:?}");
-                return Err(());
-            }
-        };
+    install_component("rustc", dest.as_ref()).await?;
+    install_component("rust-std", dest.as_ref()).await?;
 
-        for i in 0..archive.len() {
-            let mut file = match archive.by_index(i) {
-                Ok(file) => file,
-                Err(e) => {
-                    log::error!("failed to read ZIP entry");
-                    log::error!("{e:?}");
-                    continue;
-                }
-            };
-
-            let outpath = match file.enclosed_name() {
-                Some(path) => fallback.join(path),
-                None => continue,
-            };
-
-            if file.is_dir() {
-                log::info!("File {} extracted to \"{}\"", i, outpath.display());
-                std::fs::create_dir_all(&outpath).unwrap();
-            } else {
-                log::info!(
-                    "File {} extracted to \"{}\" ({} bytes)",
-                    i,
-                    outpath.display(),
-                    file.size()
-                );
-                if let Some(p) = outpath.parent() {
-                    if !p.exists() {
-                        std::fs::create_dir_all(p).unwrap();
-                    }
-                }
-                let mut outfile = std::fs::File::create(&outpath).unwrap();
-                std::io::copy(&mut file, &mut outfile).unwrap();
-            }
-
-            log::info!("{} unpacked", outpath.display());
-        }
-    }
-
-    #[cfg(not(windows))]
-    {
-        let decoder = GzDecoder::new(&*data);
-        let mut archive = Archive::new(decoder);
-        if let Ok(entries) = archive.entries() {
-            for mut entry in entries.flatten() {
-                if let Ok(path) = entry.path() {
-                    let path = path.to_path_buf();
-                    if path.as_os_str() != "rustowl" {
-                        if !entry.unpack_in(&fallback).unwrap_or(false) {
-                            log::error!("failed to unpack runtime tarball");
-                            return Err(());
-                        }
-                        log::info!("{} unpacked", path.display());
-                    }
-                }
-            }
-        } else {
-            log::error!("failed to unpack runtime tarball");
-            return Err(());
-        }
-    }
-
-    log::info!("runtime setup done in {}", fallback.display());
-    Ok(fallback)
+    log::info!("toolchain setup finished");
+    Ok(())
 }
 
 pub async fn uninstall_toolchain() {
@@ -339,11 +314,16 @@ pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
             format!("--sysroot={}", sysroot.display()),
         );
 
-    let driver_dir = rustc_driver_path(sysroot)
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf();
+    let driver_dir = match rustc_driver_path(sysroot) {
+        Some(v) => v,
+        None => {
+            log::warn!("unable to find rustc_driver");
+            return;
+        }
+    }
+    .parent()
+    .unwrap()
+    .to_path_buf();
 
     #[cfg(target_os = "linux")]
     {

@@ -26,15 +26,15 @@ flate2 = "1"
 reqwest = { version = "0.12", default-features = false, features = ["http2", "rustls-tls-native-roots"] }
 clap_complete_nushell = "4"
 clap_complete = "4"
+tar = "0.4.44"
+tempfile = "3"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 mimalloc = { version = "0.1", default-features = false, features = ['extended'] }
 libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended'] }
 libc = "0.2"
-tar = "0.4.44"
 
 [target.'cfg(target_env = "msvc")'.dependencies]
-zip = "4.0.0"
 mimalloc = { version = "0.1", default-features = false, features = ['extended', 'override'] }
 libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended', 'override'] }
 
@@ -43,6 +43,7 @@ clap_complete_nushell = "4"
 clap_complete = "4"
 clap_mangen = "0.2"
 clap = { version = "4", features = ["derive"] }
+regex = "1"
 
 [dev-dependencies]
 criterion = { version = "0.6", features = ["html_reports"] }
