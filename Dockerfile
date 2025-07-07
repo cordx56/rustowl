@@ -1,12 +1,25 @@
 FROM rust:1.88.0-slim-trixie AS builder
 
+ENV RUSTC_BOOTSTRAP=1
+ENV RUSTUP_TOOLCHAIN="${RUST_VERSION}"
+
+ENV RUSTOWL_RUNTIME_DIRS="/opt/rustowl"
+
+ENV HOST_TUPLE="$(rustc --print=host-tuple)"
+ENV ACTIVE_TOOLCHAIN="$(rustup show active-toolchain | awk '{ print $1 }')"
+
 WORKDIR /app
 
-ENV RUSTC_BOOTSTRAP=1
-ENV RUSTUP_TOOLCHAIN=${RUST_VERSION}
+RUN rustup component add rust-src rustc-dev llvm-tools
 
-RUN rustup component add llvm-tools rustc-dev rust-src \
-    && cargo install rustowl
+COPY . .
+
+RUN cargo build --release --all-features --target "${HOST_TUPLE}"
+
+RUN mkdir sysroot \
+    cp -r "$(rustc --print=sysroot)" sysroot/"${ACTIVE_TOOLCHAIN}" \
+    find sysroot -type f | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf \
+    find sysroot -depth -type d -empty -exec rm -rf {} \;
 
 FROM debian:bookworm-slim
 
@@ -16,11 +29,12 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /usr/local/cargo/bin/rustowl /usr/local/bin/rustowl
-COPY --from=builder /usr/local/cargo/bin/rustowlc /usr/local/bin/rustowlc
+COPY --from=builder /app/target/${HOST_TUPLE}/release/rustowl /usr/local/bin/rustowl
+COPY --from=builder /app/target/${HOST_TUPLE}/release/rustowlc /usr/local/bin/rustowlc
+
+RUN mkdir /opt/rustowl
+COPY --from=builder /app/sysroot /opt/rustowl
 
 ENV PATH="/usr/local/bin:${PATH}"
-
-RUN rustowl toolchain install
 
 ENTRYPOINT ["rustowl"]
