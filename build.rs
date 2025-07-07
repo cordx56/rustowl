@@ -13,6 +13,13 @@ fn main() -> Result<(), Error> {
     println!("cargo::rustc-check-cfg=cfg(miri)");
 
     println!("cargo::rustc-env=RUSTOWL_TOOLCHAIN={}", get_toolchain());
+    println!("cargo::rustc-env=TOOLCHAIN_CHANNEL={}", get_channel());
+    if let Some(date) = get_toolchain_date() {
+        println!("cargo::rustc-env=TOOLCHAIN_DATE={date}");
+    }
+
+    let host_tuple = get_host_tuple().expect("unable to obtain host-tuple");
+    println!("cargo::rustc-env=HOST_TUPLE={host_tuple}");
 
     let tarball_name = if cfg!(windows) {
         format!("rustowl-{}.zip", get_host_tuple().unwrap())
@@ -49,6 +56,17 @@ fn main() -> Result<(), Error> {
 // get toolchain
 fn get_toolchain() -> String {
     env::var("RUSTUP_TOOLCHAIN").expect("RUSTUP_TOOLCHAIN unset. Expected version.")
+}
+fn get_channel() -> String {
+    get_toolchain()
+        .split("-")
+        .next()
+        .expect("failed to obtain channel from toolchain")
+        .to_owned()
+}
+fn get_toolchain_date() -> Option<String> {
+    let r = regex::Regex::new(r#"\d\d\d\d-\d\d-\d\d"#).unwrap();
+    r.find(&get_toolchain()).map(|v| v.as_str().to_owned())
 }
 fn get_host_tuple() -> Option<String> {
     match Command::new(env::var("RUSTC").unwrap_or("rustc".to_string()))

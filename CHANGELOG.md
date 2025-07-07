@@ -27,6 +27,7 @@
 - **bencmarks:** fix benchmarks script to calculate result correctly, and increased the amount of iteration for more precise results
 - **deps:** update tar dependency to version 0.4
 - **rustc:** new 1.88.0, bump version in ci ([#300](https://github.com/cordx56/rustowl/issues/300))
+- **lsp-core:** fix lifetime range visualization in async functions.
 
 ### 🚀 Features
 - update to rustc 1.88.0
