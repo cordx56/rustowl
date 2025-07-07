@@ -70,7 +70,15 @@ pub struct ToolchainArgs {
 #[derive(Debug, Subcommand)]
 pub enum ToolchainCommands {
     /// Install the toolchain.
-    Install,
+    Install {
+        #[arg(
+            long,
+            value_name("path"),
+            value_hint(ValueHint::AnyPath),
+            help = "Path to install RustOwl toolchain"
+        )]
+        path: Option<std::path::PathBuf>,
+    },
 
     /// Uninstall the toolchain.
     Uninstall,
