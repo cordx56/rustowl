@@ -43,15 +43,8 @@ jobs:
             fakeroot \
             sudo \
             binutils \
-            libcap \
-            base-devel sudo git curl wget unzip tar gzip which openssh jq tree xz bzip2 p7zip \
-            python python-pip go ruby java-runtime-openjdk java-environment-openjdk maven dotnet-sdk \
-            gcc clang php sqlite postgresql tk upx xorg-server-xvfb fakeroot libtool libyaml openssl \
-            iproute2 iputils net-tools netcat parallel patchelf shellcheck swig zip zsync nodejs npm \
-            autoconf automake dbus dnsutils dpkg fakeroot gnupg iproute2 iputils mercurial p7zip pkgconf \
-            rpm texinfo tk tree tzdata upx xorg-server-xvfb xz zsync bison brotli coreutils file findutils flex \
-            haveged lz4 m4 mediainfo netcat net-tools parallel patchelf pigz rsync shellcheck \
-            sqlite3 sshpass sudo systemd swig time zip
+            glibc \
+            glibc-libs
 
       - name: Setup build user
         run: |
