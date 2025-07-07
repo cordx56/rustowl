@@ -22,11 +22,13 @@ process_alive = "0.1"
 cargo_metadata = "0.20"
 uuid = { version = "1", features = ["v4"] }
 clap = { version = "4", features = ["cargo", "derive"] }
-clap_complete_nushell = "4"
-clap_complete = "4"
 flate2 = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots-no-provider"] }
 rustls = { version = "0.23.28", default-features = false, features = ["aws_lc_rs"] }
+clap_complete_nushell = "4"
+clap_complete = "4"
+tar = "0.4.44"
+tempfile = "3"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 mimalloc = { version = "0.1", default-features = false, features = ['extended'] }
