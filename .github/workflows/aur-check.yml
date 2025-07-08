@@ -41,10 +41,7 @@ jobs:
             shellcheck \
             debugedit \
             fakeroot \
-            sudo \
-            binutils \
-            glibc \
-            gcc-libs
+            sudo
 
       - name: Setup build user
         run: |
