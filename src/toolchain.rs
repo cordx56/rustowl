@@ -246,8 +246,19 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
                 return Err(());
             }
             if let Err(e) = rename(&from, &to).await {
-                log::error!("file move error: {e}");
-                return Err(());
+                if e.raw_os_error() == Some(18) {
+                    if let Err(copy_err) = tokio::fs::copy(&from, &to).await {
+                        log::error!("file copy error (after EXDEV): {copy_err}");
+                        return Err(());
+                    }
+                    if let Err(del_err) = tokio::fs::remove_file(&from).await {
+                        log::error!("file delete error (after EXDEV): {del_err}");
+                        return Err(());
+                    }
+                } else {
+                    log::error!("file move error: {e}");
+                    return Err(());
+                }
             }
         }
         log::info!("component {component} successfully installed");
