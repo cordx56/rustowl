@@ -20,8 +20,8 @@ RUN HOST_TUPLE="$(rustc --print=host-tuple)" && \
     mkdir -p artifacts && \
     cp target/"${HOST_TUPLE}"/release/rustowl /usr/local/bin/rustowl && \
     cp target/"${HOST_TUPLE}"/release/rustowlc /usr/local/bin/rustowlc && \
-    /usr/local/bin/rustowl toolchain install --path sysroot/$(rustup show active-toolchain | awk '{ print $1 }')
-    mkdir -p /opt/rustowl/sysroot
+    /usr/local/bin/rustowl toolchain install --path sysroot/$(rustup show active-toolchain | awk '{ print $1 }') && \
+    mkdir -p /opt/rustowl/sysroot && \
     cp -a sysroot/ /opt/rustowl
 
 ENV PATH="/usr/local/bin:${PATH}"
