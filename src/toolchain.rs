@@ -16,6 +16,26 @@ const HOST_TUPLE: &str = env!("HOST_TUPLE");
 const TOOLCHAIN_CHANNEL: &str = env!("TOOLCHAIN_CHANNEL");
 const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
+// Lazily initialized Tokio runtime for synchronous calls to async functions
+static SYNC_RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
+    tokio::runtime::Runtime::new().expect("Failed to create sync runtime for toolchain operations")
+});
+
+/// Synchronous version of get_sysroot for use in non-async contexts
+///
+/// This function handles the case when called from both inside and outside
+/// of an existing Tokio runtime context to avoid potential deadlocks.
+pub fn get_sysroot_sync() -> PathBuf {
+    // Check if we're already in a Tokio context to avoid deadlocks
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        // We're in a tokio runtime context, use the current handle
+        handle.block_on(get_sysroot())
+    } else {
+        // We're not in a tokio runtime context, use the shared runtime
+        SYNC_RUNTIME.block_on(get_sysroot())
+    }
+}
+
 pub static FALLBACK_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
     let exec_dir = env::current_exe().unwrap().parent().unwrap().to_path_buf();
     vec![exec_dir.join("rustowl-runtime"), exec_dir]

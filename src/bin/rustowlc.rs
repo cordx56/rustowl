@@ -22,6 +22,13 @@ pub mod core;
 
 use std::process::exit;
 
+// Use static linking for macOS ARM for better symbol resolution
+#[cfg(enable_static_link)]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(enable_static_link)]
+static STATIC_LINK_ENABLED: AtomicBool = AtomicBool::new(true);
+
 fn main() {
     // This is cited from [rustc](https://github.com/rust-lang/rust/blob/b90cfc887c31c3e7a9e6d462e2464db1fe506175/compiler/rustc/src/main.rs).
     // MIT License
@@ -50,6 +57,33 @@ fn main() {
 
             #[used]
             static _F7: unsafe extern "C" fn() = _mi_macros_override_malloc;
+        }
+
+        // For macOS ARM, add additional allocator symbol exports
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            // Export additional symbols needed for macOS ARM compatibility
+            #[used]
+            static _F8: unsafe extern "C" fn(usize, usize) -> *mut c_void =
+                libmimalloc_sys::mi_calloc_aligned;
+            #[used]
+            static _F9: unsafe extern "C" fn(usize, usize) -> *mut c_void =
+                libmimalloc_sys::mi_malloc_aligned;
+        }
+
+        // Set up macOS ARM environment variables for dynamic library loading
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            // Set DYLD_FALLBACK_LIBRARY_PATH for macOS if not already set
+            if std::env::var_os("DYLD_FALLBACK_LIBRARY_PATH").is_none() {
+                let sysroot = rustowl::toolchain::get_sysroot_sync();
+                let lib_path = format!("{}/lib:/usr/local/lib:/usr/lib", sysroot.display());
+                std::env::set_var("DYLD_FALLBACK_LIBRARY_PATH", lib_path);
+                eprintln!(
+                    "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={}",
+                    lib_path
+                );
+            }
         }
     }
 

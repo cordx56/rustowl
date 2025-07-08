@@ -10,7 +10,16 @@ include!("src/shells.rs");
 
 fn main() -> Result<(), Error> {
     // Declare custom cfg flags to avoid warnings
-    println!("cargo::rustc-check-cfg=cfg(miri)");
+    println!("cargo:rustc-check-cfg=cfg(miri)");
+    println!("cargo:rustc-check-cfg=cfg(enable_static_link)");
+    println!("cargo:rustc-check-cfg=cfg(macos_arm)");
+
+    // Set up platform-specific features
+    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        println!("cargo:rustc-cfg=macos_arm");
+        println!("cargo:rustc-cfg=enable_static_link");
+        println!("cargo:features=static-link");
+    }
 
     println!("cargo::rustc-env=RUSTOWL_TOOLCHAIN={}", get_toolchain());
     println!("cargo::rustc-env=TOOLCHAIN_CHANNEL={}", get_channel());
