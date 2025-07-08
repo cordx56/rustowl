@@ -32,7 +32,7 @@ impl Loc {
         // Find the character index corresponding to the byte position
         match source_clean
             .char_indices()
-            .position(|(byte_idx, _)| (byte_pos as usize) < byte_idx)
+            .position(|(byte_idx, _)| (byte_pos as usize) <= byte_idx)
         {
             Some(char_idx) => Self(char_idx as u32),
             None => Self(source_clean.chars().count() as u32),
