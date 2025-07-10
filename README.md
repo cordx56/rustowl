@@ -71,9 +71,11 @@ So, RustOwl can be used easily from other editor.
   - [Emacs](#emacs)
   - [RustRover / IntelliJ IDEs](#rustrover--intellij-ides)
 - [Architecture / OS / package repositories](#architecture--os--package-repositories)
+  - [Cargo Binstall](#cargo-binstall)
   - [Windows](#windows)
   - [Archlinux](#archlinux)
   - [Nix flake](#nix-flake)
+  - [GitHub Release](#github-release)
 - [Build manually](#build-manually)
   - [RustOwl](#rustowl)
     - [Prerequisite](#prerequisite)
@@ -208,6 +210,16 @@ You have to install RustOwl LSP server manually.
 
 ## Architecture / OS / package repositories
 
+### [Cargo Binstall](https://github.com/cargo-bins/cargo-binstall)
+
+One of the easiest way to install RustOwl is using cargo-binstall.
+
+```bash
+cargo binstall rustowl
+```
+
+Toolchain is automatically Downloaded and unpacked.
+
 ### Windows
 
 We have a winget package, install with:
@@ -241,6 +253,11 @@ yay -S rustowl-git
 ### Nix flake
 
 There is a [third-party Nix flake repository](https://github.com/nix-community/rustowl-flake) in the Nix community.
+
+## GitHub Release
+
+Download only `rustowl` executable from [release page](https://github.com/cordx56/rustowl/releases/latest) and place it into the place you desire.
+Toolchain is automatically Downloaded and unpacked.
 
 ## Build manually
 
