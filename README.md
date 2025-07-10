@@ -253,6 +253,8 @@ Here, we describe manual install instructions from source code.
 - `rustup` installed
     - You can install `rustup` from [this link](https://rustup.rs/).
     - You need to set up the `PATH` environment variable. To do this, follow the instructions provided by the `rustup` installer.
+- `gcc` or `clang` installed.
+    - In Windows, you can install Visual Studio toolchain.
 
 Building RustOwl requires nightly build of `rustc`. It will automatically installed by `rustup`.
 
