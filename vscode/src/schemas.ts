@@ -1,4 +1,4 @@
-import { z, ZodSchema } from "zod";
+import { z, ZodType } from "zod";
 
 export const zAliveMessage = z.object({ status: z.literal(true) });
 
@@ -84,7 +84,7 @@ export const zItem = z.object({
   mir: zMir,
 });
 export const zCollectedData = z.object({ items: z.array(zMir) });
-export const zWorkspace = z.record(zCollectedData);
+export const zWorkspace = z.record(z.string(), zCollectedData);
 export const zAnalyzeSuccess = z.object({
   success: z.literal(true),
   compile_error: z.boolean(),
@@ -95,7 +95,7 @@ export const zAnalyzeResponse = z.union([
   z.object({ success: z.literal(false), cause: z.string() }),
 ]);
 
-export type zInfer<T extends ZodSchema> = z.infer<T>;
+export type zInfer<T extends ZodType> = z.infer<T>;
 
 export const zLspLocation = z.object({
   line: z.number().int(),
