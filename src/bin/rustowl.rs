@@ -19,6 +19,49 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+// Use static linking for macOS ARM for better symbol resolution
+#[cfg(enable_static_link)]
+use std::sync::atomic::AtomicBool;
+
+#[cfg(enable_static_link)]
+#[allow(dead_code)]
+static STATIC_LINK_ENABLED: AtomicBool = AtomicBool::new(true);
+
+// Set up macOS ARM environment variables for dynamic library loading
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn setup_macos_arm_env() {
+    use std::env;
+
+    // Set DYLD_FALLBACK_LIBRARY_PATH for macOS dynamic library loading
+    if env::var_os("DYLD_FALLBACK_LIBRARY_PATH").is_none() {
+        let sysroot = toolchain::get_sysroot_sync();
+
+        // Try to find the actual library directory containing rustc_driver
+        if let Some(driver_path) = toolchain::rustc_driver_path(&sysroot) {
+            if let Some(lib_dir) = driver_path.parent() {
+                let lib_path = format!("{}:/usr/local/lib:/usr/lib", lib_dir.display());
+                unsafe {
+                    env::set_var("DYLD_FALLBACK_LIBRARY_PATH", &lib_path);
+                }
+                log::info!("macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={lib_path}");
+                return;
+            }
+        }
+
+        // Fallback to sysroot/lib if rustc_driver not found
+        let lib_path = format!("{}:/usr/local/lib:/usr/lib", sysroot.join("lib").display());
+        unsafe {
+            env::set_var("DYLD_FALLBACK_LIBRARY_PATH", &lib_path);
+        }
+        log::info!("macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={lib_path} (fallback)");
+    }
+}
+
+#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+fn setup_macos_arm_env() {
+    // No-op for non-macOS ARM platforms
+}
+
 fn set_log_level(default: log::LevelFilter) {
     log::set_max_level(
         env::var("RUST_LOG")
@@ -138,6 +181,9 @@ async fn start_lsp_server() {
 #[tokio::main]
 async fn main() {
     initialize_logging();
+
+    // Set up macOS ARM specific environment
+    setup_macos_arm_env();
 
     let parsed_args = Cli::parse();
 

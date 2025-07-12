@@ -16,6 +16,48 @@ const HOST_TUPLE: &str = env!("HOST_TUPLE");
 const TOOLCHAIN_CHANNEL: &str = env!("TOOLCHAIN_CHANNEL");
 const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
+/// Synchronous version of get_sysroot for use in non-async contexts
+///
+/// This function provides a way to get the sysroot without requiring an async context.
+/// It dynamically discovers the appropriate sysroot path using the same logic as the async version.
+pub fn get_sysroot_sync() -> PathBuf {
+    // First check if we have a configured sysroot
+    if let Some(sysroot) = get_configured_sysroot() {
+        return sysroot;
+    }
+
+    // Try to get sysroot from rustup using synchronous process execution
+    if let Ok(output) = std::process::Command::new("rustup")
+        .args(["run", TOOLCHAIN, "rustc", "--print=sysroot"])
+        .output()
+    {
+        if output.status.success() {
+            let sysroot = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+            if is_valid_sysroot(&sysroot) {
+                log::info!(
+                    "select sysroot dir from rustup installed: {}",
+                    sysroot.display()
+                );
+                return sysroot;
+            }
+        }
+    }
+
+    // Try to use an already configured runtime directory
+    if let Some(runtime) = get_configured_runtime_dir() {
+        return sysroot_from_runtime(runtime);
+    }
+
+    // Check fallback directories
+    if let Some(fallback) = check_fallback_dir() {
+        return sysroot_from_runtime(fallback);
+    }
+
+    // Last resort: return the default fallback path
+    // Note: This may not exist yet, but the caller should handle setup if needed
+    sysroot_from_runtime(&*FALLBACK_RUNTIME_DIRS[0])
+}
+
 pub static FALLBACK_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
     let exec_dir = env::current_exe().unwrap().parent().unwrap().to_path_buf();
     vec![exec_dir.join("rustowl-runtime"), exec_dir]
@@ -132,7 +174,7 @@ fn get_configured_sysroot() -> Option<PathBuf> {
         if is_valid_sysroot(sysroot) {
             log::info!(
                 "select sysroot dir from build time env var: {}",
-                sysroot.display(),
+                sysroot.display()
             );
             return Some(sysroot.clone());
         }
@@ -158,7 +200,7 @@ pub async fn get_sysroot() -> PathBuf {
     {
         log::info!(
             "select sysroot dir from rustup installed: {}",
-            sysroot.display(),
+            sysroot.display()
         );
         return sysroot;
     }

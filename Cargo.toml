@@ -29,10 +29,18 @@ clap_complete = "4"
 tar = "0.4.44"
 tempfile = "3"
 
+[features]
+default = []
+static-link = []
+
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 mimalloc = { version = "0.1", default-features = false, features = ['extended'] }
 libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended'] }
 libc = "0.2"
+
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+mimalloc = { version = "0.1", default-features = false, features = ['extended', 'secure'] }
+libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended', 'secure'] }
 
 [target.'cfg(target_env = "msvc")'.dependencies]
 mimalloc = { version = "0.1", default-features = false, features = ['extended', 'override'] }
@@ -65,6 +73,12 @@ opt-level = 3
 [profile.arm-windows-release]
 inherits = "release"
 lto = "off"
+
+[profile.arm-macos-release]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
 
 [profile.security]
 inherits = "release"
