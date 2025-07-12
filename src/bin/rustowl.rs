@@ -21,9 +21,10 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 // Use static linking for macOS ARM for better symbol resolution
 #[cfg(enable_static_link)]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 
 #[cfg(enable_static_link)]
+#[allow(dead_code)]
 static STATIC_LINK_ENABLED: AtomicBool = AtomicBool::new(true);
 
 // Set up macOS ARM environment variables for dynamic library loading
@@ -34,10 +35,29 @@ fn setup_macos_arm_env() {
     // Set DYLD_FALLBACK_LIBRARY_PATH for macOS dynamic library loading
     if env::var_os("DYLD_FALLBACK_LIBRARY_PATH").is_none() {
         let sysroot = toolchain::get_sysroot_sync();
+        
+        // Try to find the actual library directory containing rustc_driver
+        if let Some(driver_path) = toolchain::rustc_driver_path(&sysroot) {
+            if let Some(lib_dir) = driver_path.parent() {
+                let lib_path = format!("{}:/usr/local/lib:/usr/lib", lib_dir.display());
+                unsafe {
+                    env::set_var("DYLD_FALLBACK_LIBRARY_PATH", &lib_path);
+                }
+                log::info!(
+                    "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={}",
+                    lib_path
+                );
+                return;
+            }
+        }
+        
+        // Fallback to sysroot/lib if rustc_driver not found
         let lib_path = format!("{}:/usr/local/lib:/usr/lib", sysroot.join("lib").display());
-        env::set_var("DYLD_FALLBACK_LIBRARY_PATH", lib_path);
+        unsafe {
+            env::set_var("DYLD_FALLBACK_LIBRARY_PATH", &lib_path);
+        }
         log::info!(
-            "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={}",
+            "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={} (fallback)",
             lib_path
         );
     }
