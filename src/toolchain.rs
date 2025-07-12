@@ -36,7 +36,7 @@ pub fn get_sysroot_sync() -> PathBuf {
             if is_valid_sysroot(&sysroot) {
                 log::info!(
                     "select sysroot dir from rustup installed: {}",
-                    sysroot.display(),
+                    sysroot.display()
                 );
                 return sysroot;
             }
@@ -174,7 +174,7 @@ fn get_configured_sysroot() -> Option<PathBuf> {
         if is_valid_sysroot(sysroot) {
             log::info!(
                 "select sysroot dir from build time env var: {}",
-                sysroot.display(),
+                sysroot.display()
             );
             return Some(sysroot.clone());
         }
@@ -200,7 +200,7 @@ pub async fn get_sysroot() -> PathBuf {
     {
         log::info!(
             "select sysroot dir from rustup installed: {}",
-            sysroot.display(),
+            sysroot.display()
         );
         return sysroot;
     }

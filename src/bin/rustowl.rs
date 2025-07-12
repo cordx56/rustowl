@@ -43,9 +43,7 @@ fn setup_macos_arm_env() {
                 unsafe {
                     env::set_var("DYLD_FALLBACK_LIBRARY_PATH", &lib_path);
                 }
-                log::info!(
-                    "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={lib_path}"
-                );
+                log::info!("macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={lib_path}");
                 return;
             }
         }
@@ -55,9 +53,7 @@ fn setup_macos_arm_env() {
         unsafe {
             env::set_var("DYLD_FALLBACK_LIBRARY_PATH", &lib_path);
         }
-        log::info!(
-            "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={lib_path} (fallback)"
-        );
+        log::info!("macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={lib_path} (fallback)");
     }
 }
 

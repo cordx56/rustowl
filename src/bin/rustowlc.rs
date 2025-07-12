@@ -89,9 +89,7 @@ fn main() {
                         unsafe {
                             std::env::set_var("DYLD_FALLBACK_LIBRARY_PATH", &lib_path);
                         }
-                        eprintln!(
-                            "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={lib_path}"
-                        );
+                        eprintln!("macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={lib_path}");
                     }
                 } else {
                     // Fallback to sysroot/lib if rustc_driver not found
