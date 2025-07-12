@@ -51,7 +51,7 @@ fn main() {
             libmimalloc_sys::mi_realloc;
         #[used]
         static _F6: unsafe extern "C" fn(*mut c_void) = libmimalloc_sys::mi_free;
-        
+
         // Only use _mi_macros_override_malloc on non-ARM64 macOS platforms
         #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
         {
@@ -81,7 +81,7 @@ fn main() {
             // Set DYLD_FALLBACK_LIBRARY_PATH for macOS if not already set
             if std::env::var_os("DYLD_FALLBACK_LIBRARY_PATH").is_none() {
                 let sysroot = rustowl::toolchain::get_sysroot_sync();
-                
+
                 // Find the actual library directory containing rustc_driver
                 if let Some(driver_path) = rustowl::toolchain::rustc_driver_path(&sysroot) {
                     if let Some(lib_dir) = driver_path.parent() {
@@ -90,8 +90,7 @@ fn main() {
                             std::env::set_var("DYLD_FALLBACK_LIBRARY_PATH", &lib_path);
                         }
                         eprintln!(
-                            "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={}",
-                            lib_path
+                            "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={lib_path}"
                         );
                     }
                 } else {
@@ -101,8 +100,7 @@ fn main() {
                         std::env::set_var("DYLD_FALLBACK_LIBRARY_PATH", &lib_path);
                     }
                     eprintln!(
-                        "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={} (fallback)",
-                        lib_path
+                        "macOS ARM detected: Set DYLD_FALLBACK_LIBRARY_PATH={lib_path} (fallback)"
                     );
                 }
             }
