@@ -75,8 +75,8 @@ So, RustOwl can be used easily from other editor.
   - [Windows](#windows)
   - [Archlinux](#archlinux)
   - [Nix flake](#nix-flake)
-  - [Docker](#docker)
   - [GitHub Release](#github-release)
+  - [Docker](#docker)
 - [Build manually](#build-manually)
   - [RustOwl](#rustowl)
     - [Prerequisite](#prerequisite)
@@ -255,6 +255,11 @@ yay -S rustowl-git
 
 There is a [third-party Nix flake repository](https://github.com/nix-community/rustowl-flake) in the Nix community.
 
+### GitHub Release
+
+Download only `rustowl` executable from [release page](https://github.com/cordx56/rustowl/releases/latest) and place it into the place you desire.
+Toolchain is automatically Downloaded and unpacked.
+
 ### Docker
 
 You can run `rustowl` using the pre-built Docker image from GitHub Container Registry (GHCR).
@@ -292,11 +297,6 @@ alias rustowl='docker run --rm ghcr.io/cordx56/rustowl:latest'
 ```
 
 Now you can run `rustowl` from your terminal like a regular command.
-
-### GitHub Release
-
-Download only `rustowl` executable from [release page](https://github.com/cordx56/rustowl/releases/latest) and place it into the place you desire.
-Toolchain is automatically Downloaded and unpacked.
 
 ## Build manually
 
