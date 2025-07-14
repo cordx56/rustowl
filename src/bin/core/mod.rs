@@ -46,17 +46,22 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
     log::info!("start borrowck of {def_id:?}");
 
-    let analyzer = MirAnalyzer::new(
-        // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
-        // This can be done since the TyCtxt object lives until the analysis tasks joined
-        // in after_analysis method.
-        unsafe { std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx) },
-        def_id,
-    );
-    RUNTIME.block_on(async move {
-        let mut locked = TASKS.lock().await;
-        locked.spawn_on(analyzer, &HANDLE);
-    });
+    let mut def_ids = vec![def_id];
+    def_ids.extend_from_slice(tcx.nested_bodies_within(def_id));
+
+    for def_id in def_ids {
+        let analyzer = MirAnalyzer::new(
+            // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
+            // This can be done since the TyCtxt object lives until the analysis tasks joined
+            // in after_analysis method.
+            unsafe { std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx) },
+            def_id,
+        );
+        RUNTIME.block_on(async move {
+            let mut locked = TASKS.lock().await;
+            locked.spawn_on(analyzer, &HANDLE);
+        });
+    }
 
     Ok(tcx
         .arena

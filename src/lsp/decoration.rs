@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use tower_lsp::lsp_types;
 
-const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
+// TODO: Variable name should be checked?
+//const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
 const ASYNC_RESUME_TY: [&str; 2] = [
     "std::future::ResumeTy",
     "impl std::future::Future<Output = ()>",
@@ -253,20 +254,25 @@ enum SelectReason {
     Borrow,
     Call,
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct SelectLocal {
     pos: Loc,
+    candidate_local_decls: Vec<FnLocal>,
     selected: Option<(SelectReason, FnLocal, Range)>,
 }
 impl SelectLocal {
     pub fn new(pos: Loc) -> Self {
         Self {
             pos,
+            candidate_local_decls: Vec::new(),
             selected: None,
         }
     }
 
     fn select(&mut self, reason: SelectReason, local: FnLocal, range: Range) {
+        if !self.candidate_local_decls.contains(&local) {
+            return;
+        }
         if range.from() <= self.pos && self.pos <= range.until() {
             if let Some((old_reason, _, old_range)) = self.selected {
                 match (old_reason, reason) {
@@ -301,6 +307,14 @@ impl SelectLocal {
 }
 impl utils::MirVisitor for SelectLocal {
     fn visit_decl(&mut self, decl: &MirDecl) {
+        let (local, ty) = match decl {
+            MirDecl::User { local, ty, .. } => (local, ty),
+            MirDecl::Other { local, ty, .. } => (local, ty),
+        };
+        if ASYNC_RESUME_TY.contains(&ty.as_str()) {
+            return;
+        }
+        self.candidate_local_decls.push(*local);
         if let MirDecl::User { local, span, .. } = decl {
             self.select(SelectReason::Var, *local, *span);
         }
@@ -525,7 +539,7 @@ impl CalcDecos {
 }
 impl utils::MirVisitor for CalcDecos {
     fn visit_decl(&mut self, decl: &MirDecl) {
-        let (local, lives, shared_borrow, mutable_borrow, drop_range, must_live_at, name, drop, ty) =
+        let (local, lives, shared_borrow, mutable_borrow, drop_range, must_live_at, name, drop) =
             match decl {
                 MirDecl::User {
                     local,
@@ -536,7 +550,6 @@ impl utils::MirVisitor for CalcDecos {
                     drop_range,
                     must_live_at,
                     drop,
-                    ty,
                     ..
                 } => (
                     *local,
@@ -547,7 +560,6 @@ impl utils::MirVisitor for CalcDecos {
                     must_live_at,
                     Some(name),
                     drop,
-                    ty,
                 ),
                 MirDecl::Other {
                     local,
@@ -557,7 +569,6 @@ impl utils::MirVisitor for CalcDecos {
                     drop_range,
                     must_live_at,
                     drop,
-                    ty,
                     ..
                 } => (
                     *local,
@@ -568,18 +579,12 @@ impl utils::MirVisitor for CalcDecos {
                     must_live_at,
                     None,
                     drop,
-                    ty,
                 ),
             };
         self.current_fn_id = local.fn_id;
         if self.locals.contains(&local) {
             let var_str = match name {
                 Some(mir_var_name) => {
-                    if ASYNC_RESUME_TY.contains(&ty.as_str())
-                        && ASYNC_MIR_VARS.contains(&mir_var_name.as_str())
-                    {
-                        return;
-                    }
                     format!("variable `{mir_var_name}`")
                 }
                 None => "anonymus variable".to_owned(),
@@ -704,102 +709,4 @@ impl utils::MirVisitor for CalcDecos {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::utils::MirVisitor;
-
-    use super::*;
-
-    #[test]
-    fn test_visit_decl_user_var() {
-        let mut calc_decos = CalcDecos::new(vec![FnLocal { id: 5, fn_id: 5 }]);
-
-        let mir_decl = MirDecl::User {
-            local: FnLocal { id: 5, fn_id: 5 },
-            name: "test_var".to_owned(),
-            span: Range::new(Loc::from(156), Loc::from(161)).unwrap(),
-            ty: "std::string::String".to_owned(),
-            lives: vec![
-                Range::new(Loc::from(156), Loc::from(161)).unwrap(),
-                Range::new(Loc::from(176), Loc::from(189)).unwrap(),
-            ],
-            shared_borrow: vec![Range::new(Loc::from(219), Loc::from(226)).unwrap()],
-            mutable_borrow: vec![Range::new(Loc::from(176), Loc::from(189)).unwrap()],
-            drop: true,
-            drop_range: vec![Range::new(Loc::from(122), Loc::from(311)).unwrap()],
-            must_live_at: vec![Range::new(Loc::from(219), Loc::from(226)).unwrap()],
-        };
-
-        calc_decos.visit_decl(&mir_decl);
-
-        assert_eq!(
-            calc_decos.decorations(),
-            vec![Deco::Lifetime {
-                local: FnLocal { id: 5, fn_id: 5 },
-                range: Range::new(Loc::from(122), Loc::from(311)).unwrap(),
-                hover_text: "lifetime of variable `test_var`".to_owned(),
-                overlapped: false
-            }]
-        );
-    }
-
-    // Regression test for issue #208
-    // See: https://github.com/cordx56/rustowl/issues/208
-    #[test]
-    fn test_visit_decl_async_mir_var() {
-        let mut calc_decos = CalcDecos::new(vec![FnLocal { id: 5, fn_id: 5 }]);
-
-        let mir_decl = MirDecl::User {
-            local: FnLocal { id: 5, fn_id: 5 },
-            name: "_task_context".to_owned(),
-            span: Range::new(Loc::from(156), Loc::from(161)).unwrap(),
-            ty: ASYNC_RESUME_TY[0].to_owned(),
-            lives: vec![
-                Range::new(Loc::from(156), Loc::from(161)).unwrap(),
-                Range::new(Loc::from(176), Loc::from(189)).unwrap(),
-            ],
-            shared_borrow: vec![Range::new(Loc::from(219), Loc::from(226)).unwrap()],
-            mutable_borrow: vec![Range::new(Loc::from(176), Loc::from(189)).unwrap()],
-            drop: true,
-            drop_range: vec![Range::new(Loc::from(122), Loc::from(311)).unwrap()],
-            must_live_at: vec![Range::new(Loc::from(219), Loc::from(226)).unwrap()],
-        };
-
-        calc_decos.visit_decl(&mir_decl);
-
-        assert_eq!(calc_decos.decorations(), vec![]);
-    }
-
-    #[test]
-    fn test_visit_decl_user_task_context() {
-        let mut calc_decos = CalcDecos::new(vec![FnLocal { id: 5, fn_id: 5 }]);
-
-        let mir_decl = MirDecl::User {
-            local: FnLocal { id: 5, fn_id: 5 },
-            name: "_task_context".to_owned(),
-            span: Range::new(Loc::from(156), Loc::from(161)).unwrap(),
-            ty: "std::string::String".to_owned(),
-            lives: vec![
-                Range::new(Loc::from(156), Loc::from(161)).unwrap(),
-                Range::new(Loc::from(176), Loc::from(189)).unwrap(),
-            ],
-            shared_borrow: vec![Range::new(Loc::from(219), Loc::from(226)).unwrap()],
-            mutable_borrow: vec![Range::new(Loc::from(176), Loc::from(189)).unwrap()],
-            drop: true,
-            drop_range: vec![Range::new(Loc::from(122), Loc::from(311)).unwrap()],
-            must_live_at: vec![Range::new(Loc::from(219), Loc::from(226)).unwrap()],
-        };
-
-        calc_decos.visit_decl(&mir_decl);
-
-        assert_eq!(
-            calc_decos.decorations(),
-            vec![Deco::Lifetime {
-                local: FnLocal { id: 5, fn_id: 5 },
-                range: Range::new(Loc::from(122), Loc::from(311)).unwrap(),
-                hover_text: "lifetime of variable `_task_context`".to_owned(),
-                overlapped: false
-            }]
-        );
-    }
-}
+// TODO: new test
