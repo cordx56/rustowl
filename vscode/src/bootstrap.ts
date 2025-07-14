@@ -42,7 +42,7 @@ export const downloadRustowl = async (basePath: string) => {
       Buffer.from(await owl.arrayBuffer()),
       { flag: "w" },
     );
-    fs.chmod(`${basePath}/rustowl${exeExt}`, "755");
+    await fs.chmod(`${basePath}/rustowl${exeExt}`, "755");
   } else {
     throw Error("unsupported architecture or platform");
   }
