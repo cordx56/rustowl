@@ -18,7 +18,6 @@ use tikv_jemallocator::Jemalloc;
 #[cfg(all(not(target_env = "msvc"), not(miri)))]
 static GLOBAL: Jemalloc = Jemalloc;
 
-
 fn set_log_level(default: log::LevelFilter) {
     log::set_max_level(
         env::var("RUST_LOG")
