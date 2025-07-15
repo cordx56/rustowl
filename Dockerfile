@@ -2,6 +2,7 @@ FROM rust:1.88.0-slim-trixie
 
 ENV RUSTC_BOOTSTRAP=1
 ENV RUSTOWL_RUNTIME_DIRS="/opt/rustowl"
+
 WORKDIR /app
 
 RUN apt-get update && \
@@ -19,9 +20,8 @@ RUN HOST_TUPLE="$(rustc --print=host-tuple)" && \
     cargo build --release --all-features --target "${HOST_TUPLE}" && \
     cp target/"${HOST_TUPLE}"/release/rustowl /usr/local/bin/rustowl && \
     cp target/"${HOST_TUPLE}"/release/rustowlc /usr/local/bin/rustowlc && \
-    /usr/local/bin/rustowl toolchain install --path sysroot/$(rustup show active-toolchain | awk '{ print $1 }') && \
-    mkdir -p /opt/rustowl/sysroot && \
-    cp -r sysroot/ /opt/rustowl
+    /usr/local/bin/rustowl toolchain install --path /opt/rustowl/sysroot/$(rustup show active-toolchain | awk '{ print $1 }') && \
+    rm -rf /app
 
 ENV PATH="/usr/local/bin:${PATH}"
 
