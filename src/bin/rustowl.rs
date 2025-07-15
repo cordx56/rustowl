@@ -16,6 +16,7 @@ use tikv_jemallocator::Jemalloc;
 
 // Use jemalloc by default, but fall back to system allocator for Miri
 #[cfg(all(not(target_env = "msvc"), not(miri)))]
+#[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
 fn set_log_level(default: log::LevelFilter) {
