@@ -53,6 +53,7 @@ check() {
 
 package() {
     cd "$srcdir/rustowl"
+    find target -type d | grep -E 'rustowl-build-time-out$' | xargs -I % cp -r % ./
     ./target/"$(rustc --print=host-tuple)"/release/rustowl toolchain install --path sysroot/"$(rustup show active-toolchain | awk '{ print $1 }')"
     install -d -m 755 "$pkgdir/opt/rustowl"
     cp -a sysroot/ "$pkgdir/opt/rustowl/"
