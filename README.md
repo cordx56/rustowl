@@ -71,9 +71,11 @@ So, RustOwl can be used easily from other editor.
   - [Emacs](#emacs)
   - [RustRover / IntelliJ IDEs](#rustrover--intellij-ides)
 - [Architecture / OS / package repositories](#architecture--os--package-repositories)
+  - [Cargo Binstall](#cargo-binstall)
   - [Windows](#windows)
   - [Archlinux](#archlinux)
   - [Nix flake](#nix-flake)
+  - [GitHub Release](#github-release)
 - [Build manually](#build-manually)
   - [RustOwl](#rustowl)
     - [Prerequisite](#prerequisite)
@@ -208,6 +210,16 @@ You have to install RustOwl LSP server manually.
 
 ## Architecture / OS / package repositories
 
+### [Cargo Binstall](https://github.com/cargo-bins/cargo-binstall)
+
+One of the easiest way to install RustOwl is using cargo-binstall.
+
+```bash
+cargo binstall rustowl
+```
+
+Toolchain is automatically Downloaded and unpacked.
+
 ### Windows
 
 We have a winget package, install with:
@@ -242,6 +254,11 @@ yay -S rustowl-git
 
 There is a [third-party Nix flake repository](https://github.com/nix-community/rustowl-flake) in the Nix community.
 
+## GitHub Release
+
+Download only `rustowl` executable from [release page](https://github.com/cordx56/rustowl/releases/latest) and place it into the place you desire.
+Toolchain is automatically Downloaded and unpacked.
+
 ## Build manually
 
 Here, we describe manual install instructions from source code.
@@ -253,6 +270,8 @@ Here, we describe manual install instructions from source code.
 - `rustup` installed
     - You can install `rustup` from [this link](https://rustup.rs/).
     - You need to set up the `PATH` environment variable. To do this, follow the instructions provided by the `rustup` installer.
+- `gcc` or `clang` installed.
+    - In Windows, you can install Visual Studio toolchain.
 
 Building RustOwl requires nightly build of `rustc`. It will automatically installed by `rustup`.
 
