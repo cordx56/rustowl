@@ -1,6 +1,5 @@
 use crate::{lsp::*, models::*, toolchain, utils};
 use std::collections::HashMap;
-use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::{
@@ -119,6 +118,10 @@ impl Backend {
         }
         let roots = { self.roots.read().await.clone() };
 
+        let cargo = toolchain::get_executable_path("cargo").await;
+        // set rustowlc & library path
+        let rustowlc_path = toolchain::get_executable_path("rustowlc").await;
+
         for (root, target) in roots {
             // progress report
             let meta = cargo_metadata::MetadataCommand::new()
@@ -134,7 +137,7 @@ impl Backend {
             let package_name = meta.and_then(|v| v.root_package().map(|w| w.name.clone()));
             if let Some(package_name) = &package_name {
                 log::info!("clear cargo cache");
-                let mut command = process::Command::new("cargo");
+                let mut command = process::Command::new(&cargo);
                 command
                     .args(["clean", "--package", package_name])
                     .env("CARGO_TARGET_DIR", &target)
@@ -155,14 +158,7 @@ impl Backend {
                 )
             };
 
-            let sysroot = toolchain::get_sysroot().await;
-            let mut command = if let Ok(cargo_path) = &env::var("CARGO") {
-                log::info!("using toolchain cargo: {cargo_path}");
-                process::Command::new(cargo_path)
-            } else {
-                log::info!("using default cargo");
-                process::Command::new("cargo")
-            };
+            let mut command = process::Command::new(&cargo);
 
             let mut args = vec!["check"];
             if all_targets {
@@ -181,11 +177,10 @@ impl Backend {
                 .stdout(std::process::Stdio::piped())
                 .kill_on_drop(true);
 
-            // set rustowlc & library path
-            let rustowlc_path = toolchain::get_rustowlc_path().await;
             command
                 .env("RUSTC", &rustowlc_path)
                 .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc_path);
+            let sysroot = toolchain::get_sysroot().await;
             toolchain::set_rustc_env(&mut command, &sysroot);
 
             if log::max_level().to_level().is_none() {
@@ -270,7 +265,7 @@ impl Backend {
 
     async fn analyze_single_file(&self, path: impl AsRef<Path>) {
         let sysroot = toolchain::get_sysroot().await;
-        let rustowlc_path = toolchain::get_rustowlc_path().await;
+        let rustowlc_path = toolchain::get_executable_path("rustowlc").await;
 
         let mut command = process::Command::new(&rustowlc_path);
         command

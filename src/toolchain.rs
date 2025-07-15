@@ -209,7 +209,9 @@ async fn download_tarball_and_extract(url: &str, dest: &Path) -> Result<(), ()> 
 
 async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
     let tempdir = tempfile::tempdir().map_err(|_| ())?;
-    log::info!("temp dir is made: {}", tempdir.path().display());
+    // Using `tempdir.path()` more than once causes SEGV, so we use `tempdir.path().to_owned()`.
+    let temp_path = tempdir.path().to_owned();
+    log::info!("temp dir is made: {}", temp_path.display());
 
     let dist_base = "https://static.rust-lang.org/dist";
     let base_url = match TOOLCHAIN_DATE {
@@ -220,9 +222,9 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
     let component_name = format!("{component}-{TOOLCHAIN_CHANNEL}-{HOST_TUPLE}");
     let tarball_url = format!("{base_url}/{component_name}.tar.gz");
 
-    download_tarball_and_extract(&tarball_url, tempdir.path()).await?;
+    download_tarball_and_extract(&tarball_url, &temp_path).await?;
 
-    let extracted_path = tempdir.path().join(component_name);
+    let extracted_path = temp_path.join(component_name);
     let components = read_to_string(extracted_path.join("components"))
         .await
         .map_err(|_| {
@@ -262,6 +264,7 @@ pub async fn setup_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
 
     install_component("rustc", dest.as_ref()).await?;
     install_component("rust-std", dest.as_ref()).await?;
+    install_component("cargo", dest.as_ref()).await?;
 
     log::info!("toolchain setup finished");
     Ok(())
@@ -277,33 +280,35 @@ pub async fn uninstall_toolchain() {
     }
 }
 
-pub async fn get_rustowlc_path() -> String {
-    let mut current_rustowlc = env::current_exe().unwrap();
+pub async fn get_executable_path(name: &str) -> String {
     #[cfg(not(windows))]
-    current_rustowlc.set_file_name("rustowlc");
+    let exec_name = name.to_owned();
     #[cfg(windows)]
-    current_rustowlc.set_file_name("rustowlc.exe");
-    if current_rustowlc.is_file() {
-        log::info!("rustowlc is selected in the same directory as rustowl executable");
-        return current_rustowlc.to_string_lossy().to_string();
-    }
-
-    if process::Command::new("rustowlc").spawn().is_ok() {
-        log::info!("rustowlc is selected in PATH");
-        return "rustowlc".to_owned();
-    }
+    let exec_name = format!("{name}.exe");
 
     let runtime_dir = get_runtime_dir().await;
-    #[cfg(not(windows))]
-    let rustowlc = runtime_dir.join("rustowlc");
-    #[cfg(windows)]
-    let rustowlc = runtime_dir.join("rustowlc.exe");
-    if rustowlc.is_file() {
-        rustowlc.to_string_lossy().to_string()
-    } else {
-        log::warn!("rustowlc not found; fallback");
-        "rustowlc".to_owned()
+    let exec = runtime_dir.join(&exec_name);
+    if exec.is_file() {
+        log::info!("{name} is selected in runtime root");
+        return exec.to_string_lossy().to_string();
     }
+
+    let sysroot = sysroot_from_runtime(runtime_dir);
+    let exec_bin = sysroot.join("bin").join(&exec_name);
+    if exec_bin.is_file() {
+        log::info!("{name} is selected in sysroot/bin");
+        return exec_bin.to_string_lossy().to_string();
+    }
+
+    let mut current_exec = env::current_exe().unwrap();
+    current_exec.set_file_name(&exec_name);
+    if current_exec.is_file() {
+        log::info!("{name} is selected in the same directory as rustowl executable");
+        return current_exec.to_string_lossy().to_string();
+    }
+
+    log::warn!("{name} not found; fallback");
+    exec_name.to_owned()
 }
 
 pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
