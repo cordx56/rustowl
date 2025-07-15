@@ -279,13 +279,13 @@ docker pull ghcr.io/cordx56/rustowl:v0.3.4
 2. Run the image
 
 ```sh
-docker run --rm ghcr.io/cordx56/rustowl:latest
+docker run --rm -v /path/to/project:/app ghcr.io/cordx56/rustowl:latest
 ```
 
 You can also pass command-line arguments as needed:
 
 ```sh
-docker run --rm ghcr.io/cordx56/rustowl:latest --help
+docker run --rm /path/to/project:/app ghcr.io/cordx56/rustowl:latest --help
 ```
 
 3. (Optional) Use as a CLI
@@ -293,7 +293,7 @@ docker run --rm ghcr.io/cordx56/rustowl:latest --help
 To use `rustowl` as if it were installed on your system, you can create a shell alias:
 
 ```sh
-alias rustowl='docker run --rm ghcr.io/cordx56/rustowl:latest'
+alias rustowl='docker run --rm -v $(pwd):/app ghcr.io/cordx56/rustowl:latest'
 ```
 
 Now you can run `rustowl` from your terminal like a regular command.
