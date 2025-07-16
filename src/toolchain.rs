@@ -1,12 +1,8 @@
 use std::env;
 use std::fs::read_dir;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::LazyLock;
-use tokio::{
-    fs::{create_dir_all, read_to_string, remove_dir_all, rename},
-    process,
-};
+use tokio::fs::{create_dir_all, read_to_string, remove_dir_all, rename};
 
 use flate2::read::GzDecoder;
 use tar::Archive;
@@ -16,23 +12,12 @@ const HOST_TUPLE: &str = env!("HOST_TUPLE");
 const TOOLCHAIN_CHANNEL: &str = env!("TOOLCHAIN_CHANNEL");
 const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
-pub static FALLBACK_RUNTIME_DIR: LazyLock<Option<PathBuf>> =
-    LazyLock::new(|| env::home_dir().map(|v| v.join(".rustowl")));
-
-const BUILD_RUNTIME_DIRS: Option<&str> = option_env!("RUSTOWL_RUNTIME_DIRS");
-static CONFIG_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
-    BUILD_RUNTIME_DIRS
-        .map(|v| env::split_paths(v).collect())
-        .unwrap_or_default()
-});
-const BUILD_SYSROOTS: Option<&str> = option_env!("RUSTOWL_SYSROOTS");
-static CONFIG_SYSROOTS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
-    BUILD_SYSROOTS
-        .map(|v| env::split_paths(v).collect())
-        .unwrap_or_default()
+pub static FALLBACK_RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    env::home_dir()
+        .map(|v| v.join(".rustowl"))
+        .unwrap_or(PathBuf::from("/opt/rustowl"))
 });
 
-const RUSTC_DRIVER_NAME: &str = env!("RUSTC_DRIVER_NAME");
 fn recursive_read_dir(path: impl AsRef<Path>) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if path.as_ref().is_dir() {
@@ -48,120 +33,26 @@ fn recursive_read_dir(path: impl AsRef<Path>) -> Vec<PathBuf> {
     paths
 }
 
-pub fn rustc_driver_path(sysroot: impl AsRef<Path>) -> Option<PathBuf> {
-    for file in recursive_read_dir(sysroot) {
-        if file.file_name().unwrap().to_string_lossy() == RUSTC_DRIVER_NAME {
-            log::info!("rustc_driver found: {}", file.display());
-            return Some(file);
-        }
-    }
-    None
-}
-
 pub fn sysroot_from_runtime(runtime: impl AsRef<Path>) -> PathBuf {
     runtime.as_ref().join("sysroot").join(TOOLCHAIN)
 }
 
-fn is_valid_sysroot(sysroot: impl AsRef<Path>) -> bool {
-    rustc_driver_path(sysroot).is_some()
-}
-
-fn get_configured_runtime_dir() -> Option<PathBuf> {
-    let env_var = env::var("RUSTOWL_RUNTIME_DIRS").unwrap_or_default();
-
-    for runtime in env::split_paths(&env_var) {
-        if is_valid_sysroot(sysroot_from_runtime(&runtime)) {
-            log::info!("select runtime dir from env var: {}", runtime.display());
-            return Some(runtime);
-        }
-    }
-
-    for runtime in &*CONFIG_RUNTIME_DIRS {
-        if is_valid_sysroot(sysroot_from_runtime(runtime)) {
-            log::info!(
-                "select runtime dir from build time env var: {}",
-                runtime.display()
-            );
-            return Some(runtime.clone());
-        }
-    }
-    None
-}
-
-pub fn check_fallback_dir() -> Option<PathBuf> {
-    if let Some(fallback) = &*FALLBACK_RUNTIME_DIR {
-        if is_valid_sysroot(sysroot_from_runtime(fallback)) {
-            log::info!("select runtime from fallback: {}", fallback.display());
-            return Some(fallback.clone());
-        }
-    }
-    None
-}
-
 async fn get_runtime_dir() -> PathBuf {
-    if let Some(runtime) = get_configured_runtime_dir() {
-        return runtime;
-    }
-    if let Some(fallback) = check_fallback_dir() {
-        return fallback;
+    let sysroot = sysroot_from_runtime(&*FALLBACK_RUNTIME_DIR);
+    if FALLBACK_RUNTIME_DIR.is_dir() && sysroot.is_dir() {
+        return FALLBACK_RUNTIME_DIR.clone();
     }
 
-    log::info!("rustc_driver not found; start setup toolchain");
-    let fallback = sysroot_from_runtime(FALLBACK_RUNTIME_DIR.as_ref().as_ref().unwrap());
-    if let Err(e) = setup_toolchain(&fallback).await {
+    log::info!("sysroot not found; start setup toolchain");
+    if let Err(e) = setup_toolchain(&sysroot).await {
         log::error!("{e:?}");
         std::process::exit(1);
     } else {
-        fallback
+        FALLBACK_RUNTIME_DIR.clone()
     }
-}
-
-fn get_configured_sysroot() -> Option<PathBuf> {
-    let env_var = env::var("RUSTOWL_SYSROOTS").unwrap_or_default();
-
-    for sysroot in env::split_paths(&env_var) {
-        if is_valid_sysroot(&sysroot) {
-            log::info!("select sysroot dir from env var: {}", sysroot.display());
-            return Some(sysroot);
-        }
-    }
-
-    for sysroot in &*CONFIG_SYSROOTS {
-        if is_valid_sysroot(sysroot) {
-            log::info!(
-                "select sysroot dir from build time env var: {}",
-                sysroot.display(),
-            );
-            return Some(sysroot.clone());
-        }
-    }
-    None
 }
 
 pub async fn get_sysroot() -> PathBuf {
-    if let Some(sysroot) = get_configured_sysroot() {
-        return sysroot;
-    }
-
-    // get sysroot from rustup
-    if let Ok(child) = process::Command::new("rustup")
-        .args(["run", TOOLCHAIN, "rustc", "--print=sysroot"])
-        .stdout(Stdio::piped())
-        .spawn()
-        && let Ok(sysroot) = child
-            .wait_with_output()
-            .await
-            .map(|v| PathBuf::from(String::from_utf8_lossy(&v.stdout).trim()))
-        && is_valid_sysroot(&sysroot)
-    {
-        log::info!(
-            "select sysroot dir from rustup installed: {}",
-            sysroot.display(),
-        );
-        return sysroot;
-    }
-
-    // fallback sysroot
     sysroot_from_runtime(get_runtime_dir().await)
 }
 
@@ -276,12 +167,10 @@ pub async fn setup_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
 }
 
 pub async fn uninstall_toolchain() {
-    if let Some(fallback) = &*FALLBACK_RUNTIME_DIR {
-        let sysroot = sysroot_from_runtime(fallback);
-        if sysroot.is_dir() {
-            log::info!("remove sysroot: {}", sysroot.display());
-            remove_dir_all(&sysroot).await.unwrap();
-        }
+    let sysroot = sysroot_from_runtime(&*FALLBACK_RUNTIME_DIR);
+    if sysroot.is_dir() {
+        log::info!("remove sysroot: {}", sysroot.display());
+        remove_dir_all(&sysroot).await.unwrap();
     }
 }
 
@@ -324,22 +213,11 @@ pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
             format!("--sysroot={}", sysroot.display()),
         );
 
-    let driver_dir = match rustc_driver_path(sysroot) {
-        Some(v) => v,
-        None => {
-            log::warn!("unable to find rustc_driver");
-            return;
-        }
-    }
-    .parent()
-    .unwrap()
-    .to_path_buf();
-
     #[cfg(target_os = "linux")]
     {
         let mut paths = env::split_paths(&env::var("LD_LIBRARY_PATH").unwrap_or("".to_owned()))
             .collect::<std::collections::VecDeque<_>>();
-        paths.push_front(sysroot.join(driver_dir));
+        paths.push_front(sysroot.join("lib"));
         let paths = env::join_paths(paths).unwrap();
         command.env("LD_LIBRARY_PATH", paths);
     }
@@ -348,7 +226,7 @@ pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
         let mut paths =
             env::split_paths(&env::var("DYLD_FALLBACK_LIBRARY_PATH").unwrap_or("".to_owned()))
                 .collect::<std::collections::VecDeque<_>>();
-        paths.push_front(sysroot.join(driver_dir));
+        paths.push_front(sysroot.join("lib"));
         let paths = env::join_paths(paths).unwrap();
         command.env("DYLD_FALLBACK_LIBRARY_PATH", paths);
     }
@@ -356,7 +234,7 @@ pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
     {
         let mut paths = env::split_paths(&env::var_os("Path").unwrap())
             .collect::<std::collections::VecDeque<_>>();
-        paths.push_front(sysroot.join(driver_dir));
+        paths.push_front(sysroot.join("bin"));
         let paths = env::join_paths(paths).unwrap();
         command.env("Path", paths);
     }
