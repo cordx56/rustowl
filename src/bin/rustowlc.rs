@@ -23,7 +23,7 @@ pub mod core;
 use std::process::exit;
 
 fn main() {
-    // This is cited from [rustc](https://github.com/rust-lang/rust/blob/master/compiler/rustc/src/main.rs).
+    // This is cited from [rustc](https://github.com/rust-lang/rust/blob/3014e79f9c8d5510ea7b3a3b70d171d0948b1e96/compiler/rustc/src/main.rs).
     // MIT License
     #[cfg(not(target_env = "msvc"))]
     {
