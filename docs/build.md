@@ -14,10 +14,10 @@ On a freshly installed Ubuntu system, you need to run `apt install build-essenti
 ### Build RustOwl using stable toolchain
 
 There are scripts to build the stable version of RustOwl.
-`scripts/build/cargo.sh` sets up the RustOwl toolchain and builds RustOwl using that toolchain.
+`scripts/build/toolchain` sets up the RustOwl toolchain and executes command using that toolchain.
 
 ```bash
-./scripts/build/cargo.sh install --path . --locked
+./scripts/build/toolchain cargo install --path . --locked
 ```
 
 ### Build RustOwl using custom toolchain
