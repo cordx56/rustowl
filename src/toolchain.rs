@@ -107,7 +107,7 @@ async fn get_runtime_dir() -> PathBuf {
     }
 
     log::info!("rustc_driver not found; start setup toolchain");
-    let fallback = sysroot_from_runtime(&FALLBACK_RUNTIME_DIR.as_ref().as_ref().unwrap());
+    let fallback = sysroot_from_runtime(FALLBACK_RUNTIME_DIR.as_ref().as_ref().unwrap());
     if let Err(e) = setup_toolchain(&fallback).await {
         log::error!("{e:?}");
         std::process::exit(1);
