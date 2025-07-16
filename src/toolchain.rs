@@ -16,12 +16,8 @@ const HOST_TUPLE: &str = env!("HOST_TUPLE");
 const TOOLCHAIN_CHANNEL: &str = env!("TOOLCHAIN_CHANNEL");
 const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
-pub static FALLBACK_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
-    env::home_dir()
-        .map(|v| v.join(".rustowl"))
-        .into_iter()
-        .collect()
-});
+pub static FALLBACK_RUNTIME_DIR: LazyLock<Option<PathBuf>> =
+    LazyLock::new(|| env::home_dir().map(|v| v.join(".rustowl")));
 
 const BUILD_RUNTIME_DIRS: Option<&str> = option_env!("RUSTOWL_RUNTIME_DIRS");
 static CONFIG_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
@@ -93,7 +89,7 @@ fn get_configured_runtime_dir() -> Option<PathBuf> {
 }
 
 pub fn check_fallback_dir() -> Option<PathBuf> {
-    for fallback in &*FALLBACK_RUNTIME_DIRS {
+    if let Some(fallback) = &*FALLBACK_RUNTIME_DIR {
         if is_valid_sysroot(sysroot_from_runtime(fallback)) {
             log::info!("select runtime from fallback: {}", fallback.display());
             return Some(fallback.clone());
@@ -111,7 +107,7 @@ async fn get_runtime_dir() -> PathBuf {
     }
 
     log::info!("rustc_driver not found; start setup toolchain");
-    let fallback = sysroot_from_runtime(&*FALLBACK_RUNTIME_DIRS[0]);
+    let fallback = sysroot_from_runtime(&FALLBACK_RUNTIME_DIR.as_ref().as_ref().unwrap());
     if let Err(e) = setup_toolchain(&fallback).await {
         log::error!("{e:?}");
         std::process::exit(1);
@@ -280,7 +276,7 @@ pub async fn setup_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
 }
 
 pub async fn uninstall_toolchain() {
-    for fallback in &*FALLBACK_RUNTIME_DIRS {
+    if let Some(fallback) = &*FALLBACK_RUNTIME_DIR {
         let sysroot = sysroot_from_runtime(fallback);
         if sysroot.is_dir() {
             log::info!("remove sysroot: {}", sysroot.display());
