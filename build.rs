@@ -55,7 +55,10 @@ fn main() -> Result<(), Error> {
 
 // get toolchain
 fn get_toolchain() -> String {
-    env::var("RUSTUP_TOOLCHAIN").expect("RUSTUP_TOOLCHAIN unset. Expected version.")
+    env::var("RUSTUP_TOOLCHAIN").unwrap_or_else(|_| {
+        env::var("TOOLCHAIN_CHANNEL")
+            .expect("neither RUSTUP_TOOLCHAIN or TOOLCHAIN_CHANNEL unset. Expected version.")
+    })
 }
 fn get_channel() -> String {
     get_toolchain()
