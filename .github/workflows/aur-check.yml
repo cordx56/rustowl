@@ -41,7 +41,9 @@ jobs:
             shellcheck \
             debugedit \
             fakeroot \
-            sudo
+            sudo \
+            gcc-libs \
+            pkgconf
 
       - name: Setup build user
         run: |
