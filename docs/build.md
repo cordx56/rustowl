@@ -27,32 +27,28 @@ You can build RustOwl using a custom toolchain. This method is recommended for c
 The prerequisites are as follows:
 
 - `rustup` installed
-    - You can install `rustup` from [this link](https://rustup.rs/).
-    - You need to set up the `PATH` environment variable. Follow the instructions provided by the `rustup` installer to do this.
+  - You can install `rustup` from [this link](https://rustup.rs/).
+  - You need to set up the `PATH` environment variable. Follow the instructions provided by the `rustup` installer to do this.
 - `gcc` or `clang` installed.
-    - On Windows, you can install the Visual Studio toolchain instead.
+  - On Windows, you can install the Visual Studio toolchain instead.
 
 Building RustOwl requires a nightly build of `rustc`. It will be installed automatically by `rustup` if needed.
 
 Other dependencies are specified in the configuration files and will be installed automatically.
 
-
 ```bash
 cargo install --path . --locked
 ```
-
-
-
 
 ## VSCode extension
 
 ### Prerequisite
 
 - VS Code installed
-    - You can install VS Code from [this link](https://code.visualstudio.com/).
+  - You can install VS Code from [this link](https://code.visualstudio.com/).
 - Node.js installed
 - `yarn` installed
-    - After installing Node.js, You can install `yarn` by running `npm install -g yarn`.
+  - After installing Node.js, You can install `yarn` by running `npm install -g yarn`.
 
 VS Code extension has been tested on macOS Sequoia 15.3.2 on arm64 architecture with Visual Studio Code 1.99.3, Node.js v20.16.0, and `yarn` 1.22.22.
 Other dependencies are locked in the configuration files and will be installed automatically.

@@ -48,8 +48,8 @@ RustOwl visualizes those by using underlines:
 - 🟪 purple: mutable borrowing
 - 🟧 orange: value moved / function call
 - 🟥 red: lifetime error
-    - diff of lifetime between actual and expected, or
-    - invalid overlapped lifetime of mutable and shared (immutable) references
+  - diff of lifetime between actual and expected, or
+  - invalid overlapped lifetime of mutable and shared (immutable) references
 
 Detailed usage is described [here](docs/usage.md).
 
@@ -61,6 +61,7 @@ So, RustOwl can be used easily from other editor.
 ## Table Of Contents
 
 <!--toc:start-->
+
 - [Support](#support)
 - [Quick Start](#quick-start)
   - [Prerequisite](#prerequisite)
@@ -99,7 +100,7 @@ Here we describe how to start using RustOwl with VS Code.
 ### Prerequisite
 
 - `cargo` installed
-    - You can install `cargo` using `rustup` from [this link](https://rustup.rs/).
+  - You can install `cargo` using `rustup` from [this link](https://rustup.rs/).
 - Visual Studio Code (VS Code) installed
 
 We tested this guide on macOS Sequoia 15.3.2 on arm64 architecture with VS Code 1.99.3 and `cargo` 1.88.0.
@@ -188,7 +189,6 @@ where `{subcommand}` can be one of:
 - `enable`: Enable rustowl highlights.
 - `disable`: Disable rustowl highlights.
 - `toggle`: Toggle rustowl highlights.
-
 
 ### Emacs
 
