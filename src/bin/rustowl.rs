@@ -72,7 +72,7 @@ async fn handle_command(command: Commands) {
                 match arg {
                     ToolchainCommands::Install { path } => {
                         let path = path.unwrap_or(toolchain::sysroot_from_runtime(
-                            &*toolchain::FALLBACK_RUNTIME_DIRS[0],
+                            toolchain::FALLBACK_RUNTIME_DIR.as_ref().unwrap(),
                         ));
                         if toolchain::setup_toolchain(&path).await.is_err() {
                             std::process::exit(1);
