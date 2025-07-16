@@ -4,7 +4,7 @@ script_dir="$(cd $(dirname "$0"); pwd)"
 
 export $(/bin/sh "$script_dir/print-env.sh" "$(cat "${script_dir}/toolchain")")
 
-export SYSROOT="${SYSROOT:-"$HOME/.cache/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}"}"
+export SYSROOT="${SYSROOT:-"$HOME/.rustowl/sysroot/${RUSTOWL_TOOLCHAIN}"}"
 export RUSTC="${RUSTC:-"${SYSROOT}/bin/rustc"}"
 export CARGO="${CARGO:-"${SYSROOT}/bin/cargo"}"
 

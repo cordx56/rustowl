@@ -7,7 +7,7 @@ Here we describe how to build each of our repository.
 You can choose one of two ways to build RustOwl.
 
 You can add runtime directory paths to the search paths by specifying the `RUSTOWL_RUNTIME_DIRS` or `RUSTOWL_SYSROOTS` environment variables.
-The default runtime directory is `$HOME/.cache/rustowl`.
+The default runtime directory is `$HOME/.rustowl`.
 
 On a freshly installed Ubuntu system, you need to run `apt install build-essential` to ensure all required build tools are available for linking.
 
