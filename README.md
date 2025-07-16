@@ -78,12 +78,6 @@ So, RustOwl can be used easily from other editor.
   - [Nix flake](#nix-flake)
   - [GitHub Release](#github-release)
 - [Build manually](#build-manually)
-  - [RustOwl](#rustowl)
-    - [Prerequisite](#prerequisite)
-    - [Build & Run](#build--run)
-  - [VSCode extension](#vscode-extension)
-    - [Prerequisite](#prerequisite)
-    - [Build & Run](#build--run)
 - [Note](#note)
 <!--toc:end-->
 
