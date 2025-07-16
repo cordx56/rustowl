@@ -17,15 +17,10 @@ const TOOLCHAIN_CHANNEL: &str = env!("TOOLCHAIN_CHANNEL");
 const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
 pub static FALLBACK_RUNTIME_DIRS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
-    let exec_dir = env::current_exe().unwrap().parent().unwrap().to_path_buf();
-    let cache_dir = env::var("HOME").map(|v| PathBuf::from(v).join(".cache").join("rustowl"));
-    let mut dirs = Vec::with_capacity(3);
-    if let Ok(cache_dir) = cache_dir {
-        dirs.push(cache_dir);
-    }
-    dirs.push(exec_dir.join("rustowl-runtime"));
-    dirs.push(exec_dir);
-    dirs
+    env::home_dir()
+        .map(|v| v.join(".rustowl"))
+        .into_iter()
+        .collect()
 });
 
 const BUILD_RUNTIME_DIRS: Option<&str> = option_env!("RUSTOWL_RUNTIME_DIRS");
