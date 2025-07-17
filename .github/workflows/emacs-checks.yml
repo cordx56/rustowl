@@ -1,4 +1,4 @@
-name: Eask CI
+name: Emacs Plugin CI
 
 on:
   push:
