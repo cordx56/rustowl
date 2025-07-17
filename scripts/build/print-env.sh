@@ -62,6 +62,7 @@ check_component() {
 print_env() {
     echo "TOOLCHAIN_CHANNEL=${TOOLCHAIN_CHANNEL}"
     echo "RUSTOWL_TOOLCHAIN=$(print_toolchain)"
+    echo "HOST_TUPLE=$(host_tuple)"
     check_component "rustc"
     check_component "rust-std"
     check_component "cargo"
