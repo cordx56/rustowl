@@ -55,7 +55,7 @@ jobs:
         run: eask lint indent
 
       - name: Lint Checkdocs
-        run: eask lint checkdocs
+        run: eask lint checkdoc
 
       - name: Lint Declare
         run: eask lint declare
