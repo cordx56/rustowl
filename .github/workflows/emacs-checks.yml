@@ -1,0 +1,117 @@
+name: Eask CI
+
+on:
+  push:
+    paths:
+      - Eask
+      - rustowl.el
+      - emacs-tests/
+      - .github/workflows/emacs-checks.yml
+    branches: 
+      - main
+  pull_request:
+    paths:
+      - Eask
+      - rustowl.el
+      - emacs-tests/
+      - .github/workflows/emacs-checks.yml
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Emacs
+        uses: jcs090218/setup-emacs@master
+        with:
+          version: 28.1
+
+      - name: Set up Eask (snapshot)
+        uses: emacs-eask/setup-eask@master
+        with:
+          version: 'snapshot'
+
+      - name: Setup Rustowl
+        run: |
+          ./scripts/build/toolchain cargo build --release
+          ./scripts/build/toolchain cargo install --path . --locked
+
+      - name: Lint Regexps
+        run: eask lint regexps
+
+      - name: Lint Package
+        run: eask lint package
+
+      - name: Lint License
+        run: eask lint license
+
+      - name: Lint Keywords
+        run: eask lint keywords
+
+      - name: Lint Indent
+        run: eask lint indent
+
+      - name: Lint Checkdocs
+        run: eask lint checkdocs
+
+      - name: Lint Declare
+        run: eask lint declare
+
+      - name: Lint elisp-lint
+        run: eask lint elisp-lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Emacs
+        uses: jcs090218/setup-emacs@master
+        with:
+          version: 28.1
+
+      - name: Set up Eask (snapshot)
+        uses: emacs-eask/setup-eask@master
+        with:
+          version: 'snapshot'
+
+      - name: Setup Rustowl
+        run: |
+          ./scripts/build/toolchain cargo build --release
+          ./scripts/build/toolchain cargo install --path . --locked
+
+      - name: Run Tests
+        run: eask run script test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Emacs
+        uses: jcs090218/setup-emacs@master
+        with:
+          version: 28.1
+
+      - name: Setup Rustowl
+        run: |
+          ./scripts/build/toolchain cargo build --release
+          ./scripts/build/toolchain cargo install --path . --locked
+
+      - name: Setup Eask
+        uses: emacs-eask/setup-eask@master
+        with:
+          version: 'snapshot'
+
+      - name: Build And Compile
+        run: |
+          eask package
+          eask install
+          eask compile
