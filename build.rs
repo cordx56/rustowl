@@ -58,11 +58,15 @@ fn main() -> Result<(), Error> {
 
 // get toolchain
 fn get_toolchain() -> String {
-    env::var("RUSTUP_TOOLCHAIN").unwrap_or_else(|_| {
-        env::var("TOOLCHAIN_CHANNEL")
-            .map(|v| format!("{v}-{}", get_host_tuple()))
-            .expect("neither RUSTUP_TOOLCHAIN or TOOLCHAIN_CHANNEL unset. Expected version.")
-    })
+    if let Ok(v) = env::var("RUSTUP_TOOLCHAIN") {
+        v
+    } else if let Ok(v) = env::var("TOOLCHAIN_CHANNEL") {
+        format!("{v}-{}", get_host_tuple())
+    } else {
+        let v = std::fs::read_to_string("./scripts/build/channel")
+            .expect("there are no toolchain specifier");
+        format!("{}-{}", v.trim(), get_host_tuple())
+    }
 }
 fn get_channel() -> String {
     get_toolchain()

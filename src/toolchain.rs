@@ -44,7 +44,7 @@ async fn get_runtime_dir() -> PathBuf {
     }
 
     log::info!("sysroot not found; start setup toolchain");
-    if let Err(e) = setup_toolchain(&sysroot).await {
+    if let Err(e) = setup_toolchain(&*FALLBACK_RUNTIME_DIR).await {
         log::error!("{e:?}");
         std::process::exit(1);
     } else {
@@ -56,7 +56,7 @@ pub async fn get_sysroot() -> PathBuf {
     sysroot_from_runtime(get_runtime_dir().await)
 }
 
-async fn download_tarball_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
+async fn download(url: &str) -> Result<Vec<u8>, ()> {
     log::info!("start downloading {url}...");
     let mut resp = match reqwest::get(url).await.and_then(|v| v.error_for_status()) {
         Ok(v) => v,
@@ -86,11 +86,34 @@ async fn download_tarball_and_extract(url: &str, dest: &Path) -> Result<(), ()> 
         }
     }
     log::info!("download finished");
-
+    Ok(data)
+}
+async fn download_tarball_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
+    let data = download(url).await?;
     let decoder = GzDecoder::new(&*data);
     let mut archive = Archive::new(decoder);
     archive.unpack(dest).map_err(|_| {
-        log::error!("failed to unpack runtime tarball");
+        log::error!("failed to unpack tarball");
+    })?;
+    log::info!("successfully unpacked");
+    Ok(())
+}
+#[cfg(target_os = "windows")]
+async fn download_zip_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
+    use zip::ZipArchive;
+    let data = download(url).await?;
+    let cursor = std::io::Cursor::new(&*data);
+
+    let mut archive = match ZipArchive::new(cursor) {
+        Ok(archive) => archive,
+        Err(e) => {
+            log::error!("failed to read ZIP archive");
+            log::error!("{e:?}");
+            return Err(());
+        }
+    };
+    archive.extract(dest).map_err(|e| {
+        log::error!("failed to unpack zip: {e}");
     })?;
     log::info!("successfully unpacked");
     Ok(())
@@ -108,12 +131,12 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
         None => dist_base.to_owned(),
     };
 
-    let component_name = format!("{component}-{TOOLCHAIN_CHANNEL}-{HOST_TUPLE}");
-    let tarball_url = format!("{base_url}/{component_name}.tar.gz");
+    let component_toolchain = format!("{component}-{TOOLCHAIN_CHANNEL}-{HOST_TUPLE}");
+    let tarball_url = format!("{base_url}/{component_toolchain}.tar.gz");
 
     download_tarball_and_extract(&tarball_url, &temp_path).await?;
 
-    let extracted_path = temp_path.join(component_name);
+    let extracted_path = temp_path.join(&component_toolchain);
     let components = read_to_string(extracted_path.join("components"))
         .await
         .map_err(|_| {
@@ -153,14 +176,40 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
     Ok(())
 }
 pub async fn setup_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
-    if create_dir_all(&dest.as_ref()).await.is_err() {
+    let sysroot = sysroot_from_runtime(dest.as_ref());
+    if create_dir_all(&sysroot).await.is_err() {
         log::error!("failed to create toolchain directory");
         return Err(());
     }
 
-    install_component("rustc", dest.as_ref()).await?;
-    install_component("rust-std", dest.as_ref()).await?;
-    install_component("cargo", dest.as_ref()).await?;
+    log::info!("start installing Rust toolchain...");
+    install_component("rustc", &sysroot).await?;
+    install_component("rust-std", &sysroot).await?;
+    install_component("cargo", &sysroot).await?;
+    log::info!("installing Rust toolchain finished");
+
+    log::info!("start installing RustOwl toolchain...");
+    #[cfg(not(target_os = "windows"))]
+    let rustowl_toolchain_result = {
+        let rustowl_tarball_url = format!(
+            "https://github.com/cordx56/rustowl/releases/download/v{}/rustowl-{HOST_TUPLE}.tar.gz",
+            clap::crate_version!(),
+        );
+        download_tarball_and_extract(&rustowl_tarball_url, dest.as_ref()).await
+    };
+    #[cfg(target_os = "windows")]
+    let rustowl_toolchain_result = {
+        let rustowl_zip_url = format!(
+            "https://github.com/cordx56/rustowl/releases/download/v{}/rustowl-{HOST_TUPLE}.zip",
+            clap::crate_version!(),
+        );
+        download_zip_and_extract(&rustowl_zip_url, dest.as_ref()).await
+    };
+    if rustowl_toolchain_result.is_ok() {
+        log::info!("installing RustOwl toolchain finished");
+    } else {
+        log::warn!("could not install RustOwl toolchain; local installed rustowlc will be used");
+    }
 
     log::info!("toolchain setup finished");
     Ok(())
@@ -180,14 +229,7 @@ pub async fn get_executable_path(name: &str) -> String {
     #[cfg(windows)]
     let exec_name = format!("{name}.exe");
 
-    let runtime_dir = get_runtime_dir().await;
-    let exec = runtime_dir.join(&exec_name);
-    if exec.is_file() {
-        log::info!("{name} is selected in runtime root");
-        return exec.to_string_lossy().to_string();
-    }
-
-    let sysroot = sysroot_from_runtime(runtime_dir);
+    let sysroot = get_sysroot().await;
     let exec_bin = sysroot.join("bin").join(&exec_name);
     if exec_bin.is_file() {
         log::info!("{name} is selected in sysroot/bin");
