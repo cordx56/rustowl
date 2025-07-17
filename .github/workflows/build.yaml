@@ -100,7 +100,9 @@ jobs:
           cd runtime
 
           if [[ "${{ env.is_windows }}" == "true" ]]; then
-            powershell -c 'Compress-Archive -Path README.md, LICENSE, "sysroot", "completions", "man" -DestinationPath "..\${{ env.archive_name }}" -CompressionLevel Optimal'
+            mkdir rustowl
+            mv README.md LICENSE sysroot/ completions/ man/ rustowl
+            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath "..\${{ env.archive_name }}" -CompressionLevel Optimal'
           else
             tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ completions/ man/
           fi
