@@ -86,7 +86,9 @@ jobs:
           ./scripts/build/toolchain cargo install --path . --locked
 
       - name: Run Tests
-        run: eask run script test
+        run: |
+          eask install-deps
+          eask run script test
 
   build:
     name: Build
