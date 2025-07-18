@@ -16,7 +16,8 @@ RUN HOST_TUPLE="$(rustc --print=host-tuple)" && \
     TOOLCHAIN="$(rustup show active-toolchain | awk '{ print $1 }')" && \
     ./scripts/build/toolchain cargo build --release --all-features --target "${HOST_TUPLE}" && \
     cp target/"${HOST_TUPLE}"/release/rustowl /usr/local/bin/rustowl && \
-    /usr/local/bin/rustowl toolchain install --path /opt/rustowl/sysroot/"${TOOLCHAIN}" && \
+    cp target/"${HOST_TUPLE}"/release/rustowlc /usr/local/bin/rustowlc && \
+    /usr/local/bin/rustowl toolchain install --path /opt/rustowl/sysroot/"${TOOLCHAIN}" --skip-rustowl-toolchain && \
     rm -rf /app
 
 ENV PATH="/usr/local/bin:${PATH}"
