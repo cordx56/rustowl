@@ -20,8 +20,9 @@ pkgver() {
 
 prepare() {
     cd "$srcdir/rustowl"
-    export script_dir="$(cd $(dirname "$0"); pwd)"
-    export $(/bin/sh "$script_dir/print-env.sh" "$(cat "${script_dir}/channel")")
+    script_dir="$(cd "$(dirname "$0")"; pwd)"
+    export script_dir
+    export "$(/bin/sh "$script_dir/print-env.sh" "$(cat "${script_dir}/channel")")"
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
@@ -33,8 +34,9 @@ build() {
 
 check() {
     cd "$srcdir/rustowl"
-    export script_dir="$(cd $(dirname "$0"); pwd)"
-    export $(/bin/sh "$script_dir/print-env.sh" "$(cat "${script_dir}/channel")")
+    script_dir="$(cd "$(dirname "$0")"; pwd)"
+    export script_dir
+    export "$(/bin/sh "$script_dir/print-env.sh" "$(cat "${script_dir}/channel")")"
     cargo test --frozen --all-features
 }
 
