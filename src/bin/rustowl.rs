@@ -70,9 +70,15 @@ async fn handle_command(command: Commands) {
         Commands::Toolchain(command_options) => {
             if let Some(arg) = command_options.command {
                 match arg {
-                    ToolchainCommands::Install { path } => {
+                    ToolchainCommands::Install {
+                        path,
+                        skip_rustowl_toolchain,
+                    } => {
                         let path = path.unwrap_or(toolchain::FALLBACK_RUNTIME_DIR.clone());
-                        if toolchain::setup_toolchain(&path).await.is_err() {
+                        if toolchain::setup_toolchain(&path, skip_rustowl_toolchain)
+                            .await
+                            .is_err()
+                        {
                             std::process::exit(1);
                         }
                     }
