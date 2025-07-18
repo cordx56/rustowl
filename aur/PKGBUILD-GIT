@@ -20,32 +20,28 @@ pkgver() {
 
 prepare() {
     cd "$srcdir/rustowl"
-    export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.88.0
-    rustup component add rust-src rustc-dev llvm-tools
+    export script_dir="$(cd $(dirname "$0"); pwd)"
+    export $(/bin/sh "$script_dir/print-env.sh" "$(cat "${script_dir}/channel")")
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
     cd "$srcdir/rustowl"
-    export CARGO_TARGET_DIR=target
-    export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.88.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
-    cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)"
+    ./scripts/build/toolchain cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)"
 }
 
 check() {
     cd "$srcdir/rustowl"
-    export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.88.0
+    export script_dir="$(cd $(dirname "$0"); pwd)"
+    export $(/bin/sh "$script_dir/print-env.sh" "$(cat "${script_dir}/channel")")
     cargo test --frozen --all-features
 }
 
 package() {
     cd "$srcdir/rustowl"
     find target -type d | grep -E 'rustowl-build-time-out$' | xargs -I % cp -r % ./
-    ./target/"$(rustc --print=host-tuple)"/release/rustowl toolchain install --path sysroot/"$(rustup show active-toolchain | awk '{ print $1 }')"
+    ./target/"$(rustc --print=host-tuple)"/release/rustowl toolchain install --path sysroot/"$(rustup show active-toolchain | awk '{ print $1 }')" --skip-rustowl-toolchain
     install -d -m 755 "$pkgdir/opt/rustowl"
     cp -a sysroot/ "$pkgdir/opt/rustowl/"
     install -Dm0755 -t "$pkgdir/usr/bin/" "target/$(rustc --print=host-tuple)/release/rustowl"
