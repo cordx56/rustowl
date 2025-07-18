@@ -1,6 +1,5 @@
 FROM rust:1.88.0-slim-trixie
 
-ENV RUSTC_BOOTSTRAP=1
 ENV RUSTOWL_RUNTIME_DIRS="/opt/rustowl"
 
 WORKDIR /app
@@ -13,14 +12,11 @@ RUN rustup component add rust-src rustc-dev llvm-tools
 
 COPY . .
 
-# Force 1.88.0
-RUN rm rust-toolchain*
-
 RUN HOST_TUPLE="$(rustc --print=host-tuple)" && \
-    cargo build --release --all-features --target "${HOST_TUPLE}" && \
+    TOOLCHAIN="$(rustup show active-toolchain | awk '{ print $1 }')" && \
+    ./scripts/build/toolchain cargo build --release --all-features --target "${HOST_TUPLE}" && \
     cp target/"${HOST_TUPLE}"/release/rustowl /usr/local/bin/rustowl && \
-    cp target/"${HOST_TUPLE}"/release/rustowlc /usr/local/bin/rustowlc && \
-    /usr/local/bin/rustowl toolchain install --path /opt/rustowl/sysroot/$(rustup show active-toolchain | awk '{ print $1 }') && \
+    /usr/local/bin/rustowl toolchain install --path /opt/rustowl/sysroot/"${TOOLCHAIN}" && \
     rm -rf /app
 
 ENV PATH="/usr/local/bin:${PATH}"
