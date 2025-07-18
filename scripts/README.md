@@ -93,7 +93,7 @@ Local performance benchmarking with regression detection.
 
 ### `run_nvim_tests.sh`
 
-Run tests defined in `[nvim-tests](../nvim-tests)` directory.
+Run tests defined in [`nvim-tests`](../nvim-tests) directory.
 
 **Usage**
 ```bash

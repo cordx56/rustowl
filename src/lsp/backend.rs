@@ -1,6 +1,5 @@
 use crate::{lsp::*, models::*, toolchain, utils};
 use std::collections::HashMap;
-use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::{
@@ -60,27 +59,26 @@ impl Backend {
             path.as_ref().parent().unwrap().to_path_buf()
         };
         for w in &*self.workspaces.read().await {
-            if dir.starts_with(w) {
-                if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
+            if dir.starts_with(w)
+                && let Ok(metadata) = cargo_metadata::MetadataCommand::new()
                     .current_dir(&dir)
                     .exec()
-                {
-                    let path = metadata.workspace_root;
-                    let mut write = self.roots.write().await;
-                    if !write.contains_key(path.as_std_path()) {
-                        log::info!("add {} to watch list", path);
+            {
+                let path = metadata.workspace_root;
+                let mut write = self.roots.write().await;
+                if !write.contains_key(path.as_std_path()) {
+                    log::info!("add {path} to watch list");
 
-                        let target = metadata
-                            .target_directory
-                            .as_std_path()
-                            .to_path_buf()
-                            .join("owl");
-                        tokio::fs::create_dir_all(&target).await.unwrap();
+                    let target = metadata
+                        .target_directory
+                        .as_std_path()
+                        .to_path_buf()
+                        .join("owl");
+                    tokio::fs::create_dir_all(&target).await.unwrap();
 
-                        write.insert(path.as_std_path().to_path_buf(), target);
-                    }
-                    return true;
+                    write.insert(path.as_std_path().to_path_buf(), target);
                 }
+                return true;
             }
         }
         false
@@ -120,6 +118,10 @@ impl Backend {
         }
         let roots = { self.roots.read().await.clone() };
 
+        let cargo = toolchain::get_executable_path("cargo").await;
+        // set rustowlc & library path
+        let rustowlc_path = toolchain::get_executable_path("rustowlc").await;
+
         for (root, target) in roots {
             // progress report
             let meta = cargo_metadata::MetadataCommand::new()
@@ -135,7 +137,7 @@ impl Backend {
             let package_name = meta.and_then(|v| v.root_package().map(|w| w.name.clone()));
             if let Some(package_name) = &package_name {
                 log::info!("clear cargo cache");
-                let mut command = process::Command::new("cargo");
+                let mut command = process::Command::new(&cargo);
                 command
                     .args(["clean", "--package", package_name])
                     .env("CARGO_TARGET_DIR", &target)
@@ -156,14 +158,7 @@ impl Backend {
                 )
             };
 
-            let sysroot = toolchain::get_sysroot().await;
-            let mut command = if let Ok(cargo_path) = &env::var("CARGO") {
-                log::info!("using toolchain cargo: {}", cargo_path);
-                process::Command::new(cargo_path)
-            } else {
-                log::info!("using default cargo");
-                process::Command::new("cargo")
-            };
+            let mut command = process::Command::new(&cargo);
 
             let mut args = vec!["check"];
             if all_targets {
@@ -182,11 +177,10 @@ impl Backend {
                 .stdout(std::process::Stdio::piped())
                 .kill_on_drop(true);
 
-            // set rustowlc & library path
-            let rustowlc_path = toolchain::get_rustowlc_path().await;
             command
                 .env("RUSTC", &rustowlc_path)
                 .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc_path);
+            let sysroot = toolchain::get_sysroot().await;
             toolchain::set_rustc_env(&mut command, &sysroot);
 
             if log::max_level().to_level().is_none() {
@@ -271,7 +265,7 @@ impl Backend {
 
     async fn analyze_single_file(&self, path: impl AsRef<Path>) {
         let sysroot = toolchain::get_sysroot().await;
-        let rustowlc_path = toolchain::get_rustowlc_path().await;
+        let rustowlc_path = toolchain::get_executable_path("rustowlc").await;
 
         let mut command = process::Command::new(&rustowlc_path);
         command
@@ -383,33 +377,33 @@ impl Backend {
     ) -> jsonrpc::Result<decoration::Decorations> {
         let is_analyzed = self.analyzed.read().await.is_some();
         let status = *self.status.read().await;
-        if let Some(path) = params.path() {
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                let position = params.position();
-                let pos = Loc(utils::line_char_to_index(
-                    &text,
-                    position.line,
-                    position.character,
-                ));
-                let (decos, status) = match self.decos(&path, pos).await {
-                    Ok(v) => (v, status),
-                    Err(e) => (
-                        Vec::new(),
-                        if status == progress::AnalysisStatus::Finished {
-                            e
-                        } else {
-                            status
-                        },
-                    ),
-                };
-                let decorations = decos.into_iter().map(|v| v.to_lsp_range(&text)).collect();
-                return Ok(decoration::Decorations {
-                    is_analyzed,
-                    status,
-                    path: Some(path),
-                    decorations,
-                });
-            }
+        if let Some(path) = params.path()
+            && let Ok(text) = std::fs::read_to_string(&path)
+        {
+            let position = params.position();
+            let pos = Loc(utils::line_char_to_index(
+                &text,
+                position.line,
+                position.character,
+            ));
+            let (decos, status) = match self.decos(&path, pos).await {
+                Ok(v) => (v, status),
+                Err(e) => (
+                    Vec::new(),
+                    if status == progress::AnalysisStatus::Finished {
+                        e
+                    } else {
+                        status
+                    },
+                ),
+            };
+            let decorations = decos.into_iter().map(|v| v.to_lsp_range(&text)).collect();
+            return Ok(decoration::Decorations {
+                is_analyzed,
+                status,
+                path: Some(path),
+                decorations,
+            });
         }
         Ok(decoration::Decorations {
             is_analyzed,
@@ -534,13 +528,13 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
-        if let Ok(path) = params.text_document.uri.to_file_path() {
-            if params.text_document.language_id == "rust" {
-                if self.set_roots(&path).await {
-                    self.analyze().await;
-                } else {
-                    self.analyze_single_file(&path).await;
-                }
+        if let Ok(path) = params.text_document.uri.to_file_path()
+            && params.text_document.language_id == "rust"
+        {
+            if self.set_roots(&path).await {
+                self.analyze().await;
+            } else {
+                self.analyze_single_file(&path).await;
             }
         }
     }

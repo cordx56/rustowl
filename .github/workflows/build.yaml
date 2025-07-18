@@ -29,10 +29,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      RUSTUP_TOOLCHAIN: 1.87.0
-      RUSTC_BOOTSTRAP: rustowlc
-      RUSTOWL_SYSROOTS: "/opt/rustowl"
 
     steps:
       - name: Checkout
@@ -47,33 +43,16 @@ jobs:
             echo "build_profile=release" >> $GITHUB_ENV
           fi
 
-      # We don't have rustup on the Windows 11 Arm64 runner yet, so manually installing it.
-      - name: Install rustup
-        if: ${{ matrix.os == 'windows-11-arm' }}
-        run: |
-          URL='https://static.rust-lang.org/rustup/dist/aarch64-pc-windows-msvc/rustup-init.exe'
-          HASH="$(curl -sSL "${URL}.sha256")"
-          curl -sSL -o ./rustup-init.exe "${URL}"
-          if [ "$(sha256sum ./rustup-init.exe | cut -d' ' -f 1)" = "${HASH}" ]; then
-            ./rustup-init.exe -y --no-update-default-toolchain
-            echo "${USERPROFILE}\.cargo\bin" >> "${GITHUB_PATH}"
-          else
-            echo "::error::The SHA256 digest does not match."
-            exit 1
-          fi
-
-      - name: Setup Rust
-        run: |
-          rustup install --profile minimal
-          rustup component add rust-src rustc-dev llvm-tools
-
       - name: setup env
         run: |
-          echo "host_tuple=$(rustc --print=host-tuple)" >> $GITHUB_ENV
-          rustup show active-toolchain | awk '{ print "active_toolchain=" $1 }' >> $GITHUB_ENV
-          ([[ "$(rustc --print=host-tuple)" == *msvc* ]] && echo "exec_ext=.exe" || echo "exec_ext=") >> $GITHUB_ENV
-          ([[ "$(rustc --print=host-tuple)" == *windows* ]] && echo "is_windows=true" || echo "is_windows=false") >> $GITHUB_ENV
-          ([[ "$(rustc --print=host-tuple)" == *linux* ]] && echo "is_linux=true" || echo "is_linux=false") >> $GITHUB_ENV
+          host_tuple="$(./scripts/build/toolchain eval 'echo $HOST_TUPLE')"
+          echo "host_tuple=$host_tuple" >> $GITHUB_ENV
+          toolchain="$(./scripts/build/toolchain eval 'echo $RUSTOWL_TOOLCHAIN')"
+          echo "toolchain=$toolchain" >> $GITHUB_ENV
+
+          ([[ "$host_tuple" == *msvc* ]] && echo "exec_ext=.exe" || echo "exec_ext=") >> $GITHUB_ENV
+          ([[ "$host_tuple" == *windows* ]] && echo "is_windows=true" || echo "is_windows=false") >> $GITHUB_ENV
+          ([[ "$host_tuple" == *linux* ]] && echo "is_linux=true" || echo "is_linux=false") >> $GITHUB_ENV
 
       - name: Install zig
         if: ${{ env.is_linux == 'true' }}
@@ -84,10 +63,10 @@ jobs:
       - name: Build
         run: |
           if [[ "${{ env.is_linux }}" == "true" ]]; then
-            cargo install --locked cargo-zigbuild
-            cargo zigbuild --target ${{ env.host_tuple }}.2.17 --profile=${{ env.build_profile }}
+            ./scripts/build/toolchain cargo install --locked cargo-zigbuild
+            ./scripts/build/toolchain cargo zigbuild --target ${{ env.host_tuple }}.2.17 --profile=${{ env.build_profile }}
           else
-            cargo build --profile=${{ env.build_profile }}
+            ./scripts/build/toolchain cargo build --profile=${{ env.build_profile }}
           fi
 
       - name: Set archive name
@@ -100,24 +79,14 @@ jobs:
 
       - name: Setup archive artifacts
         run: |
-          SYSROOT_PATH=sysroot/${{ env.active_toolchain }}
-          rm -rf runtime && mkdir -p runtime/$SYSROOT_PATH
-
-          rm -rf tmp && mkdir tmp
-          RUSTC_NAME="rustc-${{ env.active_toolchain }}"
-          STD_NAME="rust-std-${{ env.active_toolchain }}"
-          curl -L "http://static.rust-lang.org/dist/${RUSTC_NAME}.tar.gz" | tar xzvf - -C tmp/
-          curl -L "http://static.rust-lang.org/dist/${STD_NAME}.tar.gz" | tar xzvf - -C tmp/
-
-          ./tmp/${RUSTC_NAME}/install.sh --destdir=runtime/$SYSROOT_PATH --prefix=
-          ./tmp/${STD_NAME}/install.sh --destdir=runtime/$SYSROOT_PATH --prefix=
+          rm -rf runtime && mkdir -p runtime/sysroot/${{ env.toolchain }}/bin
 
           if [[ "${{ env.is_linux }}" == "true"  ]]; then
-            cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime
-            cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime
+            cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
+            cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
           else
-            cp target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime
-            cp target/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime
+            cp target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
+            cp target/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
           fi
 
           cp README.md ./runtime
@@ -131,9 +100,11 @@ jobs:
           cd runtime
 
           if [[ "${{ env.is_windows }}" == "true" ]]; then
-            powershell -c 'Compress-Archive -Path README.md, LICENSE, "rustowl${{ env.exec_ext }}", "rustowlc${{ env.exec_ext }}", "sysroot", "completions", "man" -DestinationPath "..\${{ env.archive_name }}" -CompressionLevel Optimal'
+            mkdir rustowl
+            mv README.md LICENSE sysroot/ completions/ man/ rustowl
+            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath "..\${{ env.archive_name }}" -CompressionLevel Optimal'
           else
-            tar -czvf ../${{ env.archive_name }} README.md LICENSE rustowl${{ env.exec_ext }} rustowlc${{ env.exec_ext }} sysroot/ completions/ man/
+            tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ completions/ man/
           fi
 
           cp ./rustowl${{ env.exec_ext }} ../rustowl-${{ env.host_tuple }}${{ env.exec_ext }}

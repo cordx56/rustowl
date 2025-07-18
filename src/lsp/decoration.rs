@@ -3,6 +3,13 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use tower_lsp::lsp_types;
 
+// TODO: Variable name should be checked?
+//const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
+const ASYNC_RESUME_TY: [&str; 2] = [
+    "std::future::ResumeTy",
+    "impl std::future::Future<Output = ()>",
+];
+
 #[derive(serde::Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Deco<R = Range> {
@@ -247,20 +254,25 @@ enum SelectReason {
     Borrow,
     Call,
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct SelectLocal {
     pos: Loc,
+    candidate_local_decls: Vec<FnLocal>,
     selected: Option<(SelectReason, FnLocal, Range)>,
 }
 impl SelectLocal {
     pub fn new(pos: Loc) -> Self {
         Self {
             pos,
+            candidate_local_decls: Vec::new(),
             selected: None,
         }
     }
 
     fn select(&mut self, reason: SelectReason, local: FnLocal, range: Range) {
+        if !self.candidate_local_decls.contains(&local) {
+            return;
+        }
         if range.from() <= self.pos && self.pos <= range.until() {
             if let Some((old_reason, _, old_range)) = self.selected {
                 match (old_reason, reason) {
@@ -295,6 +307,14 @@ impl SelectLocal {
 }
 impl utils::MirVisitor for SelectLocal {
     fn visit_decl(&mut self, decl: &MirDecl) {
+        let (local, ty) = match decl {
+            MirDecl::User { local, ty, .. } => (local, ty),
+            MirDecl::Other { local, ty, .. } => (local, ty),
+        };
+        if ASYNC_RESUME_TY.contains(&ty.as_str()) {
+            return;
+        }
+        self.candidate_local_decls.push(*local);
         if let MirDecl::User { local, span, .. } = decl {
             self.select(SelectReason::Var, *local, *span);
         }
@@ -563,9 +583,12 @@ impl utils::MirVisitor for CalcDecos {
             };
         self.current_fn_id = local.fn_id;
         if self.locals.contains(&local) {
-            let var_str = name
-                .map(|v| format!("variable `{v}`"))
-                .unwrap_or("anonymous variable".to_owned());
+            let var_str = match name {
+                Some(mir_var_name) => {
+                    format!("variable `{mir_var_name}`")
+                }
+                None => "anonymus variable".to_owned(),
+            };
             // merge Drop object lives
             let drop_copy_live = if *drop {
                 utils::eliminated_ranges(drop_range.clone())
@@ -653,36 +676,37 @@ impl utils::MirVisitor for CalcDecos {
             destination_local,
             fn_span,
         } = term
+            && self.locals.contains(destination_local)
         {
-            if self.locals.contains(destination_local) {
-                let mut i = 0;
-                for deco in &self.decorations {
-                    if let Deco::Call { range, .. } = deco {
-                        if utils::is_super_range(*fn_span, *range) {
-                            return;
-                        }
-                    }
+            let mut i = 0;
+            for deco in &self.decorations {
+                if let Deco::Call { range, .. } = deco
+                    && utils::is_super_range(*fn_span, *range)
+                {
+                    return;
                 }
-                while i < self.decorations.len() {
-                    let range = match &self.decorations[i] {
-                        Deco::Call { range, .. } => Some(range),
-                        _ => None,
-                    };
-                    if let Some(range) = range {
-                        if utils::is_super_range(*range, *fn_span) {
-                            self.decorations.remove(i);
-                            continue;
-                        }
-                    }
-                    i += 1;
-                }
-                self.decorations.push(Deco::Call {
-                    local: *destination_local,
-                    range: *fn_span,
-                    hover_text: "function call".to_string(),
-                    overlapped: false,
-                });
             }
+            while i < self.decorations.len() {
+                let range = match &self.decorations[i] {
+                    Deco::Call { range, .. } => Some(range),
+                    _ => None,
+                };
+                if let Some(range) = range
+                    && utils::is_super_range(*range, *fn_span)
+                {
+                    self.decorations.remove(i);
+                    continue;
+                }
+                i += 1;
+            }
+            self.decorations.push(Deco::Call {
+                local: *destination_local,
+                range: *fn_span,
+                hover_text: "function call".to_string(),
+                overlapped: false,
+            });
         }
     }
 }
+
+// TODO: new test

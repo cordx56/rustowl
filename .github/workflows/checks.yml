@@ -10,7 +10,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTUP_TOOLCHAIN: 1.87.0
+  RUSTUP_TOOLCHAIN: 1.88.0
   RUSTC_BOOTSTRAP: 1
 
 jobs:
@@ -67,12 +67,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          
+
       - name: Install dependencies
         run: yarn install --frozen-locked
         working-directory: ./vscode
@@ -83,4 +83,8 @@ jobs:
         
       - name: Lint and type check
         run: yarn lint && yarn check-types
+        working-directory: ./vscode
+
+      - name: Run tests
+        run: xvfb-run -a yarn run test
         working-directory: ./vscode

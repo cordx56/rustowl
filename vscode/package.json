@@ -6,7 +6,7 @@
   "author": "cordx56 <cordx56@cordx.cx>",
   "publisher": "cordx56",
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.101.0"
   },
   "repository": {
     "type": "git",
@@ -77,39 +77,46 @@
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "yarn run package",
-    "compile": "yarn run check-types && yarn run lint && node esbuild.js",
+    "compile": "yarn run check-types && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "yarn run check-types && yarn run lint && node esbuild.js --production",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "yarn run compile-tests && yarn run compile && yarn run lint",
+    "compile-tests": "tsc",
+    "watch-tests": "tsc -w --outDir out",
     "check-types": "tsc --noEmit",
-    "lint": "eslint src",
-    "test": "vscode-test",
-    "fmt": "prettier -w src",
+    "lint": "eslint .",
+    "test": "yarn run compile && yarn run compile-tests && node out/tests/runTest.js",
+    "coverage": "c8 --include=\"out/src/**/*.js\" --all --reporter=text yarn test",
+    "fmt": "prettier -w .",
     "build": "vsce package"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.9",
-    "@types/node": "^24.0.10",
+    "@types/node": "^24.0.13",
+    "@types/proxyquire": "^1.3.31",
+    "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.101.0",
-    "@typescript-eslint/eslint-plugin": "^8.35.1",
-    "@typescript-eslint/parser": "^8.35.1",
+    "@typescript-eslint/eslint-plugin": "^8.36.0",
+    "@typescript-eslint/parser": "^8.36.0",
     "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.6.0",
-    "esbuild": "^0.25.5",
-    "eslint": "^9.30.1",
+    "c8": "^10.1.3",
+    "esbuild": "^0.25.6",
+    "eslint": "^9.31.0",
+    "glob": "^11.0.3",
+    "mocha": "^11.7.1",
     "npm-run-all": "^4.1.5",
-    "ovsx": "^0.10.4",
+    "ovsx": "^0.10.5",
     "prettier": "^3.6.2",
+    "proxyquire": "^2.1.3",
+    "sinon": "^21.0.0",
     "typescript": "^5.8.3"
   },
   "dependencies": {
     "semver-parser": "^4.1.8",
     "vscode-languageclient": "^9.0.1",
-    "zod": "^3.25.71"
+    "zod": "^4.0.5"
   }
 }
