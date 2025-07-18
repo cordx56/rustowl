@@ -20,24 +20,28 @@ Set up your development environment manually by installing the required tools fo
 #### Prerequisites
 
 **Common Requirements:**
+
 - Rust toolchain (automatically managed via `rust-toolchain.toml`)
 - Basic build tools
 
 **Platform-Specific Tools:**
 
 **Linux:**
+
 ```bash
 sudo apt-get update
 sudo apt-get install -y valgrind bc gnuplot build-essential
 ```
 
 **macOS:**
+
 ```bash
 brew install gnuplot
 # Optional: brew install valgrind (limited support)
 ```
 
 **Node.js Development (for VS Code extension):**
+
 - Node.js and yarn for VS Code extension development
 
 ### Rust code
@@ -97,6 +101,7 @@ We provide a comprehensive development checks script that validates code quality
 ```
 
 This script performs:
+
 - Rust version compatibility check
 - Code formatting validation (`cargo fmt`)
 - Linting with Clippy (`cargo clippy`)
@@ -122,6 +127,7 @@ Run comprehensive security analysis before submitting:
 ```
 
 The security script includes:
+
 - **Miri**: Undefined behavior detection
 - **Valgrind**: Memory error detection (Linux)
 - **cargo-audit**: Security vulnerability scanning
@@ -147,6 +153,7 @@ Validate that your changes don't introduce performance regressions:
 ```
 
 Performance testing features:
+
 - Criterion benchmark integration
 - Baseline creation and comparison
 - Configurable regression thresholds (default: 5%)
@@ -173,11 +180,13 @@ Check for binary size regressions:
 If the automated scripts are not available, ensure:
 
 #### Rust code correctness and formatting
+
 - Correctly formatted by `cargo fmt`
 - Linted using Clippy by `cargo clippy`
 - All tests pass with `cargo test`
 
 #### VS Code extension Style
+
 - Correctly formatted by `yarn prettier --write src`
 - Linting passes with `yarn lint`
 - Type checking passes with `yarn check-types`
@@ -187,12 +196,14 @@ If the automated scripts are not available, ensure:
 ### Recommended Development Process
 
 1. **Before making changes**:
+
    ```bash
    # Create performance baseline
    ./scripts/bench.sh --save before-changes
    ```
 
 2. **During development**:
+
    ```bash
    # Run quick checks frequently
    ./scripts/dev-checks.sh --fix
@@ -210,6 +221,7 @@ If the automated scripts are not available, ensure:
 ### Integration with CI
 
 Our scripts are designed to match CI workflows:
+
 - **`security.sh`** ↔ **`.github/workflows/security.yml`**
 - **`bench.sh`** ↔ **`.github/workflows/bench-performance.yml`**
 - **`dev-checks.sh`** ↔ **`.github/workflows/checks.yml`**
@@ -219,6 +231,7 @@ This ensures local testing provides the same results as CI.
 ## Troubleshooting
 
 ### Script Permissions
+
 ```bash
 chmod +x scripts/*.sh
 ```
@@ -230,18 +243,21 @@ Install the required tools manually using the platform-specific commands in the 
 ### Platform-Specific Issues
 
 #### Linux
+
 ```bash
 sudo apt-get update
 sudo apt-get install -y valgrind bc gnuplot build-essential
 ```
 
 #### macOS
+
 ```bash
 brew install gnuplot
 # Valgrind has limited support on macOS
 ```
 
 ### CI Failures
+
 - Check workflow logs for specific error messages
 - Verify `rust-toolchain.toml` compatibility
 - Ensure scripts have execution permissions

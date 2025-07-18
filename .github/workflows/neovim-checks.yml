@@ -28,8 +28,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTUP_TOOLCHAIN: 1.88.0
-  RUSTC_BOOTSTRAP: 1
 
 jobs:
   test:
@@ -53,8 +51,8 @@ jobs:
 
       - name: Setup RustOwl
         run: |
-          cargo build --release
-          cargo install --path .
+          ./scripts/build/toolchain cargo build --release
+          ./scripts/build/toolchain cargo install --path .
 
       - name: Run Tests
         run: ./scripts/run_nvim_tests.sh
@@ -83,6 +81,6 @@ jobs:
       - name: Lint Lua code with Selene
         uses: YoloWingPixie/selene-lua-linter-action@v1
         with:
-          config-path: 'selene.toml'
-          working-directory: '.'
-          report-as-annotations: 'true'
+          config-path: "selene.toml"
+          working-directory: "."
+          report-as-annotations: "true"

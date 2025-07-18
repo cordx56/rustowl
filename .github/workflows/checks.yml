@@ -2,16 +2,14 @@ name: Basic Checks
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
   workflow_call:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTUP_TOOLCHAIN: 1.88.0
-  RUSTC_BOOTSTRAP: 1
 
 jobs:
   check:
@@ -53,10 +51,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build release
-        run: cargo build --release
+        run: ./scripts/build/toolchain cargo build --release
 
       - name: Install binary
-        run: cargo install --path .
+        run: ./scripts/build/toolchain cargo install --path .
 
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
@@ -76,11 +74,11 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-locked
         working-directory: ./vscode
-        
+
       - name: Check formatting
         run: yarn prettier -c src
         working-directory: ./vscode
-        
+
       - name: Lint and type check
         run: yarn lint && yarn check-types
         working-directory: ./vscode

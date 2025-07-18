@@ -147,7 +147,7 @@ check_clippy() {
 check_build() {
     log_info "Testing build..."
     
-    if cargo build --release; then
+    if ./scrips/build/toolchain cargo build --release; then
         log_success "Build successful"
     else
         log_error "Build failed"
