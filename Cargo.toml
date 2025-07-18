@@ -19,24 +19,24 @@ simple_logger = { version = "5", features = ["stderr"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "process", "fs"] }
 tower-lsp = "0.20"
 process_alive = "0.1"
-cargo_metadata = "0.20"
+cargo_metadata = "0.21"
 uuid = { version = "1", features = ["v4"] }
 clap = { version = "4", features = ["cargo", "derive"] }
 flate2 = "1"
-reqwest = { version = "0.12", default-features = false, features = ["http2", "rustls-tls-native-roots"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots-no-provider"] }
 clap_complete_nushell = "4"
 clap_complete = "4"
 tar = "0.4.44"
 tempfile = "3"
+rustls = { version = "0.23.29", default-features = false, features = ["aws_lc_rs"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-mimalloc = { version = "0.1", default-features = false, features = ['extended'] }
-libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended'] }
 libc = "0.2"
+tikv-jemalloc-sys = "0.6"
+tikv-jemallocator = "0.6"
 
-[target.'cfg(target_env = "msvc")'.dependencies]
-mimalloc = { version = "0.1", default-features = false, features = ['extended', 'override'] }
-libmimalloc-sys = { version = "0.1", default-features = false, features = ['extended', 'override'] }
+[target.'cfg(target_os = "windows")'.dependencies]
+zip = "4.3.0"
 
 [build-dependencies]
 clap_complete_nushell = "4"

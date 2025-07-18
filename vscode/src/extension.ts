@@ -10,7 +10,7 @@ import {
   LanguageClientOptions,
 } from "vscode-languageclient/node";
 
-let client: LanguageClient | undefined = undefined;
+export let client: LanguageClient | undefined = undefined;
 
 let decoTimer: NodeJS.Timeout | null = null;
 
@@ -177,15 +177,17 @@ export function activate(context: vscode.ExtensionContext) {
     }
   };
 
-  vscode.commands.registerCommand("rustowlHover", async (_args) => {
-    if (activeEditor) {
-      await rustowlHoverRequest(
-        activeEditor,
-        activeEditor?.selection.active,
-        activeEditor?.document.uri,
-      );
-    }
-  });
+  context.subscriptions.push(
+    vscode.commands.registerCommand("rustowlHover", async (_args) => {
+      if (activeEditor) {
+        await rustowlHoverRequest(
+          activeEditor,
+          activeEditor?.selection.active,
+          activeEditor?.document.uri,
+        );
+      }
+    }),
+  );
 
   // events
   vscode.window.onDidChangeActiveTextEditor(

@@ -48,8 +48,8 @@ RustOwl visualizes those by using underlines:
 - 🟪 purple: mutable borrowing
 - 🟧 orange: value moved / function call
 - 🟥 red: lifetime error
-    - diff of lifetime between actual and expected, or
-    - invalid overlapped lifetime of mutable and shared (immutable) references
+  - diff of lifetime between actual and expected, or
+  - invalid overlapped lifetime of mutable and shared (immutable) references
 
 Detailed usage is described [here](docs/usage.md).
 
@@ -61,6 +61,7 @@ So, RustOwl can be used easily from other editor.
 ## Table Of Contents
 
 <!--toc:start-->
+
 - [Support](#support)
 - [Quick Start](#quick-start)
   - [Prerequisite](#prerequisite)
@@ -78,12 +79,6 @@ So, RustOwl can be used easily from other editor.
   - [GitHub Release](#github-release)
   - [Docker](#docker)
 - [Build manually](#build-manually)
-  - [RustOwl](#rustowl)
-    - [Prerequisite](#prerequisite)
-    - [Build & Run](#build--run)
-  - [VSCode extension](#vscode-extension)
-    - [Prerequisite](#prerequisite)
-    - [Build & Run](#build--run)
 - [Note](#note)
 <!--toc:end-->
 
@@ -100,7 +95,7 @@ Here we describe how to start using RustOwl with VS Code.
 ### Prerequisite
 
 - `cargo` installed
-    - You can install `cargo` using `rustup` from [this link](https://rustup.rs/).
+  - You can install `cargo` using `rustup` from [this link](https://rustup.rs/).
 - Visual Studio Code (VS Code) installed
 
 We tested this guide on macOS Sequoia 15.3.2 on arm64 architecture with VS Code 1.99.3 and `cargo` 1.88.0.
@@ -189,7 +184,6 @@ where `{subcommand}` can be one of:
 - `enable`: Enable rustowl highlights.
 - `disable`: Disable rustowl highlights.
 - `toggle`: Toggle rustowl highlights.
-
 
 ### Emacs
 
@@ -300,71 +294,7 @@ Now you can run `rustowl` from your terminal like a regular command.
 
 ## Build manually
 
-Here, we describe manual install instructions from source code.
-
-### RustOwl
-
-#### Prerequisite
-
-- `rustup` installed
-    - You can install `rustup` from [this link](https://rustup.rs/).
-    - You need to set up the `PATH` environment variable. To do this, follow the instructions provided by the `rustup` installer.
-- `gcc` or `clang` installed.
-    - In Windows, you can install Visual Studio toolchain.
-
-Building RustOwl requires nightly build of `rustc`. It will automatically installed by `rustup`.
-
-RustOwl has been tested on macOS Sequoia 15.3.2 on arm64 architecture with `rustup` 1.28.1.
-We have not tested the installation of dependencies from other package repositories, such as Homebrew.
-You may need to uninstall any Rust-related packages installed through those repositories first.
-Other dependencies are locked in the configuration files and will be installed automatically.
-
-We have also tested this on Ubuntu 24.04.2 on amd64 architecture and on Windows 11 Education 23H2 on amd64 architecture.
-Additional dependencies may be required.
-We have confirmed that running `apt install build-essential` is necessary on a freshly installed Ubuntu for linking.
-
-#### Build & Run
-
-```bash
-cargo install --path . --locked
-```
-
-You can add runtime directory paths to the search paths by specifying `RUSTOWL_RUNTIME_DIRS` or `RUSTOWL_SYSROOTS`.
-
-### VSCode extension
-
-#### Prerequisite
-
-- VS Code installed
-    - You can install VS Code from [this link](https://code.visualstudio.com/).
-- Node.js installed
-- `yarn` installed
-    - After installing Node.js, You can install `yarn` by running `npm install -g yarn`.
-
-VS Code extension has been tested on macOS Sequoia 15.3.2 on arm64 architecture with Visual Studio Code 1.99.3, Node.js v20.16.0, and `yarn` 1.22.22.
-Other dependencies are locked in the configuration files and will be installed automatically.
-
-#### Build & Run
-
-First, install the dependencies.
-
-```bash
-cd vscode
-yarn install --frozen-lockfile
-```
-
-Then open `vscode` directory in VS Code.
-
-A notification to install the recommended VS Code extension will appear in the bottom right corner of VS Code.
-Click the install button, wait for the installation to finish, and then restart VS Code.
-
-Open `vscode` directory again, and press the `F5` key in the VS Code window.
-A new VS Code window with the extension enabled will appear.
-
-Open cargo workspace directory in the new VS Code window.
-
-When you save Rust files, decoration indicating the movement of ownership and lifetimes will appear in the editor.
-
+There is a [build guide](docs/build.md) to build RustOwl or extensions.
 
 ## Note
 

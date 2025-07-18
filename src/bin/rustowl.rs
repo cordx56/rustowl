@@ -11,13 +11,13 @@ use tower_lsp::{LspService, Server};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
-#[cfg(not(miri))]
-use mimalloc::MiMalloc;
+#[cfg(all(not(target_env = "msvc"), not(miri)))]
+use tikv_jemallocator::Jemalloc;
 
-// Use mimalloc by default, but fall back to system allocator for Miri
-#[cfg(not(miri))]
+// Use jemalloc by default, but fall back to system allocator for Miri
+#[cfg(all(not(target_env = "msvc"), not(miri)))]
 #[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+static GLOBAL: Jemalloc = Jemalloc;
 
 fn set_log_level(default: log::LevelFilter) {
     log::set_max_level(
@@ -70,11 +70,15 @@ async fn handle_command(command: Commands) {
         Commands::Toolchain(command_options) => {
             if let Some(arg) = command_options.command {
                 match arg {
-                    ToolchainCommands::Install { path } => {
-                        let path = path.unwrap_or(toolchain::sysroot_from_runtime(
-                            &*toolchain::FALLBACK_RUNTIME_DIRS[0],
-                        ));
-                        if toolchain::setup_toolchain(&path).await.is_err() {
+                    ToolchainCommands::Install {
+                        path,
+                        skip_rustowl_toolchain,
+                    } => {
+                        let path = path.unwrap_or(toolchain::FALLBACK_RUNTIME_DIR.clone());
+                        if toolchain::setup_toolchain(&path, skip_rustowl_toolchain)
+                            .await
+                            .is_err()
+                        {
                             std::process::exit(1);
                         }
                     }
@@ -137,6 +141,10 @@ async fn start_lsp_server() {
 
 #[tokio::main]
 async fn main() {
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("crypto provider already installed");
+
     initialize_logging();
 
     let parsed_args = Cli::parse();
