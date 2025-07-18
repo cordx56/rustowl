@@ -22,6 +22,16 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Get Rust version
+        run: |
+          echo 'RUSTUP_TOOLCHAIN="$(cat ./scripts/build/channel)"' >> $GITHUB_ENV
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
+
       - name: Check formatting
         run: cargo fmt --check
 
