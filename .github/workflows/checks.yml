@@ -24,7 +24,7 @@ jobs:
 
       - name: Get Rust version
         run: |
-          echo 'RUSTUP_TOOLCHAIN="$(cat ./scripts/build/channel)"' >> $GITHUB_ENV
+          echo RUSTUP_TOOLCHAIN=$(cat ./scripts/build/channel) >> $GITHUB_ENV
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
