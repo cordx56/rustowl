@@ -20,6 +20,6 @@ jobs:
         stale-issue-label: 'no-issue-activity'
         stale-pr-label: 'no-pr-activity'
         days-before-stale: 30
-        exempt-issue-labels: checking,tier-1,tier-2,future-work,good-first-issue,help-wanted
-        exempt-pr-labels: blocked,dependencies,documentation 
+        exempt-issue-labels: checking,tier-1,tier-2,future-work,good-first-issue,help-wanted,dont-close
+        exempt-pr-labels: blocked,dependencies,documentation,dont-close
         exempt-draft-pr: true
