@@ -41,7 +41,11 @@ jobs:
             shellcheck \
             debugedit \
             fakeroot \
-            sudo
+            sudo \
+            pkgconf \
+            libc++ \
+            cmake \
+            openssl
 
       - name: Setup build user
         run: |
