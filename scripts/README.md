@@ -24,9 +24,11 @@ This directory contains utility scripts for local development and testing that c
 ## Script Overview
 
 ### `dev-checks.sh`
+
 Runs comprehensive development checks including formatting, linting, and tests.
 
 **Features:**
+
 - Code formatting checks (`cargo fmt`)
 - Linting with Clippy
 - Unit tests
@@ -34,17 +36,21 @@ Runs comprehensive development checks including formatting, linting, and tests.
 - Documentation tests
 
 ### `size-check.sh`
+
 Analyzes binary size changes to detect bloat and track optimization efforts.
 
 **Features:**
+
 - Binary size comparison
 - Dependency analysis
 - Size regression detection
 
 ### 🛡️ `security.sh`
+
 Comprehensive security and memory safety testing framework.
 
 **Features:**
+
 - Multi-tool testing (Miri, Valgrind, cargo-audit, cargo-machete)
 - Cross-platform support (Linux, macOS, ARM64)
 - Graceful degradation when tools unavailable
@@ -52,6 +58,7 @@ Comprehensive security and memory safety testing framework.
 - Color-coded output with progress indicators
 
 **Usage:**
+
 ```bash
 # Run all available tests
 ./scripts/security.sh
@@ -65,10 +72,12 @@ Comprehensive security and memory safety testing framework.
 ./scripts/security.sh --check
 ```
 
-### 📊 `bench.sh` 
+### 📊 `bench.sh`
+
 Local performance benchmarking with regression detection.
 
 **Features:**
+
 - Criterion benchmark integration
 - Baseline creation and comparison
 - Automatic test package detection
@@ -77,6 +86,7 @@ Local performance benchmarking with regression detection.
 - Local development focus
 
 **Usage:**
+
 ```bash
 # Standard benchmark run
 ./scripts/bench.sh
@@ -96,6 +106,7 @@ Local performance benchmarking with regression detection.
 Run tests defined in [`nvim-tests`](../nvim-tests) directory.
 
 **Usage**
+
 ```bash
 ./scripts/run_nvim_tests.sh
 ```
@@ -105,6 +116,7 @@ In uses `[mini.test](https://github.com/echasnovski/mini.test)` plugin to test.
 ## Prerequisites
 
 ### Common Requirements
+
 - Rust toolchain (automatically managed via `rust-toolchain.toml`)
 - Basic build tools
 - Neovim (Only For The Tests And If You Are Changing Neovim Specific Things)
@@ -112,12 +124,14 @@ In uses `[mini.test](https://github.com/echasnovski/mini.test)` plugin to test.
 ### Platform-Specific Tools
 
 #### Linux
+
 ```bash
 sudo apt-get update
 sudo apt-get install -y valgrind bc gnuplot build-essential
 ```
 
 #### macOS
+
 ```bash
 brew install gnuplot
 # Optional: brew install valgrind (limited support)
@@ -136,15 +150,18 @@ Note: Benchmarking (`bench.sh`) is intentionally local-only due to CI environmen
 The scripts integrate with workflows where appropriate:
 
 #### Security Workflows
+
 - **`security.yml`**: Runs comprehensive security testing across platforms
 
 #### Development Scripts
+
 - **`bench.sh`**: Local-only performance testing (not suitable for CI)
 - **`dev-checks.sh`**: Can be used in CI for code quality checks
 
 ## Development Workflow
 
 ### Before Committing
+
 ```bash
 # Run all development checks
 ./scripts/dev-checks.sh
@@ -163,19 +180,23 @@ The scripts integrate with workflows where appropriate:
 ```
 
 ### Setting Up New Environment
+
 For setting up a development environment, ensure you have the platform-specific tools listed in the Prerequisites section above.
 
 ## Troubleshooting
 
 ### Script Permissions
+
 ```bash
 chmod +x scripts/*.sh
 ```
 
 ### Missing Tools
+
 Run the setup script or check platform-specific installation commands above.
 
 ### CI Failures
+
 - Check workflow logs for specific error messages
 - Verify `rust-toolchain.toml` compatibility
 - Ensure scripts have execution permissions
@@ -184,6 +205,7 @@ Run the setup script or check platform-specific installation commands above.
 ## Script Architecture
 
 All scripts follow common patterns:
+
 - **Color-coded output** with emoji indicators
 - **Progressive enhancement** based on available tools
 - **Comprehensive help text** with examples

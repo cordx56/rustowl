@@ -672,7 +672,7 @@ run_valgrind_tests() {
     
     # Build RustOwl for Valgrind testing (use release profile for better performance)
     echo -e "${BLUE}Building RustOwl for Valgrind testing...${NC}"
-    if ! cargo build --release >/dev/null 2>&1; then
+    if ! ./scripts/build/toolchain cargo build --release >/dev/null 2>&1; then
         echo -e "${RED}[FAIL] Failed to build RustOwl for Valgrind testing${NC}"
         return 1
     fi

@@ -1,11 +1,15 @@
 <a name="unreleased"></a>
+
 ## [Unreleased]
 
 ### ♻️ Code Refactoring
+
 - **alloc:** move to mimalloc because of jemalloc archive ([#230](https://github.com/cordx56/rustowl/issues/230))
+- **reqwest:** move to aws_lc instead of ring ([#338](https://github.com/cordx56/rustowl/issues/338))
 - **runtime:** refactor the runtime to use more suitable stack size for generic machine, and to use amount of cores counting the existing cores on the machine and using half to not make or get stuck
 
 ### 🎨 Chores
+
 - add ovsx to release script and docs about extension ([#266](https://github.com/cordx56/rustowl/issues/266))
 - update changelog ([#211](https://github.com/cordx56/rustowl/issues/211))
 - update lockfiles and deps ([#267](https://github.com/cordx56/rustowl/issues/267))
@@ -22,87 +26,115 @@
 - **rustc:** bump rustc to 1.88.0 in neovim ci ([#315](https://github.com/cordx56/rustowl/issues/315))
 
 ### 🐞 Bug Fixes
+
+- add skip installing RustOwl toolchain option on toolchain installation ([#342](https://github.com/cordx56/rustowl/issues/342))
 - visualize wrong range, caused by byte check ([#325](https://github.com/cordx56/rustowl/issues/325))
 - visualize inside async function ([#327](https://github.com/cordx56/rustowl/issues/327))
 - call vscode bootstrap only when RustOwl is downloaded ([#309](https://github.com/cordx56/rustowl/issues/309))
-- **alloc:** move to jemalloc as rustc does
+- **alloc:** move to jemalloc as rustc does ([#335](https://github.com/cordx56/rustowl/issues/335))
 - **alloc:** properly setup mimalloc
 - **benchmarks:** increase measurement and warm-up time for benchmark tests
 - **bencmarks:** fix benchmarks script to calculate result correctly, and increased the amount of iteration for more precise results
 - **deps:** update tar dependency to version 0.4
 - **rustc:** new 1.88.0, bump version in ci ([#300](https://github.com/cordx56/rustowl/issues/300))
+- **windows:** zip now contains a top level dir ([#341](https://github.com/cordx56/rustowl/issues/341))
 
 ### 🚀 Features
+
+- add vscode tests, migrate to zod v4, format code ([#330](https://github.com/cordx56/rustowl/issues/330))
 - update to rustc 1.88.0
 - enhance CLI command handling with options for all targets and features ([#225](https://github.com/cordx56/rustowl/issues/225))
 - Add security and memory safety testing workflow ([#234](https://github.com/cordx56/rustowl/issues/234))
 - consolidate and enhance CI workflows by replacing check.yaml with checks.yml and adding a development checks script ([#233](https://github.com/cordx56/rustowl/issues/233))
 - winget package ([#178](https://github.com/cordx56/rustowl/issues/178))
+- **build:** add consistent build script ([#336](https://github.com/cordx56/rustowl/issues/336))
 - **perf-tests:** Memory fixes ([#226](https://github.com/cordx56/rustowl/issues/226))
 - **toolchain:** install cargo on toolchain installation ([#334](https://github.com/cordx56/rustowl/issues/334))
 - **toolchain:** new toolchain installer ([#320](https://github.com/cordx56/rustowl/issues/320))
 
 
 <a name="v0.3.4"></a>
+
 ## [v0.3.4] - 2025-05-20
+
 ### 🎨 Chores
+
 - urgent release v0.3.4, fixes wrong visualization
 - update changelog ([#170](https://github.com/cordx56/rustowl/issues/170))
 - update changelog ([#168](https://github.com/cordx56/rustowl/issues/168))
 
 ### 🐞 Bug Fixes
+
 - **lsp-core:** fix actual lifetime range visualization for `Drop` variable.
 
 
 <a name="v0.3.3"></a>
+
 ## [v0.3.3] - 2025-05-17
+
 ### ♻️ Code Refactoring
+
 - split build action from release action
 
 ### 🎨 Chores
+
 - fix pre-release if statement
 - fix release case
 - regex in bash should not quoted
 - automate cargo publish
 
 ### 🐞 Bug Fixes
+
 - support CRLF
 
 
 <a name="v0.3.3-rc.2"></a>
+
 ## [v0.3.3-rc.2] - 2025-05-17
+
 ### 🎨 Chores
+
 - vsce auto publish
 - use official toolchain
 
 ### 🐞 Bug Fixes
+
 - GitHub Actions typo
 
 
 <a name="v0.3.3-rc.1"></a>
+
 ## [v0.3.3-rc.1] - 2025-05-16
+
 ### 🎨 Chores
+
 - Rewrite CLI using Derive API ([#153](https://github.com/cordx56/rustowl/issues/153))
 - update changelog ([#154](https://github.com/cordx56/rustowl/issues/154))
 - **cli:** Add help messages to options ([#159](https://github.com/cordx56/rustowl/issues/159))
 
 ### 🐞 Bug Fixes
+
 - use native ca certs by enabling native roots feature of reqwest ([#162](https://github.com/cordx56/rustowl/issues/162))
 - **pkgbuild:** use rustup instead of cargo ([#156](https://github.com/cordx56/rustowl/issues/156))
 
 ### 🚀 Features
+
 - update rustc to 1.87.0
 
 
 <a name="v0.3.2"></a>
+
 ## [v0.3.2] - 2025-05-09
+
 ### 🐞 Bug Fixes
+
 - support gsed (macOS)
 - version.sh removed and use ./scripts/bump.sh
 - specify pkg-fmt for binstall
 - restore current newest version
 
 ### 🚀 Features
+
 - v0.3.2 release
 - support RUSTOWL_SYSROOT_DIRS
 - add a bump.sh for bumping ([#148](https://github.com/cordx56/rustowl/issues/148))
@@ -110,26 +142,35 @@
 - support single .rs file analyze and VS Code download progress
 
 ### Pull Requests
+
 - Merge pull request [#146](https://github.com/cordx56/rustowl/issues/146) from cordx56/dependabot/npm_and_yarn/vscode/types/node-22.15.14
 
 
 <a name="v0.3.1"></a>
+
 ## [v0.3.1] - 2025-05-07
+
 ### 🎨 Chores
+
 - Release v0.3.1
 - Don't check every main push
 
 ### 🐞 Bug Fixes
+
 - VS Code version check returns null
 
 
 <a name="v0.3.1-rc.1"></a>
+
 ## [v0.3.1-rc.1] - 2025-05-07
+
 ### 🎨 Chores
+
 - update changelog
 - update changelog
 
 ### 🐞 Bug Fixes
+
 - check before release and profile dir
 - arm Windows build
 - avoid failure to find sysroot
@@ -139,15 +180,18 @@
 - **windows:** unzip
 
 ### 🚀 Features
+
 - better-release-notes
 - support multiple fallbacks
 - remove redundant rustc_driver
 - RustOwl version check for VS Code extension
 
 ### Reverts
+
 - move CONTRIBUTING.md
 
 ### Pull Requests
+
 - Merge pull request [#142](https://github.com/cordx56/rustowl/issues/142) from cordx56/feat/better-release-notes
 - Merge pull request [#140](https://github.com/cordx56/rustowl/issues/140) from MuntasirSZN/fix/changelogen
 - Merge pull request [#132](https://github.com/cordx56/rustowl/issues/132) from cordx56/create-pull-request/autogenerate-changelog
@@ -156,28 +200,39 @@
 
 
 <a name="v0.3.1-alpha.3"></a>
+
 ## [v0.3.1-alpha.3] - 2025-05-06
+
 ### 🐞 Bug Fixes
+
 - rustowlc ext for Windows
 
 
 <a name="v0.3.1-alpha.2"></a>
+
 ## [v0.3.1-alpha.2] - 2025-05-06
+
 ### 🐞 Bug Fixes
+
 - dont use tar, use Compress-Archive instead
 
 ### 🚀 Features
+
 - add a pr template
 - add a code of conduct and security file
 
 ### Pull Requests
+
 - Merge pull request [#129](https://github.com/cordx56/rustowl/issues/129) from MuntasirSZN/feat/community-standards
 - Merge pull request [#128](https://github.com/cordx56/rustowl/issues/128) from MuntasirSZN/main
 
 
 <a name="v0.3.1-alpha.1"></a>
+
 ## [v0.3.1-alpha.1] - 2025-05-05
+
 ### 🎨 Chores
+
 - update changelog
 - update changelog ([#116](https://github.com/cordx56/rustowl/issues/116))
 - update changelog ([#112](https://github.com/cordx56/rustowl/issues/112))
@@ -189,6 +244,7 @@
 - update changelog
 
 ### 🐞 Bug Fixes
+
 - change compress script to use sysroot dir ([#125](https://github.com/cordx56/rustowl/issues/125))
 - add release on top of cp
 - use target name in cp command
@@ -198,6 +254,7 @@
 - **reqwest:** dont depend on openssl-sys, use rustls for lower system deps
 
 ### 🚀 Features
+
 - aur packages ([#105](https://github.com/cordx56/rustowl/issues/105))
 - aur packages
 - automatic updates with dependabot
@@ -206,6 +263,7 @@
 - **archive:** implement zipping for windows
 
 ### Pull Requests
+
 - Merge pull request [#126](https://github.com/cordx56/rustowl/issues/126) from cordx56/create-pull-request/autogenerate-changelog
 - Merge pull request [#124](https://github.com/cordx56/rustowl/issues/124) from MuntasirSZN/main
 - Merge pull request [#123](https://github.com/cordx56/rustowl/issues/123) from MuntasirSZN/main
@@ -225,60 +283,89 @@
 
 
 <a name="v0.3.0"></a>
+
 ## [v0.3.0] - 2025-04-30
 
+
 <a name="v0.3.0-alpha.2"></a>
+
 ## [v0.3.0-alpha.2] - 2025-04-30
+
 ### Pull Requests
+
 - Merge pull request [#88](https://github.com/cordx56/rustowl/issues/88) from yasuo-ozu/fix_build_canonical
 
 
 <a name="v0.3.0-alpha.1"></a>
+
 ## [v0.3.0-alpha.1] - 2025-04-27
 
+
 <a name="v0.2.3-alpha.1"></a>
+
 ## [v0.2.3-alpha.1] - 2025-04-25
 
+
 <a name="v0.2.3pre"></a>
+
 ## [v0.2.3pre] - 2025-04-25
+
 ### 🚀 Features
+
 - shell completions and man pages
 
 ### Reverts
+
 - test workflow
 
 ### Pull Requests
+
 - Merge pull request [#85](https://github.com/cordx56/rustowl/issues/85) from MuntasirSZN/main
 - Merge pull request [#80](https://github.com/cordx56/rustowl/issues/80) from siketyan/ci/more-platform
 
 
 <a name="v0.2.2"></a>
+
 ## [v0.2.2] - 2025-04-18
 
+
 <a name="v0.2.2pre2"></a>
+
 ## [v0.2.2pre2] - 2025-04-18
 
+
 <a name="v0.2.2pre"></a>
+
 ## [v0.2.2pre] - 2025-04-18
+
 ### ♻️ Code Refactoring
+
 - streamline toolchain detection and correct cargo path
 
 ### 🚀 Features
+
 - **toolchain:** add support for RUSTOWL_TOOLCHAIN_DIR to bypass rustup
 
 ### Pull Requests
+
 - Merge pull request [#77](https://github.com/cordx56/rustowl/issues/77) from xBLACKICEx/flexible-toolchain
 
 
 <a name="v0.2.1"></a>
+
 ## [v0.2.1] - 2025-04-15
 
+
 <a name="v0.2.0"></a>
+
 ## [v0.2.0] - 2025-04-09
+
 ### ♻️ Code Refactoring
+
 - add prefix to functions with commonly used names
 
 ### 🎨 Chores
+
 - add require lsp
 - remove calling `enable-rustowlsp-cursor`
 - add `defgroup`
@@ -286,14 +373,17 @@
 - Migrate to Rust 2024
 
 ### 🐞 Bug Fixes
+
 - package-requires
 
 ### Reverts
+
 - messsage type
 - neovim plugin function
 - update install manual
 
 ### Pull Requests
+
 - Merge pull request [#72](https://github.com/cordx56/rustowl/issues/72) from mawkler/neovim-version
 - Merge pull request [#69](https://github.com/cordx56/rustowl/issues/69) from cordx56/feat/elim-rustup-call
 - Merge pull request [#48](https://github.com/cordx56/rustowl/issues/48) from mawkler/lua-api
@@ -304,30 +394,42 @@
 
 
 <a name="v0.1.4"></a>
+
 ## [v0.1.4] - 2025-02-22
+
 ### ♻️ Code Refactoring
+
 - simplify HashMap insertion by using entry API
 
 ### Pull Requests
+
 - Merge pull request [#54](https://github.com/cordx56/rustowl/issues/54) from uhobnil/main
 
 
 <a name="v0.1.3"></a>
+
 ## [v0.1.3] - 2025-02-20
+
 ### 🎨 Chores
+
 - remove duplicate code
 
 ### 🐞 Bug Fixes
+
 - install the newest version
 
 ### Pull Requests
+
 - Merge pull request [#53](https://github.com/cordx56/rustowl/issues/53) from uhobnil/main
 - Merge pull request [#47](https://github.com/cordx56/rustowl/issues/47) from robin-thoene/fix/update-install-script
 
 
 <a name="v0.1.2"></a>
+
 ## [v0.1.2] - 2025-02-19
+
 ### 🎨 Chores
+
 - add the description for duplication
 - add config.yaml
 - add issue templae for feature requesting
@@ -335,6 +437,7 @@
 - add issue templae for bug reporing
 
 ### 🐞 Bug Fixes
+
 - s/enhancement/bug/
 - update the introduction
 - correct label
@@ -345,6 +448,7 @@
 - kill process when the client/server is dead
 
 ### Pull Requests
+
 - Merge pull request [#35](https://github.com/cordx56/rustowl/issues/35) from chansuke/chore/add-issue-template
 - Merge pull request [#42](https://github.com/cordx56/rustowl/issues/42) from uhobnil/main
 - Merge pull request [#34](https://github.com/cordx56/rustowl/issues/34) from mtshiba/main
@@ -354,43 +458,66 @@
 
 
 <a name="v0.1.1"></a>
+
 ## [v0.1.1] - 2025-02-07
 
+
 <a name="v0.1.0"></a>
+
 ## [v0.1.0] - 2025-02-05
+
 ### Pull Requests
+
 - Merge pull request [#2](https://github.com/cordx56/rustowl/issues/2) from wx257osn2/support-windows
 
 
 <a name="v0.0.5"></a>
+
 ## [v0.0.5] - 2025-02-02
 
+
 <a name="v0.0.4"></a>
+
 ## [v0.0.4] - 2025-01-31
 
+
 <a name="v0.0.3"></a>
+
 ## [v0.0.3] - 2025-01-30
+
 ### Pull Requests
+
 - Merge pull request [#6](https://github.com/cordx56/rustowl/issues/6) from Jayllyz/build/enable-lto-codegen
 
 
 <a name="v0.0.3pre"></a>
+
 ## [v0.0.3pre] - 2025-01-26
+
 ### Pull Requests
+
 - Merge pull request [#5](https://github.com/cordx56/rustowl/issues/5) from mu001999-contrib/main
 
 
 <a name="v0.0.2"></a>
+
 ## [v0.0.2] - 2025-01-23
 
+
 <a name="v0.0.2pre"></a>
+
 ## [v0.0.2pre] - 2025-01-23
 
+
 <a name="v0.0.1"></a>
+
 ## [v0.0.1] - 2024-11-13
 
+
 <a name="vpre"></a>
+
 ## vpre - 2024-11-11
+
 
 [Unreleased]: https://github.com/cordx56/rustowl/compare/v0.3.4...HEAD
 [v0.3.4]: https://github.com/cordx56/rustowl/compare/v0.3.3...v0.3.4

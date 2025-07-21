@@ -14,4 +14,3 @@ In addition, you may request that the project provide you a patched release in a
 However, I will email you at the same time the public announcement is made.
 We will let you know within a few weeks whether or not your report has been accepted or rejected.
 We ask that you please keep the report confidential until we have made a public announcement.
-

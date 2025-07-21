@@ -164,4 +164,4 @@ jobs:
           files: artifacts/**/*
           draft: true
           body_path: release.md
-          prerelease: ${{ needs.meta.outputs.pre_release == 'true' }} 
+          prerelease: ${{ needs.meta.outputs.pre_release == 'true' }}
