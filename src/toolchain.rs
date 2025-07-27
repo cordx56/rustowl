@@ -44,7 +44,7 @@ async fn get_runtime_dir() -> PathBuf {
     }
 
     log::info!("sysroot not found; start setup toolchain");
-    if let Err(e) = setup_toolchain(&*FALLBACK_RUNTIME_DIR).await {
+    if let Err(e) = setup_toolchain(&*FALLBACK_RUNTIME_DIR, false).await {
         log::error!("{e:?}");
         std::process::exit(1);
     } else {
@@ -175,7 +175,14 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
     }
     Ok(())
 }
-pub async fn setup_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
+pub async fn setup_toolchain(dest: impl AsRef<Path>, skip_rustowl: bool) -> Result<(), ()> {
+    setup_rust_toolchain(&dest).await?;
+    if !skip_rustowl {
+        setup_rustowl_toolchain(&dest).await?;
+    }
+    Ok(())
+}
+pub async fn setup_rust_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
     let sysroot = sysroot_from_runtime(dest.as_ref());
     if create_dir_all(&sysroot).await.is_err() {
         log::error!("failed to create toolchain directory");
@@ -187,7 +194,9 @@ pub async fn setup_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
     install_component("rust-std", &sysroot).await?;
     install_component("cargo", &sysroot).await?;
     log::info!("installing Rust toolchain finished");
-
+    Ok(())
+}
+pub async fn setup_rustowl_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
     log::info!("start installing RustOwl toolchain...");
     #[cfg(not(target_os = "windows"))]
     let rustowl_toolchain_result = {

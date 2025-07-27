@@ -75,9 +75,15 @@ pub enum ToolchainCommands {
             long,
             value_name("path"),
             value_hint(ValueHint::AnyPath),
-            help = "Path to install RustOwl toolchain"
+            help = "Runtime directory path to install RustOwl toolchain"
         )]
         path: Option<std::path::PathBuf>,
+        #[arg(
+            long,
+            value_name("skip-rustowl-toolchain"),
+            help = "Install Rust toolchain only"
+        )]
+        skip_rustowl_toolchain: bool,
     },
 
     /// Uninstall the toolchain.
