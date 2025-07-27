@@ -27,6 +27,7 @@ prepare() {
 build() {
     cd "$srcdir/rustowl"
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
+    export RUSTFLAGS="-C link-arg=-ljemalloc"
     ./scripts/build/toolchain cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)"
 }
 
