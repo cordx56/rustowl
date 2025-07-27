@@ -20,7 +20,6 @@ pkgver() {
 
 prepare() {
     cd "$srcdir/rustowl"
-    export "$(/bin/sh "./scripts/build/print-env.sh" "$(cat "./scripts/build/channel")")"
     ./scripts/build/toolchain cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
@@ -33,7 +32,6 @@ build() {
 
 check() {
     cd "$srcdir/rustowl"
-    export "$(/bin/sh "./scripts/build/print-env.sh" "$(cat "./scripts/build/channel")")"
     ./scripts/build/toolchain cargo test --frozen --all-features
 }
 
