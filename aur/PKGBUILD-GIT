@@ -22,6 +22,7 @@ prepare() {
     cd "$srcdir/rustowl"
     export RUSTC_BOOTSTRAP=1
     export RUSTUP_TOOLCHAIN=1.88.0
+    rustup component add rust-src rustc-dev llvm-tools
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
