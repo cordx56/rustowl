@@ -18,7 +18,7 @@ jobs:
     name: Arch Linux Container Build & Test
     runs-on: ubuntu-latest
     container:
-      image: archlinux/archlinux:latest
+      image: archlinux/archlinux:multilib-devel
     
     steps:
       - name: Checkout repository
@@ -45,7 +45,9 @@ jobs:
             pkgconf \
             libc++ \
             cmake \
-            openssl
+            openssl \
+            clang \
+            llvm
 
       - name: Setup build user
         run: |
