@@ -82,10 +82,10 @@ jobs:
           rm -rf runtime && mkdir -p runtime/sysroot/${{ env.toolchain }}/bin
 
           if [[ "${{ env.is_linux }}" == "true"  ]]; then
-            cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
+            cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/
             cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
           else
-            cp target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
+            cp target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/
             cp target/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
           fi
 
@@ -101,10 +101,10 @@ jobs:
 
           if [[ "${{ env.is_windows }}" == "true" ]]; then
             mkdir rustowl
-            mv README.md LICENSE sysroot/ completions/ man/ rustowl
+            mv README.md LICENSE sysroot/ completions/ man/ rustowl${{ env.exec_ext }} rustowl/
             powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath "..\${{ env.archive_name }}" -CompressionLevel Optimal'
           else
-            tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ completions/ man/
+            tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ completions/ man/ rustowl${{ env.exec_ext }}
           fi
 
           cp ./rustowl${{ env.exec_ext }} ../rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
