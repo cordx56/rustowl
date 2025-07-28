@@ -2,14 +2,14 @@ name: Security & Memory Safety
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTC_BOOTSTRAP:  1
+  RUSTC_BOOTSTRAP: 1
 
 jobs:
   security-checks:
@@ -35,7 +35,7 @@ jobs:
           components: miri,rust-src,llvm-tools-preview,rustc-dev
           # Automatically reads from rust-toolchain.toml
           cache: false
-      
+
       - name: Install system dependencies (Linux)
         if: matrix.runner_os == 'Linux'
         run: |
@@ -62,7 +62,7 @@ jobs:
         run: |
           # Only create summary and cleanup on failure
           echo "Security tests failed, creating summary..."
-          
+
           # The security script should have created its own summary
           if [ -f "security-logs/security_summary_*.md" ]; then
             echo "Security script summary found:"
@@ -77,7 +77,7 @@ jobs:
             echo "Status: Security tests failed" >> security-logs/failure-summary.txt
             echo "::error::Security tests failed and no detailed summary was found"
           fi
-          
+
           # List all generated logs for debugging
           if [ -d "security-logs" ]; then
             echo "Available security logs:"

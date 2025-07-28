@@ -105,7 +105,7 @@ ensure_binaries_built() {
     
     if $need_build; then
         log_info "Building release binaries..."
-        if ! cargo build --release; then
+        if ! ./scripts/build/toolchain cargo build --release; then
             log_error "Failed to build release binaries"
             exit 1
         fi
