@@ -47,7 +47,13 @@ jobs:
             cmake \
             openssl \
             clang \
-            llvm
+            llvm \
+            perl \
+            ninja \
+            go \
+            git \
+            glibc \
+            gcc-libs
 
       - name: Setup build user
         run: |
