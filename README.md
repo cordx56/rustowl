@@ -71,6 +71,7 @@ So, RustOwl can be used easily from other editor.
   - [Neovim](#neovim)
   - [Emacs](#emacs)
   - [RustRover / IntelliJ IDEs](#rustrover--intellij-ides)
+  - [Sublime Text](#sublime-text)
 - [Architecture / OS / package repositories](#architecture--os--package-repositories)
   - [Cargo Binstall](#cargo-binstall)
   - [Windows](#windows)
@@ -200,6 +201,11 @@ You have to install RustOwl LSP server manually.
 ### RustRover / IntelliJ IDEs
 
 There is a [third-party repository](https://github.com/siketyan/intellij-rustowl) that supports IntelliJ IDEs.
+You have to install RustOwl LSP server manually.
+
+### Sublime Text
+
+There is a [third-party repository](https://github.com/CREAsTIVE/LSP-rustowl) that supports Sublime Text.
 You have to install RustOwl LSP server manually.
 
 ## Architecture / OS / package repositories
