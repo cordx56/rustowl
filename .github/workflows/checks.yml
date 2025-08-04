@@ -2,15 +2,14 @@ name: Basic Checks
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
   workflow_call:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTUP_TOOLCHAIN: 1.88.0
   RUSTC_BOOTSTRAP: 1
 
 jobs:
@@ -21,14 +20,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Get Rust version
+        run: |
+          echo RUSTUP_TOOLCHAIN=$(cat ./scripts/build/channel) >> $GITHUB_ENV
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
           components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
 
       - name: Check formatting
         run: cargo fmt --check
@@ -43,20 +46,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
-
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
       - name: Build release
-        run: cargo build --release
+        run: ./scripts/build/toolchain cargo build --release
 
       - name: Install binary
-        run: cargo install --path .
+        run: ./scripts/build/toolchain cargo install --path .
 
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
@@ -76,11 +73,11 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-locked
         working-directory: ./vscode
-        
+
       - name: Check formatting
         run: yarn prettier -c src
         working-directory: ./vscode
-        
+
       - name: Lint and type check
         run: yarn lint && yarn check-types
         working-directory: ./vscode

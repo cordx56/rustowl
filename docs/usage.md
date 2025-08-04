@@ -52,16 +52,16 @@ Now you have a master's degree in RustOwl.
 The lifetime that RustOwl visualizes is the range of these variables:
 
 - Where the variable _lives_
-    - For the meaning of _NLL_
+  - For the meaning of _NLL_
 - Until the variable is _dropped_ or _moved_
-    - For the meaning of _RAII_
+  - For the meaning of _RAII_
 
 Based on this, we can use RustOwl as listed below:
 
 - To resolve _dead lock_ that is caused by some data structures like `Mutex`
-    - Because these _locks_ are freed where the lock object is dropped
+  - Because these _locks_ are freed where the lock object is dropped
 - To manage resources
-    - Like memories, files, and anything which is managed by _RAII_ respective
+  - Like memories, files, and anything which is managed by _RAII_ respective
 
 Did you get a Ph.D. in lifetimes?
 So let's try managing resources with RustOwl.
