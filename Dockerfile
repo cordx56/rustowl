@@ -5,6 +5,7 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates=20250419 \
+        build-essential=12.12 \
         curl=8.14.1-2 && \
     rm -rf /var/lib/apt/lists/*
 
