@@ -206,7 +206,6 @@ You have to install RustOwl LSP server manually.
 ### Sublime Text
 
 There is a [third-party repository](https://github.com/CREAsTIVE/LSP-rustowl) that supports Sublime Text.
-You have to install RustOwl LSP server manually.
 
 ## Architecture / OS / package repositories
 
