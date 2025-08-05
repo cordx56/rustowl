@@ -6,7 +6,6 @@ COPY scripts/ scripts/
 ENV RUSTC_BOOTSTRAP=1
 
 RUN export "$(./scripts/build/print-env.sh 1.88.0)" && \
-    export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
     export RUSTUP_TOOLCHAIN="${RUSTOWL_TOOLCHAIN}" && \
     cargo install cargo-chef
 
@@ -14,7 +13,6 @@ FROM chef AS planner
 ENV RUSTC_BOOTSTRAP=1
 COPY . .
 RUN export "$(./scripts/build/print-env.sh 1.88.0)" && \
-    export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
     export RUSTUP_TOOLCHAIN="${RUSTOWL_TOOLCHAIN}" && \
     cargo chef prepare --recipe-path recipe.json
 
@@ -35,7 +33,6 @@ RUN apt-get update && \
 
 COPY --from=planner /app/recipe.json recipe.json
 RUN export "$(./scripts/build/print-env.sh 1.88.0)" && \
-    export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
     export RUSTUP_TOOLCHAIN="${RUSTOWL_TOOLCHAIN}" && \
     cargo chef cook --release --recipe-path recipe.json
 
