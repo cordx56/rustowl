@@ -23,12 +23,12 @@ cargo_metadata = "0.21"
 uuid = { version = "1", features = ["v4"] }
 clap = { version = "4", features = ["cargo", "derive"] }
 flate2 = "1"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots-no-provider"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots-no-provider", "socks", "system-proxy", "http2"] }
 clap_complete_nushell = "4"
 clap_complete = "4"
 tar = "0.4.44"
 tempfile = "3"
-rustls = { version = "0.23.29", default-features = false, features = ["aws_lc_rs"] }
+rustls = { version = "0.23.31", default-features = false, features = ["aws_lc_rs"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 libc = "0.2"
@@ -46,7 +46,7 @@ clap = { version = "4", features = ["derive"] }
 regex = "1"
 
 [dev-dependencies]
-criterion = { version = "0.6", features = ["html_reports"] }
+criterion = { version = "0.7", features = ["html_reports"] }
 
 [[bench]]
 name = "rustowl_bench_simple"
