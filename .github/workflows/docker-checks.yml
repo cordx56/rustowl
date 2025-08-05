@@ -50,3 +50,5 @@ jobs:
         run: |
           docker run --rm rustowl:test --version
           docker run --rm rustowl:test --help
+          cd perf-tests/dummy-package
+          docker run --rm -v $(pwd):/app rustowl:test check
