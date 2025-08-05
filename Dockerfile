@@ -64,7 +64,7 @@ COPY --from=builder /build-output/rustowlc /usr/local/bin/rustowlc
 
 RUN RUSTOWL_TOOLCHAIN="$(./scripts/build/toolchain eval "echo $RUSTOWL_TOOLCHAIN")" && \
     export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
-    ./scripts/build/toolchain "Done!"
+    ./scripts/build/toolchain "Done!" && \
     rm -rf scripts/
 
 ENV PATH="/usr/local/bin:${PATH}"
