@@ -10,15 +10,17 @@ RUN apt-get update && \
         curl=8.14.1-2 && \
     rm -rf /var/lib/apt/lists/*
 
-RUN eval "export $(./scripts/build/print-env.sh "$(cat scripts/build/channel)")" && \
-    RUSTUP_TOOLCHAIN="$(cat scripts/build/channel)" && \
+RUN channel="$(cat scripts/build/channel)" && \
+    eval "export $(./scripts/build/print-env.sh "$channel")" && \
+    export RUSTUP_TOOLCHAIN="$channel" && \
     cargo install cargo-chef
 
 FROM chef AS planner
 ENV RUSTC_BOOTSTRAP=1
 COPY . .
-RUN eval "export $(./scripts/build/print-env.sh "$(cat scripts/build/channel)")" && \
-    RUSTUP_TOOLCHAIN="$(cat scripts/build/channel)" && \
+RUN channel="$(cat scripts/build/channel)" && \
+    eval "export $(./scripts/build/print-env.sh "$channel")" && \
+    export RUSTUP_TOOLCHAIN="$channel" && \
     cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
@@ -37,15 +39,17 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=planner /app/recipe.json recipe.json
-RUN eval "export $(./scripts/build/print-env.sh "$(cat scripts/build/channel)")" && \
-    RUSTUP_TOOLCHAIN="$(cat scripts/build/channel)" && \
+RUN channel="$(cat scripts/build/channel)" && \
+    eval "export $(./scripts/build/print-env.sh "$channel")" && \
+    export RUSTUP_TOOLCHAIN="$channel" && \
     cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
 
-RUN eval "export $(./scripts/build/print-env.sh "$(cat scripts/build/channel)")" && \
+RUN channel="$(cat scripts/build/channel)" && \
+    eval "export $(./scripts/build/print-env.sh "$channel")" && \
     export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
-    RUSTUP_TOOLCHAIN="$(cat scripts/build/channel)" && \
+    export RUSTUP_TOOLCHAIN="$channel" && \
     ./scripts/build/toolchain cargo build --release --all-features --target "${HOST_TUPLE}" && \
     mkdir -p /build-output && \
     cp target/"${HOST_TUPLE}"/release/rustowl /build-output/rustowl && \
@@ -56,6 +60,8 @@ FROM rust:1.88.0-slim-trixie
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates=20250419 curl=8.14.1-2  && \
     rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/local/bin
 
 COPY --from=builder scripts/ scripts/
 
