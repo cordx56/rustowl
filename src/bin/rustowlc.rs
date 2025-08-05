@@ -17,6 +17,9 @@ pub extern crate rustc_middle;
 pub extern crate rustc_session;
 pub extern crate rustc_span;
 pub extern crate smallvec;
+pub extern crate rustc_stable_hash;
+pub extern crate rustc_data_structures;
+pub extern crate rustc_query_system;
 
 pub mod core;
 

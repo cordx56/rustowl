@@ -1,4 +1,4 @@
-use crate::{lsp::*, models::*, toolchain, utils};
+use crate::{cache::*, lsp::*, models::*, toolchain, utils};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -125,6 +125,7 @@ impl Backend {
         for (root, target) in roots {
             // progress report
             let meta = cargo_metadata::MetadataCommand::new()
+                .cargo_path(&cargo)
                 .current_dir(&root)
                 .exec()
                 .ok();
@@ -182,6 +183,10 @@ impl Backend {
                 .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc_path);
             let sysroot = toolchain::get_sysroot().await;
             toolchain::set_rustc_env(&mut command, &sysroot);
+
+            if is_incremental() {
+                set_incremental_path(&mut command, &target);
+            }
 
             if log::max_level().to_level().is_none() {
                 command.stderr(std::process::Stdio::null());

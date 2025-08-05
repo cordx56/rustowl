@@ -1,6 +1,8 @@
 mod analyze;
+mod cache;
 
-use analyze::MirAnalyzer;
+use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
+use cache::CacheData;
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
 use rustc_middle::{
@@ -40,6 +42,9 @@ static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
 // tokio runtime handler
 static HANDLE: LazyLock<Handle> = LazyLock::new(|| RUNTIME.handle().clone());
 
+static NEW_CACHE: LazyLock<Mutex<cache::CacheData>> =
+    LazyLock::new(|| Mutex::new(CacheData::new()));
+
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
 }
@@ -59,7 +64,20 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
         );
         RUNTIME.block_on(async move {
             let mut locked = TASKS.lock().await;
-            locked.spawn_on(analyzer, &HANDLE);
+
+            match analyzer {
+                MirAnalyzerInitResult::Cached(cached) => {
+                    NEW_CACHE.lock().await.insert_cache(
+                        cached.file_hash.clone(),
+                        cached.mir_hash.clone(),
+                        cached.analyzed.clone(),
+                    );
+                    print_analyzed_result(tcx, cached);
+                }
+                MirAnalyzerInitResult::Analyzer(analyzer) => {
+                    locked.spawn_on(analyzer, &HANDLE);
+                }
+            }
         });
     }
 
@@ -85,28 +103,38 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         _compiler: &interface::Compiler,
         tcx: TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
-        // get currently-compiling crate name
-        let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
         RUNTIME.block_on(async move {
             let task_len = { TASKS.lock().await.len() };
             let mut joined = 0;
             while let Some(task) = { TASKS.lock().await.join_next().await } {
                 joined += 1;
                 log::info!("borrow checked: {joined} / {task_len}");
-                let (filename, analyzed) = task.unwrap().analyze();
-                log::info!("analyzed one item of {filename}");
-                let krate = Crate(HashMap::from([(
-                    filename,
-                    File {
-                        items: vec![analyzed],
-                    },
-                )]));
-                let ws = Workspace(HashMap::from([(crate_name.clone(), krate)]));
-                println!("{}", serde_json::to_string(&ws).unwrap());
+                let analyzed = task.unwrap().analyze();
+                log::info!("analyzed one item of {}", analyzed.file_name);
+                NEW_CACHE.lock().await.insert_cache(
+                    analyzed.file_hash.clone(),
+                    analyzed.mir_hash.clone(),
+                    analyzed.analyzed.clone(),
+                );
+                print_analyzed_result(tcx, analyzed);
             }
+            cache::write_incremental_cache(&*NEW_CACHE.lock().await);
         });
         rustc_driver::Compilation::Continue
     }
+}
+
+pub fn print_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
+    let krate = Crate(HashMap::from([(
+        analyzed.file_name.to_owned(),
+        File {
+            items: vec![analyzed.analyzed],
+        },
+    )]));
+    // get currently-compiling crate name
+    let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
+    let ws = Workspace(HashMap::from([(crate_name.clone(), krate)]));
+    println!("{}", serde_json::to_string(&ws).unwrap());
 }
 
 pub fn run_compiler() -> i32 {
