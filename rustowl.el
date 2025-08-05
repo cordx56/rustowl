@@ -123,14 +123,6 @@
     (cancel-timer rustowl-cursor-timer)
     (setq rustowl-cursor-timer nil)))
 
-;;;###autoload
-(defalias 'enable-rustowl-cursor 'rustowl-enable-cursor
-  "Backward compatibility alias for 'rustowl-enable-cursor'.")
-
-;;;###autoload
-(defalias 'disable-rustowl-cursor 'rustowl-disable-cursor
-  "Backward compatibility alias for 'rustowl-disable-cursor'.")
-
 (defun rustowl-line-col-to-pos (line col)
   "Convert LINE and COL to buffer position.
 LINE and COL are 0-based (LSP compatible); if either is negative (< 0), signal an error.
