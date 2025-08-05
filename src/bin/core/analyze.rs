@@ -1,10 +1,10 @@
-use super::cache;
+use super::{cache, mir_transform};
 use polonius_engine::FactTypes;
 use rustc_borrowck::consumers::{
     BorrowSet, ConsumerOptions, PoloniusInput, PoloniusLocationTable, PoloniusOutput, RichLocation,
     RustcFacts, get_body_with_borrowck_facts,
 };
-use rustc_hir::def_id::LocalDefId;
+use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_middle::{
     mir::{
         BasicBlock, BasicBlockData, BasicBlocks, Body, BorrowKind, Local, Operand, Rvalue,
@@ -18,7 +18,6 @@ use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::hash::Hash;
 use std::pin::Pin;
-use std::sync::LazyLock;
 
 pub type MirAnalyzeFuture<'tcx> =
     Pin<Box<dyn Future<Output = MirAnalyzer<'tcx>> + Send + Sync + 'tcx>>;
@@ -73,8 +72,6 @@ where
     }
 }
 
-static CACHE: LazyLock<Option<cache::CacheData>> = LazyLock::new(|| cache::get_incremental_cache());
-
 fn range_from_span(source: &str, span: Span, offset: u32) -> Option<Range> {
     let from = Loc::new(source, span.lo().0, offset);
     let until = Loc::new(source, span.hi().0, offset);
@@ -100,7 +97,7 @@ pub struct MirAnalyzer<'tcx> {
 }
 impl MirAnalyzer<'_> {
     /// initialize analyzer
-    pub fn new(tcx: TyCtxt<'_>, fn_id: LocalDefId) -> MirAnalyzerInitResult<'_> {
+    pub fn init(tcx: TyCtxt<'_>, fn_id: LocalDefId) -> MirAnalyzerInitResult<'_> {
         let mut facts =
             get_body_with_borrowck_facts(tcx, fn_id, ConsumerOptions::PoloniusOutputFacts);
         let input = *facts.input_facts.take().unwrap();
@@ -122,9 +119,20 @@ impl MirAnalyzer<'_> {
         let file_name = path.to_string_lossy().to_string();
         log::info!("facts of {fn_id:?} prepared; start analyze of {fn_id:?}");
 
-        let mir_hash = cache::Hasher::get_hash(tcx, &body);
+        // region variables should not be hashed (it results an error)
+        // so we erase region variables and set 'static as new region
+        let mir_hash = cache::Hasher::get_hash(
+            tcx,
+            mir_transform::erase_region_variables(tcx, body.clone()),
+        );
         let file_hash = cache::Hasher::get_hash(tcx, &source);
-        if let Some(cache) = &*CACHE {
+        let mut cache = cache::CACHE.lock().unwrap();
+
+        // setup cache
+        if cache.is_none() {
+            *cache = cache::get_cache(&tcx.crate_name(LOCAL_CRATE).to_string());
+        }
+        if let Some(cache) = cache.as_mut() {
             if let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash) {
                 log::info!("MIR cache hit: {fn_id:?}");
                 return MirAnalyzerInitResult::Cached(AnalyzeResult {

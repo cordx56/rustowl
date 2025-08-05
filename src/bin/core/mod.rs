@@ -1,8 +1,8 @@
 mod analyze;
 mod cache;
+mod mir_transform;
 
 use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
-use cache::CacheData;
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
 use rustc_middle::{
@@ -42,9 +42,6 @@ static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
 // tokio runtime handler
 static HANDLE: LazyLock<Handle> = LazyLock::new(|| RUNTIME.handle().clone());
 
-static NEW_CACHE: LazyLock<Mutex<cache::CacheData>> =
-    LazyLock::new(|| Mutex::new(CacheData::new()));
-
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
 }
@@ -55,7 +52,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
     def_ids.extend_from_slice(tcx.nested_bodies_within(def_id));
 
     for def_id in def_ids {
-        let analyzer = MirAnalyzer::new(
+        let analyzer = MirAnalyzer::init(
             // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
             // This can be done since the TyCtxt object lives until the analysis tasks joined
             // in after_analysis method.
@@ -67,11 +64,6 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
 
             match analyzer {
                 MirAnalyzerInitResult::Cached(cached) => {
-                    NEW_CACHE.lock().await.insert_cache(
-                        cached.file_hash.clone(),
-                        cached.mir_hash.clone(),
-                        cached.analyzed.clone(),
-                    );
                     print_analyzed_result(tcx, cached);
                 }
                 MirAnalyzerInitResult::Analyzer(analyzer) => {
@@ -111,14 +103,18 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
                 log::info!("borrow checked: {joined} / {task_len}");
                 let analyzed = task.unwrap().analyze();
                 log::info!("analyzed one item of {}", analyzed.file_name);
-                NEW_CACHE.lock().await.insert_cache(
-                    analyzed.file_hash.clone(),
-                    analyzed.mir_hash.clone(),
-                    analyzed.analyzed.clone(),
-                );
+                if let Some(cache) = cache::CACHE.lock().unwrap().as_mut() {
+                    cache.insert_cache(
+                        analyzed.file_hash.clone(),
+                        analyzed.mir_hash.clone(),
+                        analyzed.analyzed.clone(),
+                    );
+                }
                 print_analyzed_result(tcx, analyzed);
             }
-            cache::write_incremental_cache(&*NEW_CACHE.lock().await);
+            if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
+                cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
+            }
         });
         rustc_driver::Compilation::Continue
     }

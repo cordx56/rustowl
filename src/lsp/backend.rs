@@ -184,8 +184,8 @@ impl Backend {
             let sysroot = toolchain::get_sysroot().await;
             toolchain::set_rustc_env(&mut command, &sysroot);
 
-            if is_incremental() {
-                set_incremental_path(&mut command, &target);
+            if is_cache() {
+                set_cache_path(&mut command, &target);
             }
 
             if log::max_level().to_level().is_none() {
