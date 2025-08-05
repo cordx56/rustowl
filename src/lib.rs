@@ -2,6 +2,7 @@
 //!
 //! Libraries that used in RustOwl
 
+pub mod cache;
 pub mod cli;
 pub mod lsp;
 pub mod models;

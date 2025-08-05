@@ -1,9 +1,10 @@
+use super::{cache, mir_transform};
 use polonius_engine::FactTypes;
 use rustc_borrowck::consumers::{
     BorrowSet, ConsumerOptions, PoloniusInput, PoloniusLocationTable, PoloniusOutput, RichLocation,
     RustcFacts, get_body_with_borrowck_facts,
 };
-use rustc_hir::def_id::LocalDefId;
+use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_middle::{
     mir::{
         BasicBlock, BasicBlockData, BasicBlocks, Body, BorrowKind, Local, Operand, Rvalue,
@@ -20,6 +21,19 @@ use std::pin::Pin;
 
 pub type MirAnalyzeFuture<'tcx> =
     Pin<Box<dyn Future<Output = MirAnalyzer<'tcx>> + Send + Sync + 'tcx>>;
+
+#[derive(Clone, Debug)]
+pub struct AnalyzeResult {
+    pub file_name: String,
+    pub file_hash: String,
+    pub mir_hash: String,
+    pub analyzed: Function,
+}
+
+pub enum MirAnalyzerInitResult<'tcx> {
+    Cached(AnalyzeResult),
+    Analyzer(MirAnalyzeFuture<'tcx>),
+}
 
 type Borrow = <RustcFacts as FactTypes>::Loan;
 type Region = <RustcFacts as FactTypes>::Origin;
@@ -65,7 +79,7 @@ fn range_from_span(source: &str, span: Span, offset: u32) -> Option<Range> {
 }
 
 pub struct MirAnalyzer<'tcx> {
-    filename: String,
+    file_name: String,
     source: String,
     offset: u32,
     location_table: PoloniusLocationTable,
@@ -78,10 +92,12 @@ pub struct MirAnalyzer<'tcx> {
     borrow_locals: HashMap<Borrow, Local>,
     basic_blocks: Vec<MirBasicBlock>,
     fn_id: LocalDefId,
+    file_hash: String,
+    mir_hash: String,
 }
 impl MirAnalyzer<'_> {
     /// initialize analyzer
-    pub fn new(tcx: TyCtxt<'_>, fn_id: LocalDefId) -> MirAnalyzeFuture<'_> {
+    pub fn init(tcx: TyCtxt<'_>, fn_id: LocalDefId) -> MirAnalyzerInitResult<'_> {
         let mut facts =
             get_body_with_borrowck_facts(tcx, fn_id, ConsumerOptions::PoloniusOutputFacts);
         let input = *facts.input_facts.take().unwrap();
@@ -91,17 +107,42 @@ impl MirAnalyzer<'_> {
 
         let source_map = tcx.sess.source_map();
 
-        let filename = source_map.span_to_filename(facts.body.span);
-        let source_file = source_map.get_source_file(&filename).unwrap();
+        let file_name = source_map.span_to_filename(facts.body.span);
+        let source_file = source_map.get_source_file(&file_name).unwrap();
         let offset = source_file.start_pos.0;
-        let filename = source_map.path_mapping().to_embeddable_absolute_path(
-            rustc_span::RealFileName::LocalPath(filename.into_local_path().unwrap()),
+        let file_name = source_map.path_mapping().to_embeddable_absolute_path(
+            rustc_span::RealFileName::LocalPath(file_name.into_local_path().unwrap()),
             &rustc_span::RealFileName::LocalPath(std::env::current_dir().unwrap()),
         );
-        let path = filename.to_path(rustc_span::FileNameDisplayPreference::Local);
+        let path = file_name.to_path(rustc_span::FileNameDisplayPreference::Local);
         let source = std::fs::read_to_string(path).unwrap();
-        let filename = path.to_string_lossy().to_string();
+        let file_name = path.to_string_lossy().to_string();
         log::info!("facts of {fn_id:?} prepared; start analyze of {fn_id:?}");
+
+        // region variables should not be hashed (it results an error)
+        // so we erase region variables and set 'static as new region
+        let mir_hash = cache::Hasher::get_hash(
+            tcx,
+            mir_transform::erase_region_variables(tcx, body.clone()),
+        );
+        let file_hash = cache::Hasher::get_hash(tcx, &source);
+        let mut cache = cache::CACHE.lock().unwrap();
+
+        // setup cache
+        if cache.is_none() {
+            *cache = cache::get_cache(&tcx.crate_name(LOCAL_CRATE).to_string());
+        }
+        if let Some(cache) = cache.as_mut() {
+            if let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash) {
+                log::info!("MIR cache hit: {fn_id:?}");
+                return MirAnalyzerInitResult::Cached(AnalyzeResult {
+                    file_name,
+                    file_hash,
+                    mir_hash,
+                    analyzed: analyzed.clone(),
+                });
+            }
+        }
 
         // local -> all borrows on that local
         let mut borrow_locals = HashMap::new();
@@ -126,7 +167,7 @@ impl MirAnalyzer<'_> {
             tcx.sess.source_map(),
         );
 
-        Box::pin(async move {
+        let analyzer = Box::pin(async move {
             log::info!("start re-computing borrow check with dump: true");
             // compute insensitive
             // it may include invalid region, which can be used at showing wrong region
@@ -141,7 +182,7 @@ impl MirAnalyzer<'_> {
             log::info!("borrow check finished");
 
             MirAnalyzer {
-                filename,
+                file_name,
                 source,
                 offset,
                 location_table,
@@ -154,8 +195,11 @@ impl MirAnalyzer<'_> {
                 borrow_locals,
                 basic_blocks,
                 fn_id,
+                file_hash,
+                mir_hash,
             }
-        })
+        });
+        MirAnalyzerInitResult::Analyzer(analyzer)
     }
 
     fn sort_locs(v: &mut [(BasicBlock, usize)]) {
@@ -540,17 +584,19 @@ impl MirAnalyzer<'_> {
     }
 
     /// analyze MIR to get JSON-serializable, TypeScript friendly representation
-    pub fn analyze(self) -> (String, Function) {
+    pub fn analyze(self) -> AnalyzeResult {
         let decls = self.collect_decls();
         let basic_blocks = self.basic_blocks;
 
-        (
-            self.filename,
-            Function {
+        AnalyzeResult {
+            file_name: self.file_name,
+            file_hash: self.file_hash,
+            mir_hash: self.mir_hash,
+            analyzed: Function {
                 fn_id: self.fn_id.local_def_index.as_u32(),
                 basic_blocks,
                 decls,
             },
-        )
+        }
     }
 }
