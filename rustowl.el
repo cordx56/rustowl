@@ -28,7 +28,8 @@
 (with-eval-after-load 'lsp-mode
   (lsp-register-client
    (make-lsp-client
-    :new-connection (lsp-stdio-connection '("rustowl"))
+    :new-connection
+    (lsp-stdio-connection '("rustowl"))
     :major-modes '(rust-mode)
     :server-id 'rustowl
     :priority -1
@@ -122,9 +123,17 @@
     (cancel-timer rustowl-cursor-timer)
     (setq rustowl-cursor-timer nil)))
 
+;;;###autoload
+(defalias 'enable-rustowl-cursor 'rustowl-enable-cursor
+  "Backward compatibility alias for 'rustowl-enable-cursor'.")
+
+;;;###autoload
+(defalias 'disable-rustowl-cursor 'rustowl-disable-cursor
+  "Backward compatibility alias for 'rustowl-disable-cursor'.")
+
 (defun rustowl-line-col-to-pos (line col)
   "Convert LINE and COL to buffer position.
-If LINE or COL is negative, signal an error.
+LINE and COL are 0-based (LSP compatible); if either is negative (< 0), signal an error.
 If LINE is past the last line, return (point-max).
 If COL is past end of line, clamp to end of line."
   (when (or (< line 0) (< col 0))

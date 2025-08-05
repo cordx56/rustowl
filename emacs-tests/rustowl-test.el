@@ -141,6 +141,8 @@
     (insert "abc\ndef\nghi")
     ;; Negative line/col should signal error
     (should-error (rustowl-line-col-to-pos -1 -1))
+    ;; Test boundary case: (0, 0) should be valid per LSP protocol
+    (should-not (should-error (rustowl-line-col-to-pos 0 0)))
     ;; Line past end
     (should (= (rustowl-line-col-to-pos 100 0) (point-max)))
     ;; Col past end of line
