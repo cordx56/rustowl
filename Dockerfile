@@ -63,7 +63,7 @@ RUN apt-get update && \
 
 WORKDIR /usr/local/bin
 
-COPY --from=builder scripts/ scripts/
+COPY scripts/ scripts/
 
 COPY --from=builder /build-output/rustowl /usr/local/bin/rustowl
 COPY --from=builder /build-output/rustowlc /usr/local/bin/rustowlc
