@@ -1,12 +1,26 @@
 FROM rust:1.88.0-slim-trixie AS chef
-RUN cargo install cargo-chef
 WORKDIR /app
 
+COPY scripts/ scripts/
+
+ENV RUSTC_BOOTSTRAP=1
+
+RUN export "$(./scripts/build/print-env.sh 1.88.0)" && \
+    export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
+    export RUSTUP_TOOLCHAIN="${RUSTOWL_TOOLCHAIN}" && \
+    cargo install cargo-chef
+
 FROM chef AS planner
+ENV RUSTC_BOOTSTRAP=1
 COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
+RUN export "$(./scripts/build/print-env.sh 1.88.0)" && \
+    export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
+    export RUSTUP_TOOLCHAIN="${RUSTOWL_TOOLCHAIN}" && \
+    cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
+
+ENV RUSTC_BOOTSTRAP=1
 
 WORKDIR /app
 
@@ -20,19 +34,16 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN export "$(./scripts/build/print-env.sh 1.88.0)" && \
+    export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
+    export RUSTUP_TOOLCHAIN="${RUSTOWL_TOOLCHAIN}" && \
+    cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
 
-RUN RUSTOWL_TOOLCHAIN && \
-    RUSTOWL_TOOLCHAIN="$(./scripts/build/toolchain eval "echo $RUSTOWL_TOOLCHAIN")" && \
-    export RUSTOWL_TOOLCHAIN && \
-    SYSROOT && \
-    SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
-    export SYSROOT && \
-    ./scripts/build/toolchain echo "Installing toolchain..." && \
-    HOST_TUPLE && \
-    HOST_TUPLE="$(./scripts/build/toolchain rustc --print=host-tuple)" && \
+RUN export "$(./scripts/build/print-env.sh 1.88.0)" && \
+    export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
+    export RUSTUP_TOOLCHAIN="${RUSTOWL_TOOLCHAIN}" && \
     ./scripts/build/toolchain cargo build --release --all-features --target "${HOST_TUPLE}" && \
     mkdir -p /build-output && \
     cp target/"${HOST_TUPLE}"/release/rustowl /build-output/rustowl && \
