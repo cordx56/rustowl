@@ -21,10 +21,6 @@ jobs:
         with:
           node-version: lts/*
 
-      - name: Enable Corepack
-        working-directory: ./vscode
-        run: corepack enable && corepack prepare yarn@stable --activate
-
       - name: Install
         working-directory: ./vscode
         run: yarn install
@@ -32,10 +28,10 @@ jobs:
       - name: Validate current commit (last commit) with commitlint
         working-directory: ./vscode
         if: github.event_name == 'push'
-        run: yarn dlx commitlint --last --verbose
+        run: yarn commitlint --last --verbose
 
       - name: Validate PR commits with commitlint
         working-directory: ./vscode
         if: github.event_name == 'pull_request'
-        run: yarn dlx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+        run: yarn commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
 
