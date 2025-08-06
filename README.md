@@ -135,6 +135,8 @@ Minimal setup with [lazy.nvim](https://github.com/folke/lazy.nvim):
 }
 ```
 
+For comprehensive configuration options including custom highlight colors, see the [Neovim Configuration Guide](docs/neovim-configuration.md).
+
 <details>
 <summary>Recommended configuration: <b>Click to expand</b></summary>
 
@@ -167,8 +169,41 @@ Default options:
   idle_time = 500, -- Time in milliseconds to hover with the cursor before triggering RustOwl
   client = {}, -- LSP client configuration that gets passed to `vim.lsp.start`
   highlight_style = 'undercurl', -- You can also use 'underline'
+  colors = { -- Customize highlight colors (hex colors)
+    lifetime = '#00cc00',   -- 🟩 green: variable's actual lifetime
+    imm_borrow = '#0000cc', -- 🟦 blue: immutable borrowing
+    mut_borrow = '#cc00cc', -- 🟪 purple: mutable borrowing
+    move = '#cccc00',       -- 🟧 orange: value moved
+    call = '#cccc00',       -- 🟧 orange: function call
+    outlive = '#cc0000',    -- 🟥 red: lifetime error
+  },
 }
 ```
+
+#### Customizing Highlight Colors
+
+You can customize the colors used for different highlight types by setting the `colors` option in your configuration:
+
+```lua
+{
+  'cordx56/rustowl',
+  version = '*',
+  build = 'cargo binstall rustowl',
+  lazy = false,
+  opts = {
+    colors = {
+      lifetime = '#32cd32',   -- Lime green for lifetimes
+      imm_borrow = '#4169e1', -- Royal blue for immutable borrows
+      mut_borrow = '#ff69b4', -- Hot pink for mutable borrows
+      move = '#ffa500',       -- Orange for moves
+      call = '#ffd700',       -- Gold for function calls
+      outlive = '#dc143c',    -- Crimson for lifetime errors
+    },
+  },
+}
+```
+
+Each color should be specified as a hex color string (e.g., `'#ff0000'` for red).
 
 When opening a Rust file, the Neovim plugin creates the `Rustowl` user command:
 
