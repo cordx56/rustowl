@@ -57,6 +57,8 @@ RUN channel="$(cat scripts/build/channel)" && \
 
 FROM rust:1.88.0-slim-trixie
 
+WORKDIR /app
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates=20250419 curl=8.14.1-2  && \
     rm -rf /var/lib/apt/lists/*
