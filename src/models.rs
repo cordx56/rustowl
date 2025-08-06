@@ -226,6 +226,9 @@ pub enum MirStatement {
         range: Range,
         rval: Option<MirRval>,
     },
+    Other {
+        range: Range,
+    },
 }
 impl MirStatement {
     pub fn range(&self) -> Range {
@@ -233,6 +236,7 @@ impl MirStatement {
             Self::StorageLive { range, .. } => *range,
             Self::StorageDead { range, .. } => *range,
             Self::Assign { range, .. } => *range,
+            Self::Other { range } => *range,
         }
     }
 }
@@ -248,14 +252,16 @@ pub enum MirTerminator {
         destination_local: FnLocal,
         fn_span: Range,
     },
-    Other,
+    Other {
+        range: Range,
+    },
 }
 impl MirTerminator {
-    pub fn range(&self) -> Option<Range> {
+    pub fn range(&self) -> Range {
         match self {
-            Self::Drop { range, .. } => Some(*range),
-            Self::Call { fn_span, .. } => Some(*fn_span),
-            Self::Other => None,
+            Self::Drop { range, .. } => *range,
+            Self::Call { fn_span, .. } => *fn_span,
+            Self::Other { range } => *range,
         }
     }
 }

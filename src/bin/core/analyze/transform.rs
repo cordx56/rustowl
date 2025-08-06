@@ -119,7 +119,8 @@ pub fn collect_basic_blocks(
                             },
                         )
                     }
-                    _ => None,
+                    _ => super::range_from_span(source, statement.source_info.span, offset)
+                        .map(|range| MirStatement::Other { range }),
                 })
                 .collect();
             let terminator =
@@ -151,7 +152,8 @@ pub fn collect_basic_blocks(
                                 fn_span,
                             }
                         }),
-                        _ => Some(MirTerminator::Other),
+                        _ => super::range_from_span(source, terminator.source_info.span, offset)
+                            .map(|range| MirTerminator::Other { range }),
                     });
             MirBasicBlock {
                 statements,
@@ -168,7 +170,7 @@ fn statement_location_to_range(
 ) -> Option<Range> {
     basic_blocks.get(basic_block).and_then(|bb| {
         if bb.statements.len() < statement {
-            bb.terminator.as_ref().and_then(|v| v.range())
+            bb.terminator.as_ref().map(|v| v.range())
         } else {
             bb.statements.get(statement).map(|v| v.range())
         }
