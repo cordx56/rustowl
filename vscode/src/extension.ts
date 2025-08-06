@@ -79,10 +79,13 @@ export function activate(context: vscode.ExtensionContext) {
       immutableBorrowColor,
       mutableBorrowColor,
       outliveColor,
-      highlightBackground
+      highlightBackground,
     } = vscode.workspace.getConfiguration("rustowl");
 
-    function createDecorationType(color: string, highlightBackground: boolean): vscode.TextEditorDecorationType {
+    function createDecorationType(
+      color: string,
+      highlightBackground: boolean,
+    ): vscode.TextEditorDecorationType {
       return highlightBackground
         ? vscode.window.createTextEditorDecorationType({
             backgroundColor: color,
@@ -92,11 +95,26 @@ export function activate(context: vscode.ExtensionContext) {
           });
     }
 
-    lifetimeDecorationType = createDecorationType(lifetimeColor, highlightBackground);
-    moveDecorationType = createDecorationType(moveCallColor, highlightBackground);
-    imBorrowDecorationType = createDecorationType(immutableBorrowColor, highlightBackground);
-    mBorrowDecorationType = createDecorationType(mutableBorrowColor, highlightBackground);
-    outLiveDecorationType = createDecorationType(outliveColor, highlightBackground);
+    lifetimeDecorationType = createDecorationType(
+      lifetimeColor,
+      highlightBackground,
+    );
+    moveDecorationType = createDecorationType(
+      moveCallColor,
+      highlightBackground,
+    );
+    imBorrowDecorationType = createDecorationType(
+      immutableBorrowColor,
+      highlightBackground,
+    );
+    mBorrowDecorationType = createDecorationType(
+      mutableBorrowColor,
+      highlightBackground,
+    );
+    outLiveDecorationType = createDecorationType(
+      outliveColor,
+      highlightBackground,
+    );
     emptyDecorationType = vscode.window.createTextEditorDecorationType({});
 
     const lifetime: vscode.DecorationOptions[] = [];
