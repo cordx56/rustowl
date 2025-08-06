@@ -1,3 +1,4 @@
+<!-- prettier-ignore-start -->
 <a name="unreleased"></a>
 
 ## [Unreleased]
@@ -10,20 +11,23 @@
 
 ### 🎨 Chores
 
+- update changelog
+- add performance test to the repo ([#219](https://github.com/cordx56/rustowl/issues/219))
+- update criterion to 0.7, enable in reqwest: http2 for lower latency and others, socks, system-proxy for proxy user ([#352](https://github.com/cordx56/rustowl/issues/352))
+- update changelog ([#317](https://github.com/cordx56/rustowl/issues/317))
 - add ovsx to release script and docs about extension ([#266](https://github.com/cordx56/rustowl/issues/266))
+- reformat every single document, use new way of building ([#344](https://github.com/cordx56/rustowl/issues/344))
 - update changelog ([#211](https://github.com/cordx56/rustowl/issues/211))
 - update lockfiles and deps ([#267](https://github.com/cordx56/rustowl/issues/267))
-- add performance test to the repo ([#219](https://github.com/cordx56/rustowl/issues/219))
-- update changelog ([#317](https://github.com/cordx56/rustowl/issues/317))
-- update changelog
 - **README:** Add Discord server link ([#239](https://github.com/cordx56/rustowl/issues/239))
 - **aur:** bump rustup toolchain version ([#177](https://github.com/cordx56/rustowl/issues/177))
-- **dependabot:** set interval weekly and use grouping ([#310](https://github.com/cordx56/rustowl/issues/310))
 - **dependabot:** fix dependabot error ([#311](https://github.com/cordx56/rustowl/issues/311))
 - **dependabot:** ignore [@types](https://github.com/types)/vscode version update ([#314](https://github.com/cordx56/rustowl/issues/314))
+- **dependabot:** set interval weekly and use grouping ([#310](https://github.com/cordx56/rustowl/issues/310))
 - **docs:** add badges to README ([#268](https://github.com/cordx56/rustowl/issues/268))
 - **nvim-tests:** add two newlines in minimal init ([#307](https://github.com/cordx56/rustowl/issues/307))
 - **rustc:** bump rustc to 1.88.0 in neovim ci ([#315](https://github.com/cordx56/rustowl/issues/315))
+- **support:** add Sublime Text plugin link ([#357](https://github.com/cordx56/rustowl/issues/357))
 
 ### 🐞 Bug Fixes
 
@@ -48,6 +52,7 @@
 - consolidate and enhance CI workflows by replacing check.yaml with checks.yml and adding a development checks script ([#233](https://github.com/cordx56/rustowl/issues/233))
 - winget package ([#178](https://github.com/cordx56/rustowl/issues/178))
 - **build:** add consistent build script ([#336](https://github.com/cordx56/rustowl/issues/336))
+- **cache:** Implement cache mechanism ([#361](https://github.com/cordx56/rustowl/issues/361))
 - **perf-tests:** Memory fixes ([#226](https://github.com/cordx56/rustowl/issues/226))
 - **toolchain:** install cargo on toolchain installation ([#334](https://github.com/cordx56/rustowl/issues/334))
 - **toolchain:** new toolchain installer ([#320](https://github.com/cordx56/rustowl/issues/320))
@@ -552,3 +557,4 @@
 [v0.0.2]: https://github.com/cordx56/rustowl/compare/v0.0.2pre...v0.0.2
 [v0.0.2pre]: https://github.com/cordx56/rustowl/compare/v0.0.1...v0.0.2pre
 [v0.0.1]: https://github.com/cordx56/rustowl/compare/vpre...v0.0.1
+<!-- prettier-ignore-end -->

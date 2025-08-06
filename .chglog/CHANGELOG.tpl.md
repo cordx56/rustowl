@@ -1,3 +1,4 @@
+<!-- prettier-ignore-start -->
 {{ if .Versions -}}
 <a name="unreleased"></a>
 
@@ -71,3 +72,4 @@
 {{ end -}}
 {{ end -}}
 {{ end -}}
+<!-- prettier-ignore-end -->
