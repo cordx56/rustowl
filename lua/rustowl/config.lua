@@ -12,8 +12,35 @@
 ---Time in milliseconds to hover with the cursor before triggering RustOwl
 ---@field idle_time? number
 ---
+---The highlight style to use for underlines ('undercurl' or 'underline')
+---Default: `'undercurl'`
+---@field highlight_style? string
+---
+---Custom colors for different highlight types
+---@field colors? rustowl.Colors
+---
 ---The LSP client config (This can also be set using |vim.lsp.config()|).
 ---@field client? rustowl.ClientConfig
+
+---@class rustowl.Colors
+---
+---Color for lifetime highlights (default: '#00cc00')
+---@field lifetime? string
+---
+---Color for immutable borrow highlights (default: '#0000cc')
+---@field imm_borrow? string
+---
+---Color for mutable borrow highlights (default: '#cc00cc')
+---@field mut_borrow? string
+---
+---Color for move highlights (default: '#cccc00')
+---@field move? string
+---
+---Color for function call highlights (default: '#cccc00')
+---@field call? string
+---
+---Color for outlive error highlights (default: '#cc0000')
+---@field outlive? string
 
 ---NOTE: This allows lua-language-server to provide users
 ---completions and hover when setting vim.g.rustowl directly.
@@ -40,6 +67,16 @@ local default_config = {
 
   ---@type string
   highlight_style = 'undercurl',
+
+  ---@type rustowl.Colors
+  colors = {
+    lifetime = '#00cc00',
+    imm_borrow = '#0000cc',
+    mut_borrow = '#cc00cc',
+    move = '#cccc00',
+    call = '#cccc00',
+    outlive = '#cc0000',
+  },
 
   ---@class rustowl.internal.ClientConfig: vim.lsp.ClientConfig
 
@@ -72,6 +109,7 @@ vim.validate {
   idle_time = { config.idle_time, 'number' },
   client = { config.client, { 'table' } },
   highlight_style = { config.highlight_style, 'string' },
+  colors = { config.colors, 'table' },
 }
 
 -- validation for highlight_style to ensure undercurl or underline

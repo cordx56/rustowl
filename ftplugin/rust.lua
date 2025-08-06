@@ -5,14 +5,15 @@ if not vim.g.loaded_rustowl then
 
   local highlight_style = config.highlight_style or 'undercurl'
 
-  local highlights = {
-    lifetime = '#00cc00',
-    imm_borrow = '#0000cc',
-    mut_borrow = '#cc00cc',
-    move = '#cccc00',
-    call = '#cccc00',
-    outlive = '#cc0000',
-  }
+  local highlights = config.colors
+    or {
+      lifetime = '#00cc00',
+      imm_borrow = '#0000cc',
+      mut_borrow = '#cc00cc',
+      move = '#cccc00',
+      call = '#cccc00',
+      outlive = '#cc0000',
+    }
 
   for hl_name, color in pairs(highlights) do
     local options = { default = true, sp = color }
