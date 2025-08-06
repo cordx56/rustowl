@@ -61,18 +61,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates=20250419 curl=8.14.1-2  && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /usr/local/bin
-
-COPY scripts/ scripts/
-
 COPY --from=builder /build-output/rustowl /usr/local/bin/rustowl
 COPY --from=builder /build-output/rustowlc /usr/local/bin/rustowlc
-
-RUN ./scripts/build/toolchain echo "" && \
-    RUSTOWL_TOOLCHAIN="$(./scripts/build/toolchain eval "echo $RUSTOWL_TOOLCHAIN")" && \
-    export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
-    ./scripts/build/toolchain echo "Done!" && \
-    rm -rf scripts/
+COPY --from=builder /opt/rustowl/sysroot/. /opt/rustowl/sysroot/
 
 ENV PATH="/usr/local/bin:${PATH}"
 ENV RUSTOWL_RUNTIME_DIRS="/opt/rustowl"
