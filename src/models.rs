@@ -227,6 +227,15 @@ pub enum MirStatement {
         rval: Option<MirRval>,
     },
 }
+impl MirStatement {
+    pub fn range(&self) -> Range {
+        match self {
+            Self::StorageLive { range, .. } => *range,
+            Self::StorageDead { range, .. } => *range,
+            Self::Assign { range, .. } => *range,
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case", tag = "type")]
@@ -240,6 +249,15 @@ pub enum MirTerminator {
         fn_span: Range,
     },
     Other,
+}
+impl MirTerminator {
+    pub fn range(&self) -> Option<Range> {
+        match self {
+            Self::Drop { range, .. } => Some(*range),
+            Self::Call { fn_span, .. } => Some(*fn_span),
+            Self::Other => None,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
