@@ -93,10 +93,10 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     lifetimeDecorationType = createDecorationType(lifetimeColor, highlightBackground);
-    moveDecorationType = createDecorationType(lifetimeColor, moveCallColor);
-    imBorrowDecorationType = createDecorationType(lifetimeColor, immutableBorrowColor);
-    mBorrowDecorationType = createDecorationType(lifetimeColor, mutableBorrowColor);
-    outLiveDecorationType = createDecorationType(lifetimeColor, outliveColor);
+    moveDecorationType = createDecorationType(moveCallColor, highlightBackground);
+    imBorrowDecorationType = createDecorationType(immutableBorrowColor, highlightBackground);
+    mBorrowDecorationType = createDecorationType(mutableBorrowColor, highlightBackground);
+    outLiveDecorationType = createDecorationType(outliveColor, highlightBackground);
     emptyDecorationType = vscode.window.createTextEditorDecorationType({});
 
     const lifetime: vscode.DecorationOptions[] = [];
