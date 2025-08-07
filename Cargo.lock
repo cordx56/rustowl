@@ -1838,6 +1838,7 @@ dependencies = [
  "libc",
  "log",
  "process_alive",
+ "rayon",
  "regex",
  "reqwest",
  "rustls",
