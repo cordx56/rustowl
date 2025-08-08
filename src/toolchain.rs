@@ -8,7 +8,7 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 
 pub const TOOLCHAIN: &str = env!("RUSTOWL_TOOLCHAIN");
-const HOST_TUPLE: &str = env!("HOST_TUPLE");
+pub const HOST_TUPLE: &str = env!("HOST_TUPLE");
 const TOOLCHAIN_CHANNEL: &str = env!("TOOLCHAIN_CHANNEL");
 const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
