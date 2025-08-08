@@ -192,9 +192,16 @@ Elpaca example:
 
 ```elisp
 (elpaca
-  (rustowlsp
+  (rustowl
     :host github
     :repo "cordx56/rustowl"))
+```
+
+Then use-package:
+
+```elisp
+(use-package rustowl
+  :after lsp-mode)
 ```
 
 You have to install RustOwl LSP server manually.
