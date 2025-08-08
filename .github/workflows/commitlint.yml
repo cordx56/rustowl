@@ -22,16 +22,16 @@ jobs:
           node-version: lts/*
 
       - name: Install
-        working-directory: ./vscode
+        working-directory: ./scripts
         run: yarn install
 
       - name: Validate current commit (last commit) with commitlint
-        working-directory: ./vscode
+        working-directory: ./scripts
         if: github.event_name == 'push'
-        run: yarn commitlint --last --verbose
+        run: yarn commitlint --last --verbos -g ../.commitlintrc.jsone
 
       - name: Validate PR commits with commitlint
-        working-directory: ./vscode
+        working-directory: ./scripts
         if: github.event_name == 'pull_request'
-        run: yarn commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+        run: yarn commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose -g ../.commitlintrc.json
 
