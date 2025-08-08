@@ -20,9 +20,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-
       - name: Get Rust version
         run: |
           echo RUSTUP_TOOLCHAIN=$(cat ./scripts/build/channel) >> $GITHUB_ENV
@@ -32,6 +29,9 @@ jobs:
         with:
           toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
           components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
 
       - name: Check formatting
         run: cargo fmt --check
