@@ -78,6 +78,7 @@ So, RustOwl can be used easily from other editor.
   - [Archlinux](#archlinux)
   - [Nix flake](#nix-flake)
   - [GitHub Release](#github-release)
+  - [Docker](#docker)
 - [Build manually](#build-manually)
 - [Note](#note)
 <!--toc:end-->
@@ -253,10 +254,48 @@ yay -S rustowl-git
 
 There is a [third-party Nix flake repository](https://github.com/nix-community/rustowl-flake) in the Nix community.
 
-## GitHub Release
+### GitHub Release
 
 Download only `rustowl` executable from [release page](https://github.com/cordx56/rustowl/releases/latest) and place it into the place you desire.
 Toolchain is automatically Downloaded and unpacked.
+
+### Docker
+
+You can run `rustowl` using the pre-built Docker image from GitHub Container Registry (GHCR).
+
+1. Pull the latest stable image
+
+```sh
+docker pull ghcr.io/cordx56/rustowl:latest
+```
+
+Or pull a specific version:
+
+```sh
+docker pull ghcr.io/cordx56/rustowl:v0.3.4
+```
+
+2. Run the image
+
+```sh
+docker run --rm -v /path/to/project:/app ghcr.io/cordx56/rustowl:latest
+```
+
+You can also pass command-line arguments as needed:
+
+```sh
+docker run --rm /path/to/project:/app ghcr.io/cordx56/rustowl:latest --help
+```
+
+3. (Optional) Use as a CLI
+
+To use `rustowl` as if it were installed on your system, you can create a shell alias:
+
+```sh
+alias rustowl='docker run --rm -v $(pwd):/app ghcr.io/cordx56/rustowl:latest'
+```
+
+Now you can run `rustowl` from your terminal like a regular command.
 
 ## Build manually
 

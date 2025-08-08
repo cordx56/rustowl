@@ -1,0 +1,54 @@
+name: Docker Checks
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "Dockerfile"
+      - ".github/workflows/docker-checks.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "Dockerfile"
+      - ".github/workflows/docker-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  dockerfile-lint:
+    name: Dockerfile Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+
+  docker-build:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: rustowl:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,retention-days=7
+
+      - name: Test Docker image
+        run: |
+          docker run --rm rustowl:test --version
+          docker run --rm rustowl:test --help
+          cd perf-tests/dummy-package
+          docker run --rm -v $(pwd):/app rustowl:test check
