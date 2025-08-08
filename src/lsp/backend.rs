@@ -270,15 +270,20 @@ impl LanguageServer for Backend {
         &self,
         params: lsp_types::InitializeParams,
     ) -> jsonrpc::Result<lsp_types::InitializeResult> {
-        if let Some(wss) = params.workspace_folders {
-            for ws in wss {
-                if let Ok(path) = ws.uri.to_file_path()
-                    && self.add_analyze_target(&path).await
-                {
-                    self.do_analyze().await;
-                }
-            }
+        let mut workspaces = Vec::new();
+        if let Some(root) = params.root_uri
+            && let Ok(path) = root.to_file_path()
+        {
+            workspaces.push(path);
         }
+        if let Some(wss) = params.workspace_folders {
+            workspaces.extend(wss.iter().filter_map(|v| v.uri.to_file_path().ok()));
+        }
+        for path in workspaces {
+            self.add_analyze_target(&path).await;
+        }
+        self.do_analyze().await;
+
         let sync_options = lsp_types::TextDocumentSyncOptions {
             open_close: Some(true),
             save: Some(lsp_types::TextDocumentSyncSaveOptions::Supported(true)),

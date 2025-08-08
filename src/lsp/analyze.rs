@@ -166,11 +166,11 @@ impl Analyzer {
                         package: checked,
                         package_count,
                     };
-                    sender.send(event).await.unwrap();
+                    let _ = sender.send(event).await;
                 }
                 if let Ok(ws) = serde_json::from_str::<Workspace>(&line) {
                     let event = AnalyzerEvent::Analyzed(ws);
-                    sender.send(event).await.unwrap();
+                    let _ = sender.send(event).await;
                 }
             }
             log::info!("stdout closed");
@@ -224,7 +224,7 @@ impl Analyzer {
             while let Ok(Some(line)) = stdout.next_line().await {
                 if let Ok(ws) = serde_json::from_str::<Workspace>(&line) {
                     let event = AnalyzerEvent::Analyzed(ws);
-                    sender.send(event).await.unwrap();
+                    let _ = sender.send(event).await;
                 }
             }
             log::info!("stdout closed");
