@@ -28,10 +28,10 @@ jobs:
       - name: Validate current commit (last commit) with commitlint
         working-directory: ./vscode
         if: github.event_name == 'push'
-        run: yarn commitlint --last --verbos -g ../.commitlintrc.jsone
+        run: yarn commitlint --last --verbose
 
       - name: Validate PR commits with commitlint
         working-directory: ./vscode
         if: github.event_name == 'pull_request'
-        run: yarn commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose -g ../.commitlintrc.json
+        run: yarn commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
 
