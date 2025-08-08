@@ -99,7 +99,7 @@ Here we describe how to start using RustOwl with VS Code.
   - You can install `cargo` using `rustup` from [this link](https://rustup.rs/).
 - Visual Studio Code (VS Code) installed
 
-We tested this guide on macOS Sequoia 15.3.2 on arm64 architecture with VS Code 1.99.3 and `cargo` 1.88.0.
+We tested this guide on macOS Sequoia 15.3.2 on arm64 architecture with VS Code 1.99.3 and `cargo` 1.89.0.
 
 ### VS Code
 
