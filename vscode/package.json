@@ -27,6 +27,16 @@
   ],
   "icon": "rustowl-icon.png",
   "contributes": {
+    "commands": [
+      {
+        "command": "rustowl.hover",
+        "title": "Show RustOwl underline"
+      },
+      {
+        "command": "rustowl.toggle",
+        "title": "Toggle RustOwl"
+      }
+    ],
     "configuration": {
       "title": "rustowl",
       "properties": {
@@ -75,6 +85,11 @@
           "type": "boolean",
           "default": false,
           "description": "Highlight text background instead of underline"
+        },
+        "rustowl.defaultEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enabled by default"
         }
       }
     }

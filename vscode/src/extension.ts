@@ -13,6 +13,7 @@ import {
 export let client: LanguageClient | undefined = undefined;
 
 let decoTimer: NodeJS.Timeout | null = null;
+let enabled: boolean = true;
 
 export function activate(context: vscode.ExtensionContext) {
   console.log("rustowl activated");
@@ -51,6 +52,11 @@ export function activate(context: vscode.ExtensionContext) {
     0,
   );
   statusBar.text = "RustOwl";
+  statusBar.command = {
+    command: "rustowl.toggle",
+    title: "toggle",
+    tooltip: "Toggle RustOwl on hover",
+  };
   statusBar.show();
 
   let lifetimeDecorationType = vscode.window.createTextEditorDecorationType({});
@@ -80,7 +86,9 @@ export function activate(context: vscode.ExtensionContext) {
       mutableBorrowColor,
       outliveColor,
       highlightBackground,
+      defaultEnabled,
     } = vscode.workspace.getConfiguration("rustowl");
+    enabled = defaultEnabled;
 
     function createDecorationType(
       color: string,
@@ -185,11 +193,6 @@ export function activate(context: vscode.ExtensionContext) {
       } else {
         statusBar.text = "$(error) RustOwl";
         statusBar.tooltip = "analyze failed";
-        statusBar.command = {
-          command: "rustowlHover",
-          title: "Analyze",
-          tooltip: "Rerun analysis",
-        };
       }
       statusBar.show();
       updateDecoration(textEditor, data.data);
@@ -197,13 +200,23 @@ export function activate(context: vscode.ExtensionContext) {
   };
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("rustowlHover", async (_args) => {
+    vscode.commands.registerCommand("rustowl.hover", async (_args) => {
       if (activeEditor) {
         await rustowlHoverRequest(
           activeEditor,
           activeEditor?.selection.active,
           activeEditor?.document.uri,
         );
+      }
+    }),
+    vscode.commands.registerCommand("rustowl.toggle", async (_args) => {
+      enabled = !enabled;
+      if (enabled) {
+        statusBar.text = "RustOwl";
+        statusBar.show();
+      } else {
+        statusBar.text = "$(debug-pause) RustOwl";
+        statusBar.show();
       }
     }),
   );
@@ -218,14 +231,19 @@ export function activate(context: vscode.ExtensionContext) {
   );
   //let timeout: NodeJS.Timeout | undefined = undefined;
   vscode.workspace.onDidSaveTextDocument(
-    (_ev) => {},
+    async (ev) => {
+      if (enabled && ev.languageId === "rust") {
+        console.log(enabled);
+        await client?.sendRequest("rustowl/analyze", {});
+      }
+    },
     null,
     context.subscriptions,
   );
   vscode.window.onDidChangeTextEditorSelection(
     (ev) => {
       const { displayDelay } = vscode.workspace.getConfiguration("rustowl");
-      if (ev.textEditor === activeEditor) {
+      if (enabled && ev.textEditor === activeEditor) {
         resetDecoration();
         if (decoTimer) {
           clearTimeout(decoTimer);

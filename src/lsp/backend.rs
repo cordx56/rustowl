@@ -7,6 +7,21 @@ use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types;
 use tower_lsp::{Client, LanguageServer, LspService};
 
+#[derive(serde::Deserialize, Clone, Debug)]
+#[serde(tag = "reason", rename_all = "kebab-case")]
+enum CargoCheckMessage {
+    #[allow(unused)]
+    CompilerArtifact {},
+    #[allow(unused)]
+    BuildFinished {},
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct AnalyzeRequest {}
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct AnalyzeResponse {}
+
 /// RustOwl LSP server backend
 pub struct Backend {
     #[allow(unused)]
@@ -30,21 +45,6 @@ impl Backend {
         }
     }
 
-    async fn is_file_in_workspace(&self, path: impl AsRef<Path>) -> bool {
-        for analyzer in &*self.analyzers.read().await {
-            if let Some(ws) = analyzer.workspace_path()
-                && path.as_ref().starts_with(ws)
-            {
-                return true;
-            }
-        }
-        false
-    }
-
-    async fn analyze(&self) {
-        self.analyze_with_options(false, false).await;
-    }
-
     async fn add_analyze_target(&self, path: &Path) -> bool {
         if let Ok(new_analyzer) = Analyzer::new(&path).await {
             let mut analyzers = self.analyzers.write().await;
@@ -58,6 +58,14 @@ impl Backend {
         } else {
             false
         }
+    }
+
+    pub async fn analyze(&self, _params: AnalyzeRequest) -> jsonrpc::Result<AnalyzeResponse> {
+        self.do_analyze().await;
+        Ok(AnalyzeResponse {})
+    }
+    async fn do_analyze(&self) {
+        self.analyze_with_options(true, true).await;
     }
 
     async fn analyze_with_options(&self, all_targets: bool, all_features: bool) {
@@ -267,7 +275,7 @@ impl LanguageServer for Backend {
                 if let Ok(path) = ws.uri.to_file_path()
                     && self.add_analyze_target(&path).await
                 {
-                    self.analyze().await;
+                    self.do_analyze().await;
                 }
             }
         }
@@ -323,7 +331,7 @@ impl LanguageServer for Backend {
             if let Ok(path) = added.uri.to_file_path()
                 && self.add_analyze_target(&path).await
             {
-                self.analyze().await;
+                self.do_analyze().await;
             }
         }
     }
@@ -334,15 +342,7 @@ impl LanguageServer for Backend {
             && params.text_document.language_id == "rust"
             && self.add_analyze_target(&path).await
         {
-            self.analyze().await;
-        }
-    }
-
-    async fn did_save(&self, params: lsp_types::DidSaveTextDocumentParams) {
-        if let Ok(path) = params.text_document.uri.to_file_path()
-            && self.is_file_in_workspace(&path).await
-        {
-            self.analyze().await;
+            self.do_analyze().await;
         }
     }
 

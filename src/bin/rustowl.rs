@@ -134,6 +134,7 @@ async fn start_lsp_server() {
 
     let (service, socket) = LspService::build(Backend::new)
         .custom_method("rustowl/cursor", Backend::cursor)
+        .custom_method("rustowl/analyze", Backend::analyze)
         .finish();
 
     Server::new(stdin, stdout, socket).serve(service).await;
