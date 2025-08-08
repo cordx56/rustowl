@@ -44,32 +44,37 @@
         "rustowl.lifetimeColor": {
           "type": "string",
           "default": "hsla(125, 80%, 60%, 0.6)",
-          "description": "The color of the lifetime underline"
+          "description": "The color of the lifetime"
         },
         "rustowl.moveCallColor": {
           "type": "string",
           "default": "hsla(35, 80%, 60%, 0.6)",
-          "description": "The color of the move/call underline"
+          "description": "The color of the move/call"
         },
         "rustowl.immutableBorrowColor": {
           "type": "string",
           "default": "hsla(230, 80%, 60%, 0.6)",
-          "description": "The color of the immutable borrow underline"
+          "description": "The color of the immutable borrow"
         },
         "rustowl.mutableBorrowColor": {
           "type": "string",
           "default": "hsla(300, 80%, 60%, 0.6)",
-          "description": "The color of the mutable borrow underline"
+          "description": "The color of the mutable borrow"
         },
         "rustowl.outliveColor": {
           "type": "string",
           "default": "hsla(0, 80%, 60%, 0.6)",
-          "description": "The color of the outlive underline"
+          "description": "The color of the outlive"
         },
         "rustowl.displayDelay": {
           "type": "number",
           "default": 2000,
           "description": "Delay in displaying underlines (ms)"
+        },
+        "rustowl.highlightBackground": {
+          "type": "boolean",
+          "default": false,
+          "description": "Highlight text background instead of underline"
         }
       }
     }

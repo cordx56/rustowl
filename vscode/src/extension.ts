@@ -79,23 +79,42 @@ export function activate(context: vscode.ExtensionContext) {
       immutableBorrowColor,
       mutableBorrowColor,
       outliveColor,
+      highlightBackground,
     } = vscode.workspace.getConfiguration("rustowl");
 
-    lifetimeDecorationType = vscode.window.createTextEditorDecorationType({
-      textDecoration: `underline solid ${underlineThickness}px ${lifetimeColor}`,
-    });
-    moveDecorationType = vscode.window.createTextEditorDecorationType({
-      textDecoration: `underline solid ${underlineThickness}px ${moveCallColor}`,
-    });
-    imBorrowDecorationType = vscode.window.createTextEditorDecorationType({
-      textDecoration: `underline solid ${underlineThickness}px ${immutableBorrowColor}`,
-    });
-    mBorrowDecorationType = vscode.window.createTextEditorDecorationType({
-      textDecoration: `underline solid ${underlineThickness}px ${mutableBorrowColor}`,
-    });
-    outLiveDecorationType = vscode.window.createTextEditorDecorationType({
-      textDecoration: `underline solid ${underlineThickness}px ${outliveColor}`,
-    });
+    function createDecorationType(
+      color: string,
+      highlightBackground: boolean,
+    ): vscode.TextEditorDecorationType {
+      return highlightBackground
+        ? vscode.window.createTextEditorDecorationType({
+            backgroundColor: color,
+          })
+        : vscode.window.createTextEditorDecorationType({
+            textDecoration: `underline solid ${underlineThickness}px ${color}`,
+          });
+    }
+
+    lifetimeDecorationType = createDecorationType(
+      lifetimeColor,
+      highlightBackground,
+    );
+    moveDecorationType = createDecorationType(
+      moveCallColor,
+      highlightBackground,
+    );
+    imBorrowDecorationType = createDecorationType(
+      immutableBorrowColor,
+      highlightBackground,
+    );
+    mBorrowDecorationType = createDecorationType(
+      mutableBorrowColor,
+      highlightBackground,
+    );
+    outLiveDecorationType = createDecorationType(
+      outliveColor,
+      highlightBackground,
+    );
     emptyDecorationType = vscode.window.createTextEditorDecorationType({});
 
     const lifetime: vscode.DecorationOptions[] = [];
