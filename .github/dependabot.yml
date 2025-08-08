@@ -26,6 +26,16 @@ updates:
           - minor
     ignore:
       - dependency-name: "@types/vscode"
+  - package-ecosystem: docker
+    directory: '/'
+    schedule:
+      interval: weekly
+    groups:
+      version:
+        applies-to: version-updates
+        update-types:
+          - patch
+          - minor
   - package-ecosystem: npm
     directory: "/scripts"
     schedule:
