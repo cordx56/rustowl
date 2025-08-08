@@ -124,15 +124,16 @@ impl MirAnalyzer<'_> {
             *cache = cache::get_cache(&tcx.crate_name(LOCAL_CRATE).to_string());
         }
         if let Some(cache) = cache.as_mut()
-            && let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash) {
-                log::info!("MIR cache hit: {fn_id:?}");
-                return MirAnalyzerInitResult::Cached(AnalyzeResult {
-                    file_name,
-                    file_hash,
-                    mir_hash,
-                    analyzed: analyzed.clone(),
-                });
-            }
+            && let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash)
+        {
+            log::info!("MIR cache hit: {fn_id:?}");
+            return MirAnalyzerInitResult::Cached(AnalyzeResult {
+                file_name,
+                file_hash,
+                mir_hash,
+                analyzed: analyzed.clone(),
+            });
+        }
 
         // collect user defined vars
         // this should be done in local thread
