@@ -2,7 +2,7 @@
 
 if [ $# -ne 1 ]; then
   echo "Usage: $0 <rust-version>"
-  echo "Example: $0 1.88.0"
+  echo "Example: $0 1.89.0"
   exit 1
 fi
 
