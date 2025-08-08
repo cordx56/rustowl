@@ -79,6 +79,11 @@ if not vim.g.loaded_rustowl then
     buffer = 0,
     desc = 'RustOwl: send rustowl/analyze on save',
     callback = function(args)
+      -- Only send when rustowl is enabled
+      local rustowl = require('rustowl')
+      if not rustowl.is_enabled() then
+        return
+      end
       local lsp = require('rustowl.lsp')
       local clients = lsp.get_rustowl_clients { bufnr = args.buf }
       for _, client in ipairs(clients) do
