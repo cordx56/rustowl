@@ -36,13 +36,11 @@
 ;; Analyze on save
 (defun rustowl--analyze-request ()
   "Send a rustowl/analyze request to the LSP server for the current buffer."
-  (when (and (bound-and-true-p lsp-mode)
-             (lsp-workspaces))
-    (lsp-request-async
+  (lsp-request-async
      "rustowl/analyze"
      (make-hash-table)
      #'ignore
-     :mode 'current)))
+     :mode 'current))
 
 (defun rustowl-enable-analyze-on-save ()
   "Enable sending rustowl/analyze on save in this buffer."
