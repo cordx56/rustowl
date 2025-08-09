@@ -14,15 +14,11 @@ const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
 pub static FALLBACK_RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let opt = PathBuf::from("/opt/rustowl");
-    if opt.is_dir() {
+    if sysroot_from_runtime(&opt).is_dir() {
         return opt;
     }
-    let same = env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("sysroot");
-    if same.is_dir() {
+    let same = env::current_exe().unwrap().parent().unwrap().to_path_buf();
+    if sysroot_from_runtime(&same).is_dir() {
         return same;
     }
     env::home_dir().unwrap().join(".rustowl")
