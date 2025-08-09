@@ -13,9 +13,19 @@ const TOOLCHAIN_CHANNEL: &str = env!("TOOLCHAIN_CHANNEL");
 const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
 pub static FALLBACK_RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-    env::home_dir()
-        .map(|v| v.join(".rustowl"))
-        .unwrap_or(PathBuf::from("/opt/rustowl"))
+    let opt = PathBuf::from("/opt/rustowl");
+    if opt.is_dir() {
+        return opt;
+    }
+    let same = env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("sysroot");
+    if same.is_dir() {
+        return same;
+    }
+    env::home_dir().unwrap().join(".rustowl")
 });
 
 fn recursive_read_dir(path: impl AsRef<Path>) -> Vec<PathBuf> {
