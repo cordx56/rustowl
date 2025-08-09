@@ -264,10 +264,10 @@ impl LanguageServer for Backend {
     ) -> jsonrpc::Result<lsp_types::InitializeResult> {
         if let Some(wss) = params.workspace_folders {
             for ws in wss {
-                if let Ok(path) = ws.uri.to_file_path() {
-                    if self.add_analyze_target(&path).await {
-                        self.analyze().await;
-                    }
+                if let Ok(path) = ws.uri.to_file_path()
+                    && self.add_analyze_target(&path).await
+                {
+                    self.analyze().await;
                 }
             }
         }
@@ -320,10 +320,10 @@ impl LanguageServer for Backend {
         params: lsp_types::DidChangeWorkspaceFoldersParams,
     ) -> () {
         for added in params.event.added {
-            if let Ok(path) = added.uri.to_file_path() {
-                if self.add_analyze_target(&path).await {
-                    self.analyze().await;
-                }
+            if let Ok(path) = added.uri.to_file_path()
+                && self.add_analyze_target(&path).await
+            {
+                self.analyze().await;
             }
         }
     }
@@ -339,10 +339,10 @@ impl LanguageServer for Backend {
     }
 
     async fn did_save(&self, params: lsp_types::DidSaveTextDocumentParams) {
-        if let Ok(path) = params.text_document.uri.to_file_path() {
-            if self.is_file_in_workspace(&path).await {
-                self.analyze().await;
-            }
+        if let Ok(path) = params.text_document.uri.to_file_path()
+            && self.is_file_in_workspace(&path).await
+        {
+            self.analyze().await;
         }
     }
 
