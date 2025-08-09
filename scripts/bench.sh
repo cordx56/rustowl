@@ -276,9 +276,9 @@ build_rustowl() {
     fi
     
     if [[ "$SHOW_OUTPUT" == "true" ]]; then
-        RUSTC_BOOTSTRAP=1 cargo build --release
+        ./scripts/build/toolchain cargo build --release
     else
-        RUSTC_BOOTSTRAP=1 cargo build --release --quiet
+        ./scripts/build/toolchain cargo build --release --quiet
     fi
     
     if [[ "$SHOW_OUTPUT" == "true" ]]; then
