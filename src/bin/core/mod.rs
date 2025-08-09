@@ -4,10 +4,7 @@ mod cache;
 use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
-use rustc_middle::{
-    mir::ConcreteOpaqueTypes, query::queries::mir_borrowck::ProvidedValue, ty::TyCtxt,
-    util::Providers,
-};
+use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
 use std::collections::HashMap;
@@ -44,7 +41,7 @@ static HANDLE: LazyLock<Handle> = LazyLock::new(|| RUNTIME.handle().clone());
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
 }
-fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
+fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     log::info!("start borrowck of {def_id:?}");
 
     let mut def_ids = vec![def_id];
@@ -96,13 +93,14 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         config.override_queries = Some(override_queries);
         config.make_codegen_backend = None;
     }
-
-    /// join all tasks after all analysis finished
-    fn after_analysis<'tcx>(
+    fn after_expansion<'tcx>(
         &mut self,
         _compiler: &interface::Compiler,
         tcx: TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
+        let _ = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
+
+        // join all tasks after all analysis finished
         RUNTIME.block_on(async move {
             while let Some(Ok(analyzer)) = { TASKS.lock().await.join_next().await } {
                 log::info!("one task joined");
@@ -112,6 +110,7 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
                 cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
             }
         });
+
         rustc_driver::Compilation::Continue
     }
 }
