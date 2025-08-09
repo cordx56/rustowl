@@ -52,11 +52,12 @@ impl Backend {
     }
 
     pub async fn analyze(&self, _params: AnalyzeRequest) -> jsonrpc::Result<AnalyzeResponse> {
+        log::info!("rustowl/analyze request received");
         self.do_analyze().await;
         Ok(AnalyzeResponse {})
     }
     async fn do_analyze(&self) {
-        self.analyze_with_options(true, true).await;
+        self.analyze_with_options(false, false).await;
     }
 
     async fn analyze_with_options(&self, all_targets: bool, all_features: bool) {
@@ -344,7 +345,7 @@ impl LanguageServer for Backend {
 
     async fn did_change(&self, _params: lsp_types::DidChangeTextDocumentParams) {
         *self.analyzed.write().await = None;
-        self.processes.write().await.shutdown().await;
+        let _ = self.shutdown().await;
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
