@@ -5,7 +5,7 @@ if not vim.g.loaded_rustowl then
 
   local highlight_style = config.highlight_style or 'undercurl'
 
-  local highlights = {
+  local default_colors = {
     lifetime = '#00cc00',
     imm_borrow = '#0000cc',
     mut_borrow = '#cc00cc',
@@ -13,6 +13,9 @@ if not vim.g.loaded_rustowl then
     call = '#cccc00',
     outlive = '#cc0000',
   }
+
+  -- Ensure all color keys are present even if user provides a partial table
+  local highlights = vim.tbl_deep_extend('keep', config.colors or {}, default_colors)
 
   for hl_name, color in pairs(highlights) do
     local options = { default = true, sp = color }
