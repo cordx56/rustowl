@@ -39,25 +39,26 @@ impl Analyzer {
     pub async fn new(path: impl AsRef<Path>) -> Result<Self, ()> {
         let path = path.as_ref().to_path_buf();
         let cargo = toolchain::get_executable_path("cargo").await;
-        if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
-            .cargo_path(&cargo)
-            .other_options(&[
-                "--filter-platform".to_owned(),
-                toolchain::HOST_TUPLE.to_owned(),
-            ])
-            .current_dir(&path)
-            .exec()
+        if path.is_file() && path.extension().map(|v| v == "rs").unwrap_or(false) {
+            Ok(Self {
+                path,
+                cargo,
+                metadata: None,
+            })
+        } else if path.is_dir()
+            && let Ok(metadata) = cargo_metadata::MetadataCommand::new()
+                .cargo_path(&cargo)
+                .other_options(&[
+                    "--filter-platform".to_owned(),
+                    toolchain::HOST_TUPLE.to_owned(),
+                ])
+                .current_dir(&path)
+                .exec()
         {
             Ok(Self {
                 path: metadata.workspace_root.as_std_path().to_path_buf(),
                 cargo,
                 metadata: Some(metadata),
-            })
-        } else if path.extension().map(|v| v == "rs").unwrap_or(false) {
-            Ok(Self {
-                path,
-                cargo,
-                metadata: None,
             })
         } else {
             log::warn!("Invalid analysis target: {}", path.display());
@@ -165,11 +166,11 @@ impl Analyzer {
                         package: checked,
                         package_count,
                     };
-                    sender.send(event).await.unwrap();
+                    let _ = sender.send(event).await;
                 }
                 if let Ok(ws) = serde_json::from_str::<Workspace>(&line) {
                     let event = AnalyzerEvent::Analyzed(ws);
-                    sender.send(event).await.unwrap();
+                    let _ = sender.send(event).await;
                 }
             }
             log::info!("stdout closed");
@@ -223,7 +224,7 @@ impl Analyzer {
             while let Ok(Some(line)) = stdout.next_line().await {
                 if let Ok(ws) = serde_json::from_str::<Workspace>(&line) {
                     let event = AnalyzerEvent::Analyzed(ws);
-                    sender.send(event).await.unwrap();
+                    let _ = sender.send(event).await;
                 }
             }
             log::info!("stdout closed");

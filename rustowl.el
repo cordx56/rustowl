@@ -30,44 +30,69 @@
    (make-lsp-client
     :new-connection
     (lsp-stdio-connection '("rustowl"))
-    :major-modes '(rust-mode)
+    :major-modes
+    '(rust-mode rust-ts-mode rustic-mode)
     :server-id 'rustowl
     :priority -1
     :add-on? t)))
 
+;; Analyze on save
+(defun rustowl--analyze-request ()
+  "Send a rustowl/analyze request to the LSP server for the current buffer."
+  (when (and (bound-and-true-p lsp-mode) (lsp-workspaces))
+    (lsp-request-async
+     "rustowl/analyze"
+     (make-hash-table)
+     #'ignore
+     :mode 'current)))
+
+(defun rustowl-enable-analyze-on-save ()
+  "Enable sending rustowl/analyze on save in this buffer."
+  (add-hook 'after-save-hook #'rustowl--analyze-request nil t))
+
+(defun rustowl-disable-analyze-on-save ()
+  "Disable sending rustowl/analyze on save in this buffer."
+  (remove-hook 'after-save-hook #'rustowl--analyze-request t))
+
+;; Automatically enable for Rust buffers
+(add-hook 'rust-mode-hook #'rustowl-enable-analyze-on-save)
+(add-hook 'rust-ts-mode-hook #'rustowl-enable-analyze-on-save)
+(add-hook 'rustic-mode-hook #'rustowl-enable-analyze-on-save)
+
 (defun rustowl-cursor (params)
-  "Request and visualize Rust ownership/lifetime overlays for PARAMS."
-  (lsp-request-async
-   "rustowl/cursor" params
-   (lambda (response)
-     (let ((decorations (gethash "decorations" response)))
-       (mapc
-        (lambda (deco)
-          (let* ((type (gethash "type" deco))
-                 (start (gethash "start" (gethash "range" deco)))
-                 (end (gethash "end" (gethash "range" deco)))
-                 (start-pos
-                  (rustowl-line-col-to-pos
-                   (gethash "line" start)
-                   (gethash "character" start)))
-                 (end-pos
-                  (rustowl-line-col-to-pos
-                   (gethash "line" end) (gethash "character" end)))
-                 (overlapped (gethash "overlapped" deco)))
-            (unless overlapped
-              (cond
-               ((equal type "lifetime")
-                (rustowl-underline start-pos end-pos "#00cc00"))
-               ((equal type "imm_borrow")
-                (rustowl-underline start-pos end-pos "#0000cc"))
-               ((equal type "mut_borrow")
-                (rustowl-underline start-pos end-pos "#cc00cc"))
-               ((or (equal type "move") (equal type "call"))
-                (rustowl-underline start-pos end-pos "#cccc00"))
-               ((equal type "outlive")
-                (rustowl-underline start-pos end-pos "#cc0000"))))))
-        decorations)))
-   :mode 'current))
+  "Send rustowl/cursor request if LSP is active in this buffer."
+  (when (and (bound-and-true-p lsp-mode) (lsp-workspaces))
+    (lsp-request-async
+     "rustowl/cursor" params
+     (lambda (response)
+       (let ((decorations (gethash "decorations" response)))
+         (mapc
+          (lambda (deco)
+            (let* ((type (gethash "type" deco))
+                   (start (gethash "start" (gethash "range" deco)))
+                   (end (gethash "end" (gethash "range" deco)))
+                   (start-pos
+                    (rustowl-line-col-to-pos
+                     (gethash "line" start)
+                     (gethash "character" start)))
+                   (end-pos
+                    (rustowl-line-col-to-pos
+                     (gethash "line" end) (gethash "character" end)))
+                   (overlapped (gethash "overlapped" deco)))
+              (when (not overlapped)
+                (cond
+                 ((equal type "lifetime")
+                  (rustowl-underline start-pos end-pos "#00cc00"))
+                 ((equal type "imm_borrow")
+                  (rustowl-underline start-pos end-pos "#0000cc"))
+                 ((equal type "mut_borrow")
+                  (rustowl-underline start-pos end-pos "#cc00cc"))
+                 ((or (equal type "move") (equal type "call"))
+                  (rustowl-underline start-pos end-pos "#cccc00"))
+                 ((equal type "outlive")
+                  (rustowl-underline start-pos end-pos "#cc0000"))))))
+          decorations)))
+     :mode 'current)))
 
 (defun rustowl-line-number-at-pos ()
   "Return the line number at point."
@@ -83,22 +108,32 @@
       (- start (point)))))
 
 (defun rustowl-cursor-call ()
-  "Call RustOwl for current cursor position."
-  (let ((line (rustowl-line-number-at-pos))
-        (column (rustowl-current-column))
-        (uri (lsp--buffer-uri)))
-    (rustowl-cursor
-     `(:position
-       (:line ,line :character ,column)
-       :document (:uri ,uri)))))
+  (when (and (bound-and-true-p lsp-mode) (lsp-workspaces))
+    (let* ((line (rustowl-line-number-at-pos))
+           (column (rustowl-current-column))
+           (uri (lsp--buffer-uri))
+           (pos
+            (let ((ht (make-hash-table :test 'equal)))
+              (puthash "line" line ht)
+              (puthash "character" column ht)
+              ht))
+           (doc
+            (let ((ht (make-hash-table :test 'equal)))
+              (puthash "uri" uri ht)
+              ht))
+           (params
+            (let ((ht (make-hash-table :test 'equal)))
+              (puthash "position" pos ht)
+              (puthash "document" doc ht)
+              ht)))
+      (rustowl-cursor params))))
 
 ;;;###autoload
 (defvar rustowl-cursor-timer nil
   "Timer object for rustowl cursor overlays.")
 
 ;;;###autoload
-(defvar rustowl-cursor-timeout 2
-  "Idle seconds before showing cursor overlays.")
+(defvar rustowl-cursor-timeout 2.0)
 
 ;;;###autoload
 (defun rustowl-reset-cursor-timer ()
@@ -111,18 +146,22 @@
          rustowl-cursor-timeout nil #'rustowl-cursor-call)))
 
 ;;;###autoload
-(defun rustowl-enable-cursor ()
-  "Enable RustOwl overlay updates on cursor move."
-  (add-hook 'post-command-hook #'rustowl-reset-cursor-timer))
+(defun enable-rustowl-cursor ()
+  (add-hook 'post-command-hook #'rustowl-reset-cursor-timer nil t))
 
 ;;;###autoload
-(defun rustowl-disable-cursor ()
-  "Disable RustOwl overlay updates."
-  (remove-hook 'post-command-hook #'rustowl-reset-cursor-timer)
+(defun disable-rustowl-cursor ()
+  (remove-hook 'post-command-hook #'rustowl-reset-cursor-timer t)
   (when rustowl-cursor-timer
     (cancel-timer rustowl-cursor-timer)
     (setq rustowl-cursor-timer nil)))
 
+;; Automatically enable cursor-based highlighting for Rust buffers
+(add-hook 'rust-mode-hook #'enable-rustowl-cursor)
+(add-hook 'rust-ts-mode-hook #'enable-rustowl-cursor)
+(add-hook 'rustic-mode-hook #'enable-rustowl-cursor)
+
+;; RustOwl visualization
 (defun rustowl-line-col-to-pos (line col)
   "Convert LINE and COL to buffer position.
 LINE and COL are 0-based (LSP compatible); if either is negative (< 0), signal an error.

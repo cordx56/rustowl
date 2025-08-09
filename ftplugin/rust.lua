@@ -71,6 +71,26 @@ if not vim.g.loaded_rustowl then
       end
     end,
   })
+
+  -- Send analyze request on save
+  local analyze_augroup = vim.api.nvim_create_augroup('RustOwlAnalyzeOnSave', { clear = false })
+  vim.api.nvim_create_autocmd('BufWritePost', {
+    group = analyze_augroup,
+    buffer = 0,
+    desc = 'RustOwl: send rustowl/analyze on save',
+    callback = function(args)
+      -- Only send when rustowl is enabled
+      local rustowl = require('rustowl')
+      if not rustowl.is_enabled() then
+        return
+      end
+      local lsp = require('rustowl.lsp')
+      local clients = lsp.get_rustowl_clients { bufnr = args.buf }
+      for _, client in ipairs(clients) do
+        client:request('rustowl/analyze', {}, function() end, args.buf)
+      end
+    end,
+  })
 end
 
 if config.auto_enable then
