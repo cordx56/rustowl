@@ -139,7 +139,7 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
             if (`${data}`.includes("%")) {
               progress.report({
                 message: "toolchain downloading",
-                increment: 1,
+                increment: 0.25, // downloads 4 toolchain components
               });
             }
           });
