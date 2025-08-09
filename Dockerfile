@@ -1,4 +1,4 @@
-FROM rust:1.88.0-slim-trixie AS chef
+FROM rust:1.89.0-slim-trixie AS chef
 WORKDIR /app
 
 COPY scripts/ scripts/
@@ -55,7 +55,7 @@ RUN channel="$(cat scripts/build/channel)" && \
     cp target/"${HOST_TUPLE}"/release/rustowl /build-output/rustowl && \
     cp target/"${HOST_TUPLE}"/release/rustowlc /build-output/rustowlc
 
-FROM rust:1.88.0-slim-trixie
+FROM rust:1.89.0-slim-trixie
 
 WORKDIR /app
 
