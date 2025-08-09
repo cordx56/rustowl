@@ -1,5 +1,6 @@
 use crate::{cache::*, models::*, toolchain};
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -31,33 +32,44 @@ pub enum AnalyzerEvent {
 #[derive(Clone)]
 pub struct Analyzer {
     path: PathBuf,
-    cargo: String,
     metadata: Option<cargo_metadata::Metadata>,
 }
 
 impl Analyzer {
     pub async fn new(path: impl AsRef<Path>) -> Result<Self, ()> {
         let path = path.as_ref().to_path_buf();
-        let cargo = toolchain::get_executable_path("cargo").await;
+
+        let mut cargo_cmd = toolchain::setup_cargo_command().await;
+
+        cargo_cmd
+            .args([
+                "metadata".to_owned(),
+                "--filter-platform".to_owned(),
+                toolchain::HOST_TUPLE.to_owned(),
+            ])
+            .current_dir(&path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+
+        let metadata = if let Ok(child) = cargo_cmd.spawn()
+            && let Ok(output) = child.wait_with_output().await
+        {
+            let data = String::from_utf8_lossy(&output.stdout);
+            cargo_metadata::MetadataCommand::parse(data).ok()
+        } else {
+            None
+        };
+
         if path.is_file() && path.extension().map(|v| v == "rs").unwrap_or(false) {
             Ok(Self {
                 path,
-                cargo,
                 metadata: None,
             })
         } else if path.is_dir()
-            && let Ok(metadata) = cargo_metadata::MetadataCommand::new()
-                .cargo_path(&cargo)
-                .other_options(&[
-                    "--filter-platform".to_owned(),
-                    toolchain::HOST_TUPLE.to_owned(),
-                ])
-                .current_dir(&path)
-                .exec()
+            && let Some(metadata) = metadata
         {
             Ok(Self {
                 path: metadata.workspace_root.as_std_path().to_path_buf(),
-                cargo,
                 metadata: Some(metadata),
             })
         } else {
@@ -96,7 +108,7 @@ impl Analyzer {
         let package_name = metadata.root_package().as_ref().unwrap().name.to_string();
         let target_dir = metadata.target_directory.as_std_path();
         log::info!("clear cargo cache");
-        let mut command = process::Command::new(&self.cargo);
+        let mut command = toolchain::setup_cargo_command().await;
         command
             .args(["clean", "--package", &package_name])
             .env("CARGO_TARGET_DIR", target_dir)
@@ -105,7 +117,7 @@ impl Analyzer {
             .stderr(std::process::Stdio::null());
         command.spawn().unwrap().wait().await.ok();
 
-        let mut command = process::Command::new(&self.cargo);
+        let mut command = toolchain::setup_cargo_command().await;
 
         let mut args = vec!["check"];
         if all_targets {
@@ -123,14 +135,6 @@ impl Analyzer {
             .current_dir(&self.path)
             .stdout(std::process::Stdio::piped())
             .kill_on_drop(true);
-
-        let rustowlc_path = toolchain::get_executable_path("rustowlc").await;
-
-        command
-            .env("RUSTC", &rustowlc_path)
-            .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc_path);
-        let sysroot = toolchain::get_sysroot().await;
-        toolchain::set_rustc_env(&mut command, &sysroot);
 
         if is_cache() {
             set_cache_path(&mut command, target_dir);
