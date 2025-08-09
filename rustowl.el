@@ -128,7 +128,7 @@
 ;;;###autoload
 (defvar rustowl-cursor-timer nil)
 ;;;###autoload
-(defvar rustowl-cursor-timeout 0.5)
+(defvar rustowl-cursor-timeout 2.0)
 
 ;;;###autoload
 (defun rustowl-reset-cursor-timer ()
