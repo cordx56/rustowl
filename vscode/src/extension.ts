@@ -233,7 +233,6 @@ export function activate(context: vscode.ExtensionContext) {
   vscode.workspace.onDidSaveTextDocument(
     async (ev) => {
       if (enabled && ev.languageId === "rust") {
-        console.log(enabled);
         await client?.sendRequest("rustowl/analyze", {});
       }
     },
