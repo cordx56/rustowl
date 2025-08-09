@@ -181,31 +181,6 @@ Default options:
 }
 ```
 
-#### Customizing Highlight Colors
-
-You can customize the colors used for different highlight types by setting the `colors` option in your configuration:
-
-```lua
-{
-  'cordx56/rustowl',
-  version = '*',
-  build = 'cargo binstall rustowl',
-  lazy = false,
-  opts = {
-    colors = {
-      lifetime = '#32cd32',   -- Lime green for lifetimes
-      imm_borrow = '#4169e1', -- Royal blue for immutable borrows
-      mut_borrow = '#ff69b4', -- Hot pink for mutable borrows
-      move = '#ffa500',       -- Orange for moves
-      call = '#ffd700',       -- Gold for function calls
-      outlive = '#dc143c',    -- Crimson for lifetime errors
-    },
-  },
-}
-```
-
-Each color should be specified as a hex color string (e.g., `'#ff0000'` for red).
-
 When opening a Rust file, the Neovim plugin creates the `Rustowl` user command:
 
 ```vim
