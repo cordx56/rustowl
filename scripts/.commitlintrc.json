@@ -1,0 +1,5 @@
+{
+  "$schema": "./vscode/node_modules/@commitlint/config-validator/lib/commitlint.schema.json",
+  "extends": ["@commitlint/config-conventional"],
+  "formatter": "@commitlint/format"
+}

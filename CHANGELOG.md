@@ -1,3 +1,4 @@
+<!-- prettier-ignore-start -->
 <a name="unreleased"></a>
 
 ## [Unreleased]
@@ -10,27 +11,22 @@
 
 ### 🎨 Chores
 
-- update dockerfile to use prebuilt binaries
-- reformat every single document, use new way of building ([#344](https://github.com/cordx56/rustowl/issues/344))
-- update criterion to 0.7, enable in reqwest: http2 for lower latency and others, socks, system-proxy for proxy user ([#352](https://github.com/cordx56/rustowl/issues/352))
-- update changelog ([#211](https://github.com/cordx56/rustowl/issues/211))
-- update changelog ([#317](https://github.com/cordx56/rustowl/issues/317))
-- add performance test to the repo ([#219](https://github.com/cordx56/rustowl/issues/219))
-- add ovsx to release script and docs about extension ([#266](https://github.com/cordx56/rustowl/issues/266))
-- update lockfiles and deps ([#267](https://github.com/cordx56/rustowl/issues/267))
 - update changelog
+- add performance test to the repo ([#219](https://github.com/cordx56/rustowl/issues/219))
+- update criterion to 0.7, enable in reqwest: http2 for lower latency and others, socks, system-proxy for proxy user ([#352](https://github.com/cordx56/rustowl/issues/352))
+- update changelog ([#317](https://github.com/cordx56/rustowl/issues/317))
+- add ovsx to release script and docs about extension ([#266](https://github.com/cordx56/rustowl/issues/266))
+- reformat every single document, use new way of building ([#344](https://github.com/cordx56/rustowl/issues/344))
+- update changelog ([#211](https://github.com/cordx56/rustowl/issues/211))
+- update lockfiles and deps ([#267](https://github.com/cordx56/rustowl/issues/267))
 - **README:** Add Discord server link ([#239](https://github.com/cordx56/rustowl/issues/239))
 - **aur:** bump rustup toolchain version ([#177](https://github.com/cordx56/rustowl/issues/177))
-- **bump:** remove docker version updates
-- **dependabot:** set interval weekly and use grouping ([#310](https://github.com/cordx56/rustowl/issues/310))
 - **dependabot:** fix dependabot error ([#311](https://github.com/cordx56/rustowl/issues/311))
 - **dependabot:** ignore [@types](https://github.com/types)/vscode version update ([#314](https://github.com/cordx56/rustowl/issues/314))
-- **docker:** just install the crate and set it up
-- **dockerfile:** set rustup toolchain the same as rust_version in base image
+- **dependabot:** set interval weekly and use grouping ([#310](https://github.com/cordx56/rustowl/issues/310))
 - **docs:** add badges to README ([#268](https://github.com/cordx56/rustowl/issues/268))
 - **nvim-tests:** add two newlines in minimal init ([#307](https://github.com/cordx56/rustowl/issues/307))
 - **rustc:** bump rustc to 1.88.0 in neovim ci ([#315](https://github.com/cordx56/rustowl/issues/315))
-- **scripts:** update bump to update dockerfiles also
 - **support:** add Sublime Text plugin link ([#357](https://github.com/cordx56/rustowl/issues/357))
 
 ### 🐞 Bug Fixes
@@ -423,5 +419,9 @@
 [v0.1.0]: https://github.com/cordx56/rustowl/compare/v0.0.5...v0.1.0
 [v0.0.5]: https://github.com/cordx56/rustowl/compare/v0.0.4...v0.0.5
 [v0.0.4]: https://github.com/cordx56/rustowl/compare/v0.0.3...v0.0.4
-[v0.0.3]: https://github.com/cordx56/rustowl/compare/v0.0.2...v0.0.3
-[v0.0.2]: https://github.com/cordx56/rustowl/compare/v0.0.1...v0.0.2
+[v0.0.3]: https://github.com/cordx56/rustowl/compare/v0.0.3pre...v0.0.3
+[v0.0.3pre]: https://github.com/cordx56/rustowl/compare/v0.0.2...v0.0.3pre
+[v0.0.2]: https://github.com/cordx56/rustowl/compare/v0.0.2pre...v0.0.2
+[v0.0.2pre]: https://github.com/cordx56/rustowl/compare/v0.0.1...v0.0.2pre
+[v0.0.1]: https://github.com/cordx56/rustowl/compare/vpre...v0.0.1
+<!-- prettier-ignore-end -->

@@ -1,5 +1,6 @@
 **/target
 perf-tests/dummy-package/Cargo.lock
+scripts/node_modules
 
 # Benchmark and size baselines are machine-specific and should not be committed
 baselines/
