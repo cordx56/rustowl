@@ -8,15 +8,6 @@ use tower_lsp::lsp_types;
 use tower_lsp::{Client, LanguageServer, LspService};
 
 #[derive(serde::Deserialize, Clone, Debug)]
-#[serde(tag = "reason", rename_all = "kebab-case")]
-enum CargoCheckMessage {
-    #[allow(unused)]
-    CompilerArtifact {},
-    #[allow(unused)]
-    BuildFinished {},
-}
-
-#[derive(serde::Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct AnalyzeRequest {}
 #[derive(serde::Serialize, Clone, Debug)]
