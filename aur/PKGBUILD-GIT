@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
-makedepends=('git' 'rustup' 'zig=0.13.0')
+makedepends=('git' 'rustup' 'gcc' 'make' 'autoconf' 'cmake' 'ninja' 'go' 'openssl' 'glibc' 'gcc-libs')
 arch=('any')
 source=("git+https://github.com/cordx56/rustowl.git")
 sha256sums=('SKIP')
@@ -21,24 +21,39 @@ pkgver() {
 prepare() {
     cd "$srcdir/rustowl"
     export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.89.0
+    export RUSTUP_TOOLCHAIN=1.88.0
     rustup component add rust-src rustc-dev llvm-tools
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
     cd "$srcdir/rustowl"
-    export CARGO_TARGET_DIR=target
     export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.89.0
+    export RUSTUP_TOOLCHAIN=1.88.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
+    
+    # Configure environment for aws-lc-sys build
+    export CC=gcc
+    export CXX=g++
+    export CMAKE_C_COMPILER=gcc
+    export CMAKE_CXX_COMPILER=g++
+    export AWS_LC_SYS_CMAKE_BUILDER=1
+    export CMAKE_BUILD_TYPE=Release
+    export AWS_LC_SYS_STATIC=1
+    export AWS_LC_SYS_NO_PREFIX=1
+    
+    # Ensure proper library search paths
+    export PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/share/pkgconfig
+    export LIBRARY_PATH=/usr/lib:/lib
+    export LD_LIBRARY_PATH=/usr/lib:/lib
+    
     cargo build --frozen --release --all-features --target $(rustc --print=host-tuple)
 }
 
 check() {
     cd "$srcdir/rustowl"
     export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.89.0
+    export RUSTUP_TOOLCHAIN=1.88.0
     cargo test --frozen --all-features
 }
 

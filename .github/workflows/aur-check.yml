@@ -1,0 +1,122 @@
+name: Arch Linux Container Validation
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/aur-check.yml'
+      - 'aur/**'
+  push:
+    paths:
+      - '.github/workflows/aur-check.yml'
+      - 'aur/**'
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  archlinux-validation:
+    name: Arch Linux Container Build & Test
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux/archlinux:multilib-devel
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache Pacman Dependencies
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/pacman/pkg
+          key: ${{ runner.os }}-pacman-${{ hashFiles('/etc/pacman.conf', '/etc/makepkg.config', '/etc/makepkg/rust.conf') }}
+          restore-keys: |
+            ${{ runner.os }}-pacman-
+
+      - name: Install base dependencies
+        run: |
+          pacman -Syu --noconfirm
+          
+          pacman -S --noconfirm \
+            namcap \
+            shellcheck \
+            debugedit \
+            fakeroot \
+            sudo \
+            pkgconf \
+            libc++ \
+            cmake \
+            openssl \
+            clang \
+            llvm \
+            perl \
+            ninja \
+            go \
+            git \
+            glibc \
+            gcc-libs
+
+      - name: Setup build user
+        run: |
+          useradd -m -s /bin/bash builder
+
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Validate PKGBUILD files
+        run: |
+          set -e
+
+          # Color codes
+          RED='\033[0;31m'
+          GREEN='\033[0;32m'
+          YELLOW='\033[1;33m'
+          BLUE='\033[0;34m'
+          MAGENTA='\033[0;35m'
+          CYAN='\033[0;36m'
+          WHITE='\033[1;37m'
+          NC='\033[0m' # No Color
+
+          for pathname in aur/PKGBUILD-GIT*; do
+            if [ -f "${pathname}" ]; then
+              filename=$(basename ${pathname})
+              dirname=$(dirname ${pathname})
+
+              echo -e "${CYAN}============ Validating [${NC}${filename}${CYAN}] ============${NC}\n\n"
+
+              echo -e "${YELLOW}============ Running Shellcheck On${NC} ${filename} ${YELLOW}============${NC}\n"
+              if shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "${pathname}"; then
+                echo -e "${GREEN}✅ Shellcheck passed${NC}"
+              else
+                echo -e "${RED}❌ Shellcheck failed${NC}"
+                exit 1
+              fi
+
+              chown -R builder:builder "${pathname}"
+              chown -R builder:builder "${dirname}"
+
+              echo -e "${BLUE}============ Running Namcap On${NC} ${filename} ${BLUE}============${NC}\n"
+              if namcap "${pathname}"; then
+                echo -e "${GREEN}✅ Namcap passed${NC}"
+              else
+                echo -e "${RED}❌ Namcap failed${NC}"
+                exit 1
+              fi
+
+              echo -e "${MAGENTA}============ Running Makepkg On${NC} ${filename} ${MAGENTA}============${NC}"
+
+              if sudo -u builder bash -c "
+                set -e
+                cd '${dirname}'
+                makepkg -scf --noconfirm -p '${filename}'
+              "; then
+                echo -e "${GREEN}✅ Makepkg completed successfully${NC}"
+              else
+                echo -e "${RED}❌ Makepkg failed${NC}"
+                exit 1
+              fi
+
+              echo -e "${GREEN}🎉 ${filename} Validation Completed Successfully!${NC}"
+              echo ""
+            fi
+          done
+
+          echo -e "${GREEN}🚀 All PKGBUILD files validated successfully!${NC}"
