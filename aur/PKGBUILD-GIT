@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
-makedepends=('git' 'rustup' 'gcc' 'make' 'autoconf' 'cmake' 'ninja' 'go' 'openssl' 'glibc' 'gcc-libs' 'pkgconf' 'perl')
+makedepends=('git' 'rustup' 'gcc' 'make' 'autoconf' 'cmake' 'ninja' 'go' 'openssl' 'glibc' 'gcc-libs' 'pkgconf' 'perl' 'clang' 'llvm')
 arch=('any')
 source=("git+https://github.com/cordx56/rustowl.git")
 sha256sums=('SKIP')
@@ -41,6 +41,10 @@ build() {
     export CMAKE_BUILD_TYPE=Release
     export AWS_LC_SYS_STATIC=1
     export AWS_LC_SYS_NO_PREFIX=1
+    
+    # Configure bindgen for aws-lc-sys
+    export BINDGEN_EXTRA_CLANG_ARGS="-I/usr/include"
+    export LIBCLANG_PATH=/usr/lib
     
     # Ensure proper library search paths
     export PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/share/pkgconfig
