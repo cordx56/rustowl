@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
-makedepends=('git' 'rustup' 'gcc' 'make' 'autoconf' 'cmake' 'ninja' 'go' 'openssl' 'glibc' 'gcc-libs')
+makedepends=('git' 'rustup' 'gcc' 'make' 'autoconf' 'cmake' 'ninja' 'go' 'openssl' 'glibc' 'gcc-libs' 'pkgconf' 'perl')
 arch=('any')
 source=("git+https://github.com/cordx56/rustowl.git")
 sha256sums=('SKIP')
@@ -47,7 +47,7 @@ build() {
     export LIBRARY_PATH=/usr/lib:/lib
     export LD_LIBRARY_PATH=/usr/lib:/lib
     
-    cargo build --frozen --release --all-features --target $(rustc --print=host-tuple)
+    cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)"
 }
 
 check() {
@@ -62,7 +62,7 @@ package() {
     find target -type d | grep -E 'rustowl-build-time-out$' | xargs -I % cp -r % ./
     mkdir sysroot
     ACTIVE_TOOLCHAIN="$(rustup show active-toolchain | awk '{ print $1 }')"
-    cp -r "$(rustc --print=sysroot)" sysroot/$ACTIVE_TOOLCHAIN
+    cp -r "$(rustc --print=sysroot)" sysroot/"$ACTIVE_TOOLCHAIN"
     find sysroot -type f | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf
     find sysroot -depth -type d -empty -exec rm -rf {} \;
     install -d -m 755 "$pkgdir/opt/rustowl"
