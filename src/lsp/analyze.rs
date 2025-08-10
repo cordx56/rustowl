@@ -94,12 +94,12 @@ impl Analyzer {
         all_features: bool,
     ) -> AnalyzeEventIter {
         let package_name = metadata.root_package().as_ref().unwrap().name.to_string();
-        let target_dir = metadata.target_directory.as_std_path();
+        let target_dir = metadata.target_directory.as_std_path().join("owl");
         log::info!("clear cargo cache");
         let mut command = process::Command::new(&self.cargo);
         command
             .args(["clean", "--package", &package_name])
-            .env("CARGO_TARGET_DIR", target_dir)
+            .env("CARGO_TARGET_DIR", &target_dir)
             .current_dir(&self.path)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
@@ -118,7 +118,7 @@ impl Analyzer {
 
         command
             .args(args)
-            .env("CARGO_TARGET_DIR", target_dir)
+            .env("CARGO_TARGET_DIR", &target_dir)
             .env_remove("RUSTC_WRAPPER")
             .current_dir(&self.path)
             .stdout(std::process::Stdio::piped())
