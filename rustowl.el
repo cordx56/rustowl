@@ -61,37 +61,38 @@
 
 (defun rustowl-cursor (params)
   "Request and visualize Rust ownership/lifetime overlays for PARAMS."
-  (lsp-request-async
-   "rustowl/cursor" params
-   (lambda (response)
-     (let ((decorations (gethash "decorations" response)))
-       (mapc
-        (lambda (deco)
-          (let* ((type (gethash "type" deco))
-                 (start (gethash "start" (gethash "range" deco)))
-                 (end (gethash "end" (gethash "range" deco)))
-                 (start-pos
-                  (rustowl-line-col-to-pos
-                   (gethash "line" start)
-                   (gethash "character" start)))
-                 (end-pos
-                  (rustowl-line-col-to-pos
-                   (gethash "line" end) (gethash "character" end)))
-                 (overlapped (gethash "overlapped" deco)))
-            (unless overlapped
-              (cond
-               ((equal type "lifetime")
-                (rustowl-underline start-pos end-pos "#00cc00"))
-               ((equal type "imm_borrow")
-                (rustowl-underline start-pos end-pos "#0000cc"))
-               ((equal type "mut_borrow")
-                (rustowl-underline start-pos end-pos "#cc00cc"))
-               ((or (equal type "move") (equal type "call"))
-                (rustowl-underline start-pos end-pos "#cccc00"))
-               ((equal type "outlive")
-                (rustowl-underline start-pos end-pos "#cc0000"))))))
-        decorations)))
-   :mode 'current))
+  (when (and (bound-and-true-p lsp-mode) (lsp-workspaces))
+    (lsp-request-async
+     "rustowl/cursor" params
+     (lambda (response)
+       (let ((decorations (gethash "decorations" response)))
+         (mapc
+          (lambda (deco)
+            (let* ((type (gethash "type" deco))
+                   (start (gethash "start" (gethash "range" deco)))
+                   (end (gethash "end" (gethash "range" deco)))
+                   (start-pos
+                    (rustowl-line-col-to-pos
+                     (gethash "line" start)
+                     (gethash "character" start)))
+                   (end-pos
+                    (rustowl-line-col-to-pos
+                     (gethash "line" end) (gethash "character" end)))
+                   (overlapped (gethash "overlapped" deco)))
+              (unless overlapped
+                (cond
+                 ((equal type "lifetime")
+                  (rustowl-underline start-pos end-pos "#00cc00"))
+                 ((equal type "imm_borrow")
+                  (rustowl-underline start-pos end-pos "#0000cc"))
+                 ((equal type "mut_borrow")
+                  (rustowl-underline start-pos end-pos "#cc00cc"))
+                 ((or (equal type "move") (equal type "call"))
+                  (rustowl-underline start-pos end-pos "#cccc00"))
+                 ((equal type "outlive")
+                  (rustowl-underline start-pos end-pos "#cc0000"))))))
+          decorations)))
+     :mode 'current)))
 
 (defun rustowl-line-number-at-pos ()
   "Return the line number at point."
@@ -136,12 +137,12 @@
 ;;;###autoload
 (defun rustowl-enable-cursor ()
   "Enable RustOwl overlay updates on cursor move."
-  (add-hook 'post-command-hook #'rustowl-reset-cursor-timer))
+  (add-hook 'post-command-hook #'rustowl-reset-cursor-timer nil t))
 
 ;;;###autoload
 (defun rustowl-disable-cursor ()
   "Disable RustOwl overlay updates."
-  (remove-hook 'post-command-hook #'rustowl-reset-cursor-timer)
+  (remove-hook 'post-command-hook #'rustowl-reset-cursor-timer t)
   (when rustowl-cursor-timer
     (cancel-timer rustowl-cursor-timer)
     (setq rustowl-cursor-timer nil)))
@@ -161,7 +162,7 @@ If COL is past end of line, clamp to end of line."
     (error "rustowl-line-col-to-pos: negative line or column"))
   (save-excursion
     (goto-char (point-min))
-    (let ((max-line (count-lines (point-min) (point-max))))
+    (let ((max-line (line-number-at-pos (point-max))))
       (if (>= line max-line)
           (point-max)
         (forward-line line)
