@@ -97,21 +97,24 @@
       (should (or (eq called 'cancelled) (eq called 'cleared)))
       (let ((added nil))
         (cl-letf (((symbol-function 'add-hook)
-                   (lambda (hook fn) (setq added (list hook fn)))))
+                   (lambda (hook fn &optional _depth local)
+                     (setq added (list hook fn local)))))
           (rustowl-enable-cursor)
           (should
            (equal
             added
-            '(post-command-hook rustowl-reset-cursor-timer))))))))
+            '(post-command-hook rustowl-reset-cursor-timer t))))))))
 
 ;; Test idempotency of rustowl-enable-cursor and rustowl-disable-cursor
 (ert-deftest rustowl-test-enable-disable-idempotent ()
   (let ((add-count 0)
         (remove-count 0))
     (cl-letf (((symbol-function 'add-hook)
-               (lambda (hook fn) (cl-incf add-count)))
+               (lambda (hook fn &optional _depth _local)
+                 (cl-incf add-count)))
               ((symbol-function 'remove-hook)
-               (lambda (hook fn) (cl-incf remove-count))))
+               (lambda (hook fn &optional _local)
+                 (cl-incf remove-count))))
       (rustowl-enable-cursor)
       (rustowl-enable-cursor)
       (should (>= add-count 2))
@@ -185,19 +188,22 @@
              ht))))
     (with-temp-buffer
       (insert "abcdef")
-      (cl-letf (((symbol-function 'lsp-request-async)
-                 (lambda (_method _params cb &rest _args)
-                   (funcall cb response)
-                   (setq called t)))
-                ((symbol-function 'rustowl-underline)
-                 (lambda (start end color)
-                   (setq called (list start end color))
-                   (make-overlay start end))))
-        (rustowl-cursor
-         '(:position
-           (:line 0 :character 0)
-           :document (:uri "file:///fake")))
-        (should called)))))
+      (let ((lsp-mode t))
+        (cl-letf (((symbol-function 'lsp-workspaces)
+                   (lambda () '(fake-workspace)))
+                  ((symbol-function 'lsp-request-async)
+                   (lambda (_method _params cb &rest _args)
+                     (funcall cb response)
+                     (setq called t)))
+                  ((symbol-function 'rustowl-underline)
+                   (lambda (start end color)
+                     (setq called (list start end color))
+                     (make-overlay start end))))
+          (rustowl-cursor
+           '(:position
+             (:line 0 :character 0)
+             :document (:uri "file:///fake")))
+          (should called))))))
 
 ;; Test rustowl-cursor overlays for all type branches and overlapped
 (ert-deftest rustowl-test-cursor-overlays-all-types ()
@@ -234,51 +240,53 @@
               ht)))
       (with-temp-buffer
         (insert "abcdef")
-        (cl-letf (((symbol-function 'lsp-request-async)
-                   (lambda (_method _params cb &rest _args)
-                     (funcall cb response)))
-                  ((symbol-function 'rustowl-underline)
-                   (lambda (_start _end color)
-                     (push color called-types)
-                     (make-overlay 1 2))))
-          (rustowl-cursor
-           '(:position
-             (:line 0 :character 0)
-             :document (:uri "file:///fake")))
-          ;; Should get all colors except for the overlapped one
-          (should (member "#00cc00" called-types)) ; lifetime
-          (should (member "#0000cc" called-types)) ; imm_borrow
-          (should (member "#cc00cc" called-types)) ; mut_borrow
-          (should (member "#cccc00" called-types)) ; move/call
-          (should (member "#cc0000" called-types)) ; outlive
-          ;; Should not call underline for overlapped
+        (let ((lsp-mode t))
+          (cl-letf (((symbol-function 'lsp-workspaces)
+                     (lambda () '(fake-workspace)))
+                    ((symbol-function 'lsp-request-async)
+                     (lambda (_method _params cb &rest _args)
+                       (funcall cb response)))
+                    ((symbol-function 'rustowl-underline)
+                     (lambda (_start _end color)
+                       (push color called-types)
+                       (make-overlay 1 2))))
+            (rustowl-cursor
+             '(:position
+               (:line 0 :character 0)
+               :document (:uri "file:///fake")))
+            ;; Should get all colors except for the overlapped one
+            (should (member "#00cc00" called-types)) ; lifetime
+            (should (member "#0000cc" called-types)) ; imm_borrow
+            (should (member "#cc00cc" called-types)) ; mut_borrow
+            (should (member "#cccc00" called-types)) ; move/call
+            (should (member "#cc0000" called-types)) ; outlive
+            ;; Should not call underline for overlapped
+            (should
+             (= (length
+                 (cl-remove-if-not
+                  (lambda (c) (equal c "#00cc00")) called-types))
+                1)))))))
+
+  ;; Test rustowl-cursor-call (mocking buffer and lsp)
+  (ert-deftest rustowl-test-cursor-call ()
+    (let ((called nil))
+      (with-temp-buffer
+        (insert "abc\ndef")
+        (goto-char (point-min))
+        (cl-letf (((symbol-function 'rustowl-line-number-at-pos)
+                   (lambda () 0))
+                  ((symbol-function 'rustowl-current-column)
+                   (lambda () 1))
+                  ((symbol-function 'lsp--buffer-uri)
+                   (lambda () "file:///fake"))
+                  ((symbol-function 'rustowl-cursor)
+                   (lambda (params) (setq called params))))
+          (rustowl-cursor-call)
           (should
-           (= (length
-               (cl-remove-if-not
-                (lambda (c) (equal c "#00cc00")) called-types))
-              1)))))))
-
-;; Test rustowl-cursor-call (mocking buffer and lsp)
-(ert-deftest rustowl-test-cursor-call ()
-  (let ((called nil))
-    (with-temp-buffer
-      (insert "abc\ndef")
-      (goto-char (point-min))
-      (cl-letf (((symbol-function 'rustowl-line-number-at-pos)
-                 (lambda () 0))
-                ((symbol-function 'rustowl-current-column)
-                 (lambda () 1))
-                ((symbol-function 'lsp--buffer-uri)
-                 (lambda () "file:///fake"))
-                ((symbol-function 'rustowl-cursor)
-                 (lambda (params) (setq called params))))
-        (rustowl-cursor-call)
-        (should
-         (equal
-          called
-          '(:position
-            (:line 0 :character 1)
-            :document (:uri "file:///fake"))))))))
-
+           (equal
+            called
+            '(:position
+              (:line 0 :character 1)
+              :document (:uri "file:///fake")))))))))
 (provide 'rustowl-test)
 ;;; rustowl-test.el ends here
