@@ -1,6 +1,8 @@
 name: Build RustOwl
 
 on:
+  push:
+    branches: ["main"]
   workflow_call:
     outputs:
       run_id:
@@ -8,11 +10,7 @@ on:
         value: ${{ github.run_id }}
 
 jobs:
-  check:
-    uses: ./.github/workflows/checks.yml
-
   rustowl:
-    needs: [check]
     strategy:
       matrix:
         os:
@@ -68,6 +66,13 @@ jobs:
           else
             ./scripts/build/toolchain cargo build --profile=${{ env.build_profile }}
           fi
+
+      - name: Check the functionality
+        run: |
+          if [[ "${{ env.is_linux }}" == "true"  ]]; then
+            ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
+          else
+            ./target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
 
       - name: Set archive name
         run: |
