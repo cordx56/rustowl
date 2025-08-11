@@ -42,17 +42,13 @@ build() {
     export RUSTUP_TOOLCHAIN=1.88.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
     
-    # Configure environment for aws-lc-sys build
-    export CC=gcc
-    export CXX=g++
-    export CMAKE_C_COMPILER=gcc
-    export CMAKE_CXX_COMPILER=g++
+    # Configure environment for aws-lc-sys build with GCC
     export AWS_LC_SYS_CMAKE_BUILDER=1
     export CMAKE_BUILD_TYPE=Release
     export AWS_LC_SYS_STATIC=1
     export AWS_LC_SYS_NO_PREFIX=1
     
-    # Configure bindgen for aws-lc-sys
+    # Configure bindgen for aws-lc-sys (clang needed for bindgen only)
     export BINDGEN_EXTRA_CLANG_ARGS="-I/usr/include"
     export LIBCLANG_PATH=/usr/lib
     
