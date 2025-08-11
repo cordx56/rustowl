@@ -43,6 +43,7 @@ jobs:
 
       - name: setup env
         run: |
+          ./scripts/build/toolchain echo "Toolchain setup successful"
           host_tuple="$(./scripts/build/toolchain eval 'echo $HOST_TUPLE')"
           echo "host_tuple=$host_tuple" >> $GITHUB_ENV
           toolchain="$(./scripts/build/toolchain eval 'echo $RUSTOWL_TOOLCHAIN')"
