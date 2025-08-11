@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
-makedepends=('git' 'rustup' 'gcc' 'make' 'autoconf' 'cmake' 'ninja' 'go' 'openssl' 'glibc' 'gcc-libs' 'pkgconf' 'perl' 'clang' 'llvm')
+makedepends=('git' 'rustup' 'gcc' 'make' 'autoconf' 'automake' 'libtool' 'cmake' 'ninja' 'go' 'openssl' 'glibc' 'gcc-libs' 'pkgconf' 'perl' 'clang' 'llvm' 'nasm')
 
 _build_deps=(
     'bindgen-cli'
@@ -55,6 +55,10 @@ build() {
     # Configure bindgen for aws-lc-sys
     export BINDGEN_EXTRA_CLANG_ARGS="-I/usr/include"
     export LIBCLANG_PATH=/usr/lib
+    
+    # Configure jemalloc build environment
+    export JEMALLOC_SYS_WITH_MALLOC_CONF=background_thread:true
+    export CARGO_FEATURE_UNPREFIXED_MALLOC_ON_SUPPORTED_PLATFORMS=1
     
     # Ensure proper library search paths
     export PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/share/pkgconfig
