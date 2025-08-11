@@ -136,12 +136,15 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: yarn install --frozen-locked
-        working-directory: ./vscode
+      - name: Setup PNPM And Install dependencies
+        uses: pnpm/action-setup@v4
+        with:
+          run_install:
+            - cwd: ./vscode
+              args: [--frozen-lockfile]
 
       - name: Create VSIX
-        run: yarn build
+        run: pnpm build
         working-directory: ./vscode
 
       - name: Upload

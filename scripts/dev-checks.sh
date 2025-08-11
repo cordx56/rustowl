@@ -36,7 +36,7 @@ show_help() {
     echo "    - Code formatting (rustfmt)"
     echo "    - Linting (clippy)"
     echo "    - Build test"
-    echo "    - VS Code extension checks (if yarn is available)"
+    echo "    - VS Code extension checks (if pnpm is available)"
     echo ""
     echo "FIXES APPLIED (with --fix):"
     echo "    - Format code with rustfmt"
@@ -188,8 +188,8 @@ check_vscode_extension() {
     
     log_info "Checking VS Code extension..."
     
-    if ! command -v yarn &> /dev/null; then
-        log_warning "yarn not found, skipping VS Code extension checks"
+    if ! command -v pnpm &> /dev/null; then
+        log_warning "pnpm not found, skipping VS Code extension checks"
         return 0
     fi
     
@@ -198,18 +198,18 @@ check_vscode_extension() {
     # Install dependencies if needed
     if [ ! -d "node_modules" ]; then
         log_info "Installing VS Code extension dependencies..."
-        yarn install --frozen-lockfile
+        pnpm install --frozen-lockfile
     fi
     
     if $AUTO_FIX; then
         log_info "Formatting VS Code extension code..."
-        if yarn prettier --write src; then
+        if pnpm prettier --write src; then
             log_success "VS Code extension code formatted"
         else
             log_warning "Failed to format VS Code extension code"
         fi
     else
-        if yarn prettier --check src; then
+        if pnpm prettier --check src; then
             log_success "VS Code extension code is properly formatted"
         else
             log_error "VS Code extension formatting issues found. Run with --fix to auto-format."
@@ -219,7 +219,7 @@ check_vscode_extension() {
     fi
     
     # Type checking and linting
-    if yarn lint && yarn check-types; then
+    if pnpm lint && pnpm check-types; then
         log_success "VS Code extension checks passed"
     else
         log_error "VS Code extension checks failed"
