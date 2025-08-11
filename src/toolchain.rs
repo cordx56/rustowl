@@ -306,12 +306,4 @@ pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
         let paths = env::join_paths(paths).unwrap();
         command.env("Path", paths);
     }
-
-    #[cfg(unix)]
-    unsafe {
-        command.pre_exec(|| {
-            libc::setsid();
-            Ok(())
-        });
-    }
 }

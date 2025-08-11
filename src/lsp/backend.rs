@@ -1,8 +1,10 @@
 use super::analyze::*;
 use crate::{lsp::*, models::*, utils};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::{sync::RwLock, task::JoinSet};
+use tokio_util::sync::CancellationToken;
 use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types;
 use tower_lsp::{Client, LanguageServer, LspService};
@@ -21,6 +23,7 @@ pub struct Backend {
     status: Arc<RwLock<progress::AnalysisStatus>>,
     analyzed: Arc<RwLock<Option<Crate>>>,
     processes: Arc<RwLock<JoinSet<()>>>,
+    process_tokens: Arc<RwLock<BTreeMap<usize, CancellationToken>>>,
     work_done_progress: Arc<RwLock<bool>>,
 }
 
@@ -32,6 +35,7 @@ impl Backend {
             analyzed: Arc::new(RwLock::new(None)),
             status: Arc::new(RwLock::new(progress::AnalysisStatus::Finished)),
             processes: Arc::new(RwLock::new(JoinSet::new())),
+            process_tokens: Arc::new(RwLock::new(BTreeMap::new())),
             work_done_progress: Arc::new(RwLock::new(false)),
         }
     }
@@ -65,10 +69,7 @@ impl Backend {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         log::info!("stop running analysis processes");
-        {
-            let mut join = self.processes.write().await;
-            join.shutdown().await;
-        }
+        self.shutdown_subprocesses().await;
 
         log::info!("start analysis");
         {
@@ -81,7 +82,21 @@ impl Backend {
             let analyzed = self.analyzed.clone();
             let client = self.client.clone();
             let work_done_progress = self.work_done_progress.clone();
+            let cancellation_token = CancellationToken::new();
 
+            let cancellation_token_key = {
+                let token = cancellation_token.clone();
+                let mut tokens = self.process_tokens.write().await;
+                let key = if let Some(key) = tokens.last_entry().map(|v| *v.key()) {
+                    key + 1
+                } else {
+                    1
+                };
+                tokens.insert(key, token);
+                key
+            };
+
+            let process_tokens = self.process_tokens.clone();
             self.processes.write().await.spawn(async move {
                 let mut progress_token = None;
                 if *work_done_progress.read().await {
@@ -91,7 +106,10 @@ impl Backend {
 
                 let mut iter = analyzer.analyze(all_targets, all_features).await;
                 let mut analyzed_package_count = 0;
-                while let Some(event) = iter.next_event().await {
+                while let Some(event) = tokio::select! {
+                    _ = cancellation_token.cancelled() => None,
+                    event = iter.next_event() => event,
+                } {
                     match event {
                         AnalyzerEvent::CrateChecked {
                             package,
@@ -121,6 +139,9 @@ impl Backend {
                         }
                     }
                 }
+                // remove cancellation token from list
+                process_tokens.write().await.remove(&cancellation_token_key);
+
                 if let Some(progress_token) = progress_token {
                     progress_token.finish().await;
                 }
@@ -254,6 +275,14 @@ impl Backend {
             false
         }
     }
+
+    pub async fn shutdown_subprocesses(&self) {
+        let mut tokens = self.process_tokens.write().await;
+        while let Some((_, token)) = tokens.pop_last() {
+            token.cancel();
+        }
+        self.processes.write().await.shutdown().await;
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -345,11 +374,11 @@ impl LanguageServer for Backend {
 
     async fn did_change(&self, _params: lsp_types::DidChangeTextDocumentParams) {
         *self.analyzed.write().await = None;
-        let _ = self.shutdown().await;
+        self.shutdown_subprocesses().await;
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
-        self.processes.write().await.shutdown().await;
+        self.shutdown_subprocesses().await;
         Ok(())
     }
 }
