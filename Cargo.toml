@@ -33,7 +33,6 @@ rayon = "1"
 tokio-util = "0.7"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-#libc = "0.2"
 tikv-jemalloc-sys = "0.6"
 tikv-jemallocator = "0.6"
 
