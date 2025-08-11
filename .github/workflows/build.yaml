@@ -123,7 +123,6 @@ jobs:
             ${{ env.archive_name }}
 
   vscode:
-    needs: check
     runs-on: ubuntu-latest
     permissions:
       contents: write
