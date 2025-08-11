@@ -29,10 +29,11 @@ clap_complete = "4"
 tar = "0.4.44"
 tempfile = "3"
 rustls = { version = "0.23.31", default-features = false, features = ["aws_lc_rs"] }
-rayon = "1.10.0"
+rayon = "1"
+tokio-util = "0.7"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-libc = "0.2"
+#libc = "0.2"
 tikv-jemalloc-sys = "0.6"
 tikv-jemallocator = "0.6"
 
