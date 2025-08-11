@@ -59,7 +59,7 @@ jobs:
         if: needs.meta.outputs.pre_release != 'true'
         uses: pnpm/action-setup@v4
         with:
-          run_install:
+          run_install: |
             - cwd: ./vscode
       - name: Release vsce
         if: needs.meta.outputs.pre_release != 'true'
@@ -83,9 +83,8 @@ jobs:
         if: needs.meta.outputs.pre_release != 'true'
         uses: pnpm/action-setup@v4
         with:
-          run_install:
+          run_install: |
             - cwd: ./vscode
-              args: [--frozen-lockfile]
       - name: Release ovsx
         if: needs.meta.outputs.pre_release != 'true'
         run: |
