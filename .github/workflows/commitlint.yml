@@ -21,17 +21,21 @@ jobs:
         with:
           node-version: lts/*
 
-      - name: Install
+      - name: Setup PNPM And Install dependencies
         working-directory: ./scripts
-        run: yarn install
+        uses: pnpm/action-setup@v4
+        with:
+          run_install:
+            - cwd: ./scripts
+              args: [--frozen-lockfile]
 
       - name: Validate current commit (last commit) with commitlint
         working-directory: ./scripts
         if: github.event_name == 'push'
-        run: yarn commitlint --last --verbose
+        run: pnpm commitlint --last --verbose
 
       - name: Validate PR commits with commitlint
         working-directory: ./scripts
         if: github.event_name == 'pull_request'
-        run: yarn commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+        run: pnpm commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
 

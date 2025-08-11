@@ -55,11 +55,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Setup PNPM And Install dependencies
+        if: needs.meta.outputs.pre_release != 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          run_install:
+            - cwd: ./vscode
+              args: [--frozen-lockfile]
       - name: Release vsce
         if: needs.meta.outputs.pre_release != 'true'
         run: |
-          yarn install --frozen-locked
-          yarn vsce publish
+          pnpm vsce publish
         working-directory: ./vscode
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -74,11 +80,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Setup PNPM And Install dependencies
+        if: needs.meta.outputs.pre_release != 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          run_install:
+            - cwd: ./vscode
+              args: [--frozen-lockfile]
       - name: Release ovsx
         if: needs.meta.outputs.pre_release != 'true'
         run: |
-          yarn install --frozen-locked
-          yarn ovsx publish
+          pnpm ovsx publish
         working-directory: ./vscode
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
