@@ -60,19 +60,11 @@ jobs:
 
       - name: Build
         run: |
-          if [[ "${{ env.is_linux }}" == "true" ]]; then
-            ./scripts/build/toolchain cargo install --locked cargo-zigbuild
-            ./scripts/build/toolchain cargo zigbuild --target ${{ env.host_tuple }}.2.17 --profile=${{ env.build_profile }}
-          else
-            ./scripts/build/toolchain cargo build --profile=${{ env.build_profile }}
-          fi
+          ./scripts/build/toolchain cargo build --profile=${{ env.build_profile }}
 
       - name: Check the functionality
         run: |
-          if [[ "${{ env.is_linux }}" == "true"  ]]; then
-            ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
-          else
-            ./target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
+          ./target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
 
       - name: Set archive name
         run: |
@@ -85,14 +77,9 @@ jobs:
       - name: Setup archive artifacts
         run: |
           rm -rf runtime && mkdir -p runtime/sysroot/${{ env.toolchain }}/bin
-
-          if [[ "${{ env.is_linux }}" == "true"  ]]; then
-            cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/
-            cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
-          else
-            cp target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/
-            cp target/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
-          fi
+          
+          cp target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/
+          cp target/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
 
           cp README.md ./runtime
           cp LICENSE ./runtime
