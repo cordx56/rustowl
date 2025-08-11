@@ -22,7 +22,6 @@ jobs:
           node-version: lts/*
 
       - name: Setup PNPM And Install dependencies
-        working-directory: ./scripts
         uses: pnpm/action-setup@v4
         with:
           run_install: |
