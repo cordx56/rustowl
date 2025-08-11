@@ -16,7 +16,7 @@ install_toolchain() {
     for url in $(env | grep "RUSTOWL_COMPONENT_.*_URL" | cut -d= -f2); do
         temp="$(mktemp -d)"
         curl "$url" | tar xzf - -C "$temp"
-        /bin/sh "$(find "$temp" -type f -maxdepth 2 | grep "install.sh")" --destdir="$1" --prefix=
+        /bin/sh "$(find "$temp" -type f -maxdepth 2 | grep "install.sh")" --destdir="$1" --prefix= > /dev/null
         rm -rf "$temp"
     done
 }
