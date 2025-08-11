@@ -45,8 +45,8 @@ build() {
     # Use pregenerated bindings for AWS-LC to avoid build issues
     export AWS_LC_SYS_PREBUILT_NASM=1
     export AWS_LC_SYS_NO_PREFIX=1
+    export AWS_LC_SYS_STATIC=1
     unset AWS_LC_SYS_CMAKE_BUILDER
-    unset AWS_LC_SYS_STATIC
     
     # Configure bindgen for aws-lc-sys
     export BINDGEN_EXTRA_CLANG_ARGS="-I/usr/include"
