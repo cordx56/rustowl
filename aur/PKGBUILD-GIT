@@ -8,6 +8,10 @@ pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
 makedepends=('git' 'rustup' 'gcc' 'make' 'autoconf' 'cmake' 'ninja' 'go' 'openssl' 'glibc' 'gcc-libs' 'pkgconf' 'perl' 'clang' 'llvm')
+
+_build_deps=(
+    'bindgen-cli'
+)
 arch=('any')
 source=("git+https://github.com/cordx56/rustowl.git")
 sha256sums=('SKIP')
@@ -23,6 +27,12 @@ prepare() {
     export RUSTC_BOOTSTRAP=1
     export RUSTUP_TOOLCHAIN=1.88.0
     rustup component add rust-src rustc-dev llvm-tools
+    
+    # Install bindgen-cli for aws-lc-sys
+    for dep in "${_build_deps[@]}"; do
+        cargo install --force --locked "$dep"
+    done
+    
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
