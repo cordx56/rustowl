@@ -60,7 +60,8 @@ jobs:
 
       - name: Build
         run: |
-          ./scripts/build/toolchain cargo build --profile=${{ env.build_profile }}
+          cargo install cross --locked
+          ./scripts/build/toolchain cross build --profile=${{ env.build_profile }}
 
       - name: Check the functionality
         run: |
