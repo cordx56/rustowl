@@ -75,7 +75,6 @@ jobs:
         with:
           run_install:
             - cwd: ./vscode
-              args: [--frozen-lockfile]
 
       - name: Check formatting
         run: pnpm prettier -c src

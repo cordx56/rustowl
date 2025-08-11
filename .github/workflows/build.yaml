@@ -142,7 +142,6 @@ jobs:
         with:
           run_install:
             - cwd: ./vscode
-              args: [--frozen-lockfile]
 
       - name: Create VSIX
         run: pnpm build
