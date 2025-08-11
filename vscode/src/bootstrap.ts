@@ -136,13 +136,13 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
           const installer = spawn(rustowlCommand, ["toolchain", "install"], {
             stdio: ["ignore", "ignore", "pipe"],
           });
-          
+
           let stderrOutput = "";
-          
+
           installer.stderr.addListener("data", (data) => {
             const dataStr = `${data}`;
             stderrOutput += dataStr;
-            
+
             if (dataStr.includes("%")) {
               progress.report({
                 message: "toolchain downloading",
@@ -150,13 +150,14 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
               });
             }
           });
-          
+
           return new Promise(async (resolve, reject) => {
             installer.addListener("exit", async (code) => {
               if (code === 0) {
                 resolve(rustowlCommand);
               } else {
-                const errorMessage = stderrOutput.trim() || `Process exited with code ${code}`;
+                const errorMessage =
+                  stderrOutput.trim() || `Process exited with code ${code}`;
                 const logPath = await writeErrorLog(dirPath, errorMessage);
                 await showDetailedError(errorMessage, logPath);
                 reject(`toolchain setup failed (exit code ${code})`);
@@ -178,11 +179,14 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
   return rustowlCommand;
 };
 
-const writeErrorLog = async (dirPath: string, error: string): Promise<string> => {
+const writeErrorLog = async (
+  dirPath: string,
+  error: string,
+): Promise<string> => {
   const logPath = path.join(dirPath, "rustowl-error.log");
   const timestamp = new Date().toISOString();
   const logContent = `[${timestamp}] RustOwl Toolchain Setup Error:\n${error}\n\n`;
-  
+
   try {
     await fs.appendFile(logPath, logContent);
     return logPath;
@@ -193,29 +197,30 @@ const writeErrorLog = async (dirPath: string, error: string): Promise<string> =>
 };
 
 const showDetailedError = async (errorOutput: string, logPath: string) => {
-  const errorLines = errorOutput.trim().split('\n');
-  const summary = errorLines.length > 0 ? errorLines[0] : "Unknown error occurred";
-  
+  const errorLines = errorOutput.trim().split("\n");
+  const summary =
+    errorLines.length > 0 ? errorLines[0] : "Unknown error occurred";
+
   // Create a more detailed error message
   let detailedMessage = `RustOwl toolchain setup failed:\n\n${summary}`;
-  
+
   if (errorLines.length > 1) {
-    detailedMessage += `\n\nAdditional details:\n${errorLines.slice(1, 3).join('\n')}`;
+    detailedMessage += `\n\nAdditional details:\n${errorLines.slice(1, 3).join("\n")}`;
     if (errorLines.length > 3) {
       detailedMessage += "\n...";
     }
   }
-  
+
   if (logPath) {
     detailedMessage += `\n\nFull error details have been saved to:\n${logPath}`;
   }
-  
+
   const selection = await vscode.window.showErrorMessage(
     detailedMessage,
     { modal: true },
-    ...(logPath ? ["Open Log File", "Copy Log Path"] : [])
+    ...(logPath ? ["Open Log File", "Copy Log Path"] : []),
   );
-  
+
   if (selection === "Open Log File" && logPath) {
     try {
       const logUri = vscode.Uri.file(logPath);
