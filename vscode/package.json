@@ -137,6 +137,6 @@
   "dependencies": {
     "semver-parser": "^4.1.8",
     "vscode-languageclient": "^9.0.1",
-    "zod": "^4.0.16"
+    "zod": "^4.0.17"
   }
 }
