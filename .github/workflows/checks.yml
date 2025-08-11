@@ -73,7 +73,7 @@ jobs:
       - name: Setup PNPM And Install dependencies
         uses: pnpm/action-setup@v4
         with:
-          run_install:
+          run_install: |
             - cwd: ./vscode
 
       - name: Check formatting
