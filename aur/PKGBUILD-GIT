@@ -42,13 +42,13 @@ build() {
     export RUSTUP_TOOLCHAIN=1.88.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
     
-    # Configure environment for aws-lc-sys build with GCC
+    # Configure environment for aws-lc-sys build
     export AWS_LC_SYS_CMAKE_BUILDER=1
     export CMAKE_BUILD_TYPE=Release
     export AWS_LC_SYS_STATIC=1
     export AWS_LC_SYS_NO_PREFIX=1
     
-    # Configure bindgen for aws-lc-sys (clang needed for bindgen only)
+    # Configure bindgen for aws-lc-sys
     export BINDGEN_EXTRA_CLANG_ARGS="-I/usr/include"
     export LIBCLANG_PATH=/usr/lib
     
@@ -58,13 +58,16 @@ build() {
     export JEMALLOC_SYS_BACKGROUND_THREAD=1
     export CARGO_FEATURE_UNPREFIXED_MALLOC_ON_SUPPORTED_PLATFORMS=1
     
-    # Link against system jemalloc
-    export RUSTFLAGS="-L /usr/lib -l jemalloc"
+    # Configure linker flags for AWS-LC and jemalloc
+    export RUSTFLAGS="-L /usr/lib -l jemalloc -L native=/tmp -C link-arg=-Wl,--allow-multiple-definition"
     
     # Ensure proper library search paths
     export PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/share/pkgconfig
     export LIBRARY_PATH=/usr/lib:/lib
     export LD_LIBRARY_PATH=/usr/lib:/lib
+    
+    # Set target directory to avoid conflicts
+    export CARGO_TARGET_DIR=target
     
     cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)"
 }
