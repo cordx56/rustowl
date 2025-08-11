@@ -27,7 +27,6 @@ jobs:
         with:
           run_install:
             - cwd: ./scripts
-              args: [--frozen-lockfile]
 
       - name: Validate current commit (last commit) with commitlint
         working-directory: ./scripts

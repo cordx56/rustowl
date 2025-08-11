@@ -61,7 +61,6 @@ jobs:
         with:
           run_install:
             - cwd: ./vscode
-              args: [--frozen-lockfile]
       - name: Release vsce
         if: needs.meta.outputs.pre_release != 'true'
         run: |
