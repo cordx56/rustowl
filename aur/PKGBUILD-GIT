@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
-makedepends=('git' 'rustup' 'gcc' 'make' 'autoconf' 'automake' 'libtool' 'cmake' 'ninja' 'go' 'openssl' 'glibc' 'gcc-libs' 'pkgconf' 'perl' 'clang' 'llvm' 'nasm' 'jemalloc')
+makedepends=('git' 'rustup' 'make' 'autoconf' 'automake' 'libtool' 'cmake' 'ninja' 'go' 'glibc' 'gcc-libs' 'pkgconf' 'perl' 'clang' 'llvm' 'nasm' 'jemalloc')
 
 _build_deps=(
     'bindgen-cli'
