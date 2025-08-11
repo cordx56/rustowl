@@ -42,11 +42,11 @@ build() {
     export RUSTUP_TOOLCHAIN=1.88.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
     
-    # Configure environment for aws-lc-sys build
-    export AWS_LC_SYS_CMAKE_BUILDER=1
-    export CMAKE_BUILD_TYPE=Release
-    export AWS_LC_SYS_STATIC=1
+    # Use pregenerated bindings for AWS-LC to avoid build issues
+    export AWS_LC_SYS_PREBUILT_NASM=1
     export AWS_LC_SYS_NO_PREFIX=1
+    unset AWS_LC_SYS_CMAKE_BUILDER
+    unset AWS_LC_SYS_STATIC
     
     # Configure bindgen for aws-lc-sys
     export BINDGEN_EXTRA_CLANG_ARGS="-I/usr/include"
@@ -58,8 +58,8 @@ build() {
     export JEMALLOC_SYS_BACKGROUND_THREAD=1
     export CARGO_FEATURE_UNPREFIXED_MALLOC_ON_SUPPORTED_PLATFORMS=1
     
-    # Configure linker flags for AWS-LC and jemalloc
-    export RUSTFLAGS="-L /usr/lib -l jemalloc -L native=/tmp -C link-arg=-Wl,--allow-multiple-definition"
+    # Configure linker flags for jemalloc
+    export RUSTFLAGS="-L /usr/lib -l jemalloc"
     
     # Ensure proper library search paths
     export PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/share/pkgconfig
