@@ -71,12 +71,14 @@ So, RustOwl can be used easily from other editor.
   - [Neovim](#neovim)
   - [Emacs](#emacs)
   - [RustRover / IntelliJ IDEs](#rustrover--intellij-ides)
+  - [Sublime Text](#sublime-text)
 - [Architecture / OS / package repositories](#architecture--os--package-repositories)
   - [Cargo Binstall](#cargo-binstall)
   - [Windows](#windows)
   - [Archlinux](#archlinux)
   - [Nix flake](#nix-flake)
   - [GitHub Release](#github-release)
+  - [Docker](#docker)
 - [Build manually](#build-manually)
 - [Note](#note)
 <!--toc:end-->
@@ -97,7 +99,7 @@ Here we describe how to start using RustOwl with VS Code.
   - You can install `cargo` using `rustup` from [this link](https://rustup.rs/).
 - Visual Studio Code (VS Code) installed
 
-We tested this guide on macOS Sequoia 15.3.2 on arm64 architecture with VS Code 1.99.3 and `cargo` 1.88.0.
+We tested this guide on macOS Sequoia 15.3.2 on arm64 architecture with VS Code 1.99.3 and `cargo` 1.89.0.
 
 ### VS Code
 
@@ -134,6 +136,8 @@ Minimal setup with [lazy.nvim](https://github.com/folke/lazy.nvim):
 }
 ```
 
+For comprehensive configuration options including custom highlight colors, see the [Neovim Configuration Guide](docs/neovim-configuration.md).
+
 <details>
 <summary>Recommended configuration: <b>Click to expand</b></summary>
 
@@ -166,6 +170,14 @@ Default options:
   idle_time = 500, -- Time in milliseconds to hover with the cursor before triggering RustOwl
   client = {}, -- LSP client configuration that gets passed to `vim.lsp.start`
   highlight_style = 'undercurl', -- You can also use 'underline'
+  colors = { -- Customize highlight colors (hex colors)
+    lifetime = '#00cc00',   -- 🟩 green: variable's actual lifetime
+    imm_borrow = '#0000cc', -- 🟦 blue: immutable borrowing
+    mut_borrow = '#cc00cc', -- 🟪 purple: mutable borrowing
+    move = '#cccc00',       -- 🟧 orange: value moved
+    call = '#cccc00',       -- 🟧 orange: function call
+    outlive = '#cc0000',    -- 🟥 red: lifetime error
+  },
 }
 ```
 
@@ -190,9 +202,16 @@ Elpaca example:
 
 ```elisp
 (elpaca
-  (rustowlsp
+  (rustowl
     :host github
     :repo "cordx56/rustowl"))
+```
+
+Then use-package:
+
+```elisp
+(use-package rustowl
+  :after lsp-mode)
 ```
 
 You have to install RustOwl LSP server manually.
@@ -201,6 +220,10 @@ You have to install RustOwl LSP server manually.
 
 There is a [third-party repository](https://github.com/siketyan/intellij-rustowl) that supports IntelliJ IDEs.
 You have to install RustOwl LSP server manually.
+
+### Sublime Text
+
+There is a [third-party repository](https://github.com/CREAsTIVE/LSP-rustowl) that supports Sublime Text.
 
 ## Architecture / OS / package repositories
 
@@ -248,10 +271,48 @@ yay -S rustowl-git
 
 There is a [third-party Nix flake repository](https://github.com/nix-community/rustowl-flake) in the Nix community.
 
-## GitHub Release
+### GitHub Release
 
 Download only `rustowl` executable from [release page](https://github.com/cordx56/rustowl/releases/latest) and place it into the place you desire.
 Toolchain is automatically Downloaded and unpacked.
+
+### Docker
+
+You can run `rustowl` using the pre-built Docker image from GitHub Container Registry (GHCR).
+
+1. Pull the latest stable image
+
+```sh
+docker pull ghcr.io/cordx56/rustowl:latest
+```
+
+Or pull a specific version:
+
+```sh
+docker pull ghcr.io/cordx56/rustowl:v0.3.4
+```
+
+2. Run the image
+
+```sh
+docker run --rm -v /path/to/project:/app ghcr.io/cordx56/rustowl:latest
+```
+
+You can also pass command-line arguments as needed:
+
+```sh
+docker run --rm /path/to/project:/app ghcr.io/cordx56/rustowl:latest --help
+```
+
+3. (Optional) Use as a CLI
+
+To use `rustowl` as if it were installed on your system, you can create a shell alias:
+
+```sh
+alias rustowl='docker run --rm -v $(pwd):/app ghcr.io/cordx56/rustowl:latest'
+```
+
+Now you can run `rustowl` from your terminal like a regular command.
 
 ## Build manually
 

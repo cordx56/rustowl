@@ -1,12 +1,10 @@
 mod analyze;
+mod cache;
 
-use analyze::MirAnalyzer;
+use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
-use rustc_middle::{
-    mir::ConcreteOpaqueTypes, query::queries::mir_borrowck::ProvidedValue, ty::TyCtxt,
-    util::Providers,
-};
+use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
 use std::collections::HashMap;
@@ -43,14 +41,14 @@ static HANDLE: LazyLock<Handle> = LazyLock::new(|| RUNTIME.handle().clone());
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
 }
-fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
+fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     log::info!("start borrowck of {def_id:?}");
 
     let mut def_ids = vec![def_id];
     def_ids.extend_from_slice(tcx.nested_bodies_within(def_id));
 
     for def_id in def_ids {
-        let analyzer = MirAnalyzer::new(
+        let analyzer = MirAnalyzer::init(
             // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
             // This can be done since the TyCtxt object lives until the analysis tasks joined
             // in after_analysis method.
@@ -59,9 +57,26 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
         );
         RUNTIME.block_on(async move {
             let mut locked = TASKS.lock().await;
-            locked.spawn_on(analyzer, &HANDLE);
+
+            match analyzer {
+                MirAnalyzerInitResult::Cached(cached) => {
+                    handle_analyzed_result(tcx, cached);
+                }
+                MirAnalyzerInitResult::Analyzer(analyzer) => {
+                    locked.spawn_on(analyzer, &HANDLE);
+                }
+            }
         });
     }
+
+    RUNTIME.block_on(async move {
+        let mut tasks = TASKS.lock().await;
+        log::info!("there are {} tasks", tasks.len());
+        while let Some(Ok(analyzer)) = tasks.try_join_next() {
+            log::info!("one task joined");
+            handle_analyzed_result(tcx, analyzer.analyze());
+        }
+    });
 
     Ok(tcx
         .arena
@@ -78,35 +93,46 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         config.override_queries = Some(override_queries);
         config.make_codegen_backend = None;
     }
-
-    /// join all tasks after all analysis finished
-    fn after_analysis<'tcx>(
+    fn after_expansion<'tcx>(
         &mut self,
         _compiler: &interface::Compiler,
         tcx: TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
-        // get currently-compiling crate name
-        let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
+        let _ = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
+
+        // join all tasks after all analysis finished
         RUNTIME.block_on(async move {
-            let task_len = { TASKS.lock().await.len() };
-            let mut joined = 0;
-            while let Some(task) = { TASKS.lock().await.join_next().await } {
-                joined += 1;
-                log::info!("borrow checked: {joined} / {task_len}");
-                let (filename, analyzed) = task.unwrap().analyze();
-                log::info!("analyzed one item of {filename}");
-                let krate = Crate(HashMap::from([(
-                    filename,
-                    File {
-                        items: vec![analyzed],
-                    },
-                )]));
-                let ws = Workspace(HashMap::from([(crate_name.clone(), krate)]));
-                println!("{}", serde_json::to_string(&ws).unwrap());
+            while let Some(Ok(analyzer)) = { TASKS.lock().await.join_next().await } {
+                log::info!("one task joined");
+                handle_analyzed_result(tcx, analyzer.analyze());
+            }
+            if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
+                cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
             }
         });
+
         rustc_driver::Compilation::Continue
     }
+}
+
+pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
+    if let Some(cache) = cache::CACHE.lock().unwrap().as_mut() {
+        cache.insert_cache(
+            analyzed.file_hash.clone(),
+            analyzed.mir_hash.clone(),
+            analyzed.analyzed.clone(),
+        );
+    }
+    let krate = Crate(HashMap::from([(
+        analyzed.file_name.to_owned(),
+        File {
+            items: vec![analyzed.analyzed],
+        },
+    )]));
+    // get currently-compiling crate name
+    let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
+    let ws = Workspace(HashMap::from([(crate_name.clone(), krate)]));
+    println!("{}", serde_json::to_string(&ws).unwrap());
 }
 
 pub fn run_compiler() -> i32 {

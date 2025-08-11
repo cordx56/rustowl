@@ -11,9 +11,11 @@ Here, we describe the types we will use in this document.
 
 ### `OprType`
 
+<!-- prettier-ignore-start -->
 ```typescript
 "lifetime" | "imm_borrow" | "mut_borrow" | "move" | "call" | "outlive" | "shared_mut"
 ```
+<!-- prettier-ignore-end -->
 
 ### `Decoration`
 

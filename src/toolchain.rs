@@ -8,14 +8,20 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 
 pub const TOOLCHAIN: &str = env!("RUSTOWL_TOOLCHAIN");
-const HOST_TUPLE: &str = env!("HOST_TUPLE");
+pub const HOST_TUPLE: &str = env!("HOST_TUPLE");
 const TOOLCHAIN_CHANNEL: &str = env!("TOOLCHAIN_CHANNEL");
 const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
 pub static FALLBACK_RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-    env::home_dir()
-        .map(|v| v.join(".rustowl"))
-        .unwrap_or(PathBuf::from("/opt/rustowl"))
+    let opt = PathBuf::from("/opt/rustowl");
+    if sysroot_from_runtime(&opt).is_dir() {
+        return opt;
+    }
+    let same = env::current_exe().unwrap().parent().unwrap().to_path_buf();
+    if sysroot_from_runtime(&same).is_dir() {
+        return same;
+    }
+    env::home_dir().unwrap().join(".rustowl")
 });
 
 fn recursive_read_dir(path: impl AsRef<Path>) -> Vec<PathBuf> {
@@ -256,6 +262,17 @@ pub async fn get_executable_path(name: &str) -> String {
     exec_name.to_owned()
 }
 
+pub async fn setup_cargo_command() -> tokio::process::Command {
+    let cargo = get_executable_path("cargo").await;
+    let mut command = tokio::process::Command::new(&cargo);
+    let rustowlc = get_executable_path("rustowlc").await;
+    command
+        .env("RUSTC", &rustowlc)
+        .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc);
+    set_rustc_env(&mut command, &get_sysroot().await);
+    command
+}
+
 pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
     command
         .env("RUSTC_BOOTSTRAP", "1") // Support nightly projects
@@ -288,13 +305,5 @@ pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
         paths.push_front(sysroot.join("bin"));
         let paths = env::join_paths(paths).unwrap();
         command.env("Path", paths);
-    }
-
-    #[cfg(unix)]
-    unsafe {
-        command.pre_exec(|| {
-            libc::setsid();
-            Ok(())
-        });
     }
 }

@@ -5,7 +5,7 @@ if not vim.g.loaded_rustowl then
 
   local highlight_style = config.highlight_style or 'undercurl'
 
-  local highlights = {
+  local default_colors = {
     lifetime = '#00cc00',
     imm_borrow = '#0000cc',
     mut_borrow = '#cc00cc',
@@ -13,6 +13,9 @@ if not vim.g.loaded_rustowl then
     call = '#cccc00',
     outlive = '#cc0000',
   }
+
+  -- Ensure all color keys are present even if user provides a partial table
+  local highlights = vim.tbl_deep_extend('keep', config.colors or {}, default_colors)
 
   for hl_name, color in pairs(highlights) do
     local options = { default = true, sp = color }
@@ -68,6 +71,26 @@ if not vim.g.loaded_rustowl then
         return vim.tbl_filter(function(command)
           return command:find(arg_lead) ~= nil
         end, commands)
+      end
+    end,
+  })
+
+  -- Send analyze request on save
+  local analyze_augroup = vim.api.nvim_create_augroup('RustOwlAnalyzeOnSave', { clear = false })
+  vim.api.nvim_create_autocmd('BufWritePost', {
+    group = analyze_augroup,
+    buffer = 0,
+    desc = 'RustOwl: send rustowl/analyze on save',
+    callback = function(args)
+      -- Only send when rustowl is enabled
+      local rustowl = require('rustowl')
+      if not rustowl.is_enabled() then
+        return
+      end
+      local lsp = require('rustowl.lsp')
+      local clients = lsp.get_rustowl_clients { bufnr = args.buf }
+      for _, client in ipairs(clients) do
+        client:request('rustowl/analyze', {}, function() end, args.buf)
       end
     end,
   })
