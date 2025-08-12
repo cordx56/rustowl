@@ -56,7 +56,7 @@ jobs:
         if: ${{ env.is_linux == 'true' }}
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.14.1
+          version: 0.13.0
 
       - name: Build
         run: |
