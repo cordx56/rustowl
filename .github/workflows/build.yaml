@@ -73,6 +73,7 @@ jobs:
             ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
           else
             ./target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
+          fi
 
       - name: Set archive name
         run: |
