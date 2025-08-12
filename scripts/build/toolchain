@@ -17,20 +17,21 @@ install_component() {
     echo "Installing component $1..." 1>&2
     temp="$(mktemp -d)"
     download_component "$1" > "$temp/archive.tar.gz"
-    if [ "$HOST_TUPLE" == *windows* ]; then
-        7z.exe x "$temp/archive.tar.gz" -o"$temp" -mmt > /dev/null
-    else
-        tar xf "$temp/archive.tar.gz" -C "$temp" > /dev/null
-    fi
-    /bin/sh "$(find "$temp" -type f -maxdepth 2 | grep "install.sh")" --destdir="$2" --prefix= > /dev/null
+    case "$HOST_TUPLE" in
+        *windows*)
+            7z.exe x "$temp/archive.tar.gz" -o"$temp" -mmt > /dev/null ;;
+        *)
+            tar xf "$temp/archive.tar.gz" -C "$temp" > /dev/null ;;
+    esac
+    /bin/sh "$(find "$temp" -type f -name "install.sh" | head -n 1)" --destdir="$2" --prefix= > /dev/null
     rm -rf "$temp"
     echo "$1 installed." 1>&2
 }
 install_toolchain() {
     mkdir -p "$1"
 
-    components=("rustc" "rust-std" "cargo" "rustc-dev" "llvm-tools")
-    for component in ${components[@]}; do
+    components="rustc rust-std cargo rustc-dev llvm-tools"
+    for component in $components; do
         install_component "$component" "$1" &
     done
     wait
