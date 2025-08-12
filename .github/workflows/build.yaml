@@ -13,7 +13,7 @@ on:
 
 jobs:
   rustowl:
-    if: github.event.action != "labeled" || github.event.label.name == "do-build-check"
+    if: github.event.action != 'labeled' || github.event.label.name == 'do-build-check'
     strategy:
       matrix:
         os:
@@ -127,7 +127,7 @@ jobs:
             ${{ env.archive_name }}
 
   vscode:
-    if: github.event.action != "labeled" || github.event.label.name == "do-build-check"
+    if: github.event.action != 'labeled' || github.event.label.name == 'do-build-check'
     runs-on: ubuntu-latest
     permissions:
       contents: write
