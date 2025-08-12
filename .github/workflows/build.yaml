@@ -3,6 +3,8 @@ name: Build RustOwl
 on:
   push:
     branches: ["main"]
+  pull_request:
+    types: ["labeled"]
   workflow_call:
     outputs:
       run_id:
@@ -11,6 +13,7 @@ on:
 
 jobs:
   rustowl:
+    if: github.event.action != "labeled" || github.event.label.name == "do-build-check"
     strategy:
       matrix:
         os:
@@ -124,6 +127,7 @@ jobs:
             ${{ env.archive_name }}
 
   vscode:
+    if: github.event.action != "labeled" || github.event.label.name == "do-build-check"
     runs-on: ubuntu-latest
     permissions:
       contents: write

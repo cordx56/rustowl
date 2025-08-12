@@ -49,25 +49,15 @@ print_toolchain() {
 }
 
 
-DIST_BASE="https://static.rust-lang.org/dist"
-check_component() {
-    component="$1"
-    url="${DIST_BASE}/${component}-$(print_toolchain).tar.gz"
-
-    component_sub="$(echo "${component}" | sed s/-/_/g)"
-    echo "RUSTOWL_COMPONENT_${component_sub}_URL=${url}"
-    echo "RUSTOWL_COMPONENT_${component_sub}_HASH=$(curl "$url.sha256" 2>/dev/null | awk '{ print $1 }')"
-}
-
 print_env() {
     echo "TOOLCHAIN_CHANNEL=${TOOLCHAIN_CHANNEL}"
-    echo "RUSTOWL_TOOLCHAIN=$(print_toolchain)"
+    toolchain="$(print_toolchain)"
+    echo "RUSTOWL_TOOLCHAIN=$toolchain"
     echo "HOST_TUPLE=$(host_tuple)"
-    check_component "rustc"
-    check_component "rust-std"
-    check_component "cargo"
-    check_component "rustc-dev"
-    check_component "llvm-tools"
+    sysroot="${SYSROOT:-"$HOME/.rustowl/sysroot/$toolchain"}"
+    echo "SYSROOT=$sysroot"
+    echo "PATH=$sysroot/bin:$PATH"
+    echo "RUSTC_BOOTSTRAP=rustowlc"
 }
 
 print_env
