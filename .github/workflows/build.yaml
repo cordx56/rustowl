@@ -67,16 +67,12 @@ jobs:
             ./scripts/build/toolchain cargo install --locked cargo-zigbuild
             ./scripts/build/toolchain cargo zigbuild --target ${{ env.host_tuple }}.2.17 --profile=${{ env.build_profile }}
           else
-            ./scripts/build/toolchain cargo build --profile=${{ env.build_profile }}
+            ./scripts/build/toolchain cargo build --target ${{ env.host_tuple }} --profile=${{ env.build_profile }}
           fi
 
       - name: Check the functionality
         run: |
-          if [[ "${{ env.is_linux }}" == "true"  ]]; then
-            ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
-          else
-            ./target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
-          fi
+          ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
 
       - name: Set archive name
         run: |
@@ -88,35 +84,29 @@ jobs:
 
       - name: Setup archive artifacts
         run: |
-          rm -rf runtime && mkdir -p runtime/sysroot/${{ env.toolchain }}/bin
+          rm -rf rustowl && mkdir -p rustowl/sysroot/${{ env.toolchain }}/bin
 
-          if [[ "${{ env.is_linux }}" == "true"  ]]; then
-            cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/
-            cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
-          else
-            cp target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./runtime/
-            cp target/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./runtime/sysroot/${{ env.toolchain }}/bin
-          fi
+          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./rustowl/
+          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/sysroot/${{ env.toolchain }}/bin
 
-          cp README.md ./runtime
-          cp LICENSE ./runtime
+          cp README.md ./rustowl
+          cp LICENSE ./rustowl
 
           find target -type d | grep -E 'rustowl-build-time-out$' | xargs -I % cp -r % ./
-          cp -r rustowl-build-time-out/completions ./runtime
-          cp -r rustowl-build-time-out/man ./runtime
+          cp -r rustowl-build-time-out/completions ./rustowl
+          cp -r rustowl-build-time-out/man ./rustowl
 
           rm -rf ${{ env.archive_name }}
-          cd runtime
 
           if [[ "${{ env.is_windows }}" == "true" ]]; then
-            mkdir rustowl
-            mv README.md LICENSE sysroot/ completions/ man/ rustowl${{ env.exec_ext }} rustowl/
-            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath "..\${{ env.archive_name }}" -CompressionLevel Optimal'
+            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath ".\${{ env.archive_name }}" -CompressionLevel Optimal'
           else
+            cd rustowl
             tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ completions/ man/ rustowl${{ env.exec_ext }}
+            cd ..
           fi
 
-          cp ./rustowl${{ env.exec_ext }} ../rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
+          cp ./rustowl/rustowl${{ env.exec_ext }} ./rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
 
       - name: Upload
         uses: actions/upload-artifact@v4
