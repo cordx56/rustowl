@@ -18,7 +18,7 @@ download_component() {
 # install_toolchain <sysroot-path>
 install_component() {
     temp="$(mktemp -d)"
-    download_component "$1" | tar xf - -C "$temp" > /dev/null
+    download_component "$1" | tar xzf - -C "$temp" > /dev/null
     echo "Component $1 extracted" 1>&2
     /bin/sh "$(find "$temp" -type f -name "install.sh" | head -n 1)" --destdir="$2" --prefix= > /dev/null
     rm -rf "$temp"
