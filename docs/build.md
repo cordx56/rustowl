@@ -47,10 +47,10 @@ cargo install --path . --locked
 - VS Code installed
   - You can install VS Code from [this link](https://code.visualstudio.com/).
 - Node.js installed
-- `yarn` installed
-  - After installing Node.js, You can install `yarn` by running `npm install -g yarn`.
+- `pnpm` installed
+  - After installing Node.js, You can install `pnpm` by running `npm install -g pnpm`.
 
-VS Code extension has been tested on macOS Sequoia 15.3.2 on arm64 architecture with Visual Studio Code 1.99.3, Node.js v20.16.0, and `yarn` 1.22.22.
+VS Code extension has been tested on macOS Sequoia 15.3.2 on arm64 architecture with Visual Studio Code 1.99.3, Node.js v20.16.0, and `pnpm` 1.22.22.
 Other dependencies are locked in the configuration files and will be installed automatically.
 
 ### Build & Run
@@ -59,7 +59,7 @@ First, install the dependencies:
 
 ```bash
 cd vscode
-yarn install --frozen-lockfile
+pnpm install --frozen-lockfile
 ```
 
 Then, open the `vscode` directory in VS Code.

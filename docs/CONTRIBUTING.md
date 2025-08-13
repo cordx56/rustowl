@@ -42,7 +42,7 @@ brew install gnuplot
 
 **Node.js Development (for VS Code extension):**
 
-- Node.js and yarn for VS Code extension development
+- Node.js and pnpm for VS Code extension development
 
 ### Rust code
 
@@ -77,11 +77,11 @@ Note that by using normal `cargo` command RustOwl will be built with nightly com
 
 ### VS Code extension
 
-For VS Code extension, we use `yarn` to setup environment.
+For VS Code extension, we use `pnpm` to setup environment.
 To get started, you have to install dependencies by running following command inside `vscode` directory:
 
 ```bash
-yarn install
+pnpm install
 ```
 
 ## Before submitting PR
@@ -187,9 +187,9 @@ If the automated scripts are not available, ensure:
 
 #### VS Code extension Style
 
-- Correctly formatted by `yarn prettier --write src`
-- Linting passes with `yarn lint`
-- Type checking passes with `yarn check-types`
+- Correctly formatted by `pnpm fmt`
+- Linting passes with `pnpm lint`
+- Type checking passes with `pnpm check-types`
 
 ## Development Workflow
 
