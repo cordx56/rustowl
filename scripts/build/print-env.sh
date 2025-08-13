@@ -10,38 +10,42 @@ TOOLCHAIN_CHANNEL="$1"
 
 # print host-tuple
 host_tuple() {
-    # Get OS
-    case "$(uname -s)" in
-        Linux)
-            os="unknown-linux-gnu"
-            ;;
-        Darwin)
-            os="apple-darwin"
-            ;;
-        CYGWIN*|MINGW32*|MSYS*|MINGW*)
-            os="pc-windows-msvc"
-            ;;
-        *)
-            echo "Unsupported OS: $(uname -s)" >&2
-            exit 1
-            ;;
-    esac
+    if [ -z "$TOOLCHAIN_OS" ]; then
+        # Get OS
+        case "$(uname -s)" in
+            Linux)
+                TOOLCHAIN_OS="unknown-linux-gnu"
+                ;;
+            Darwin)
+                TOOLCHAIN_OS="apple-darwin"
+                ;;
+            CYGWIN*|MINGW32*|MSYS*|MINGW*)
+                TOOLCHAIN_OS="pc-windows-msvc"
+                ;;
+            *)
+                echo "Unsupported OS: $(uname -s)" >&2
+                exit 1
+                ;;
+        esac
+    fi
 
-    # Get architecture
-    case "$(uname -m)" in
-        arm64|aarch64)
-            arch="aarch64"
-            ;;
-        x86_64|amd64)
-            arch="x86_64"
-            ;;
-        *)
-            echo "Unsupported architecture: $(uname -m)" >&2
-            exit 1
-            ;;
-    esac
+    if [ -z "$TOOLCHAIN_ARCH" ]; then
+        # Get architecture
+        case "$(uname -m)" in
+            arm64|aarch64)
+                TOOLCHAIN_ARCH="aarch64"
+                ;;
+            x86_64|amd64)
+                TOOLCHAIN_ARCH="x86_64"
+                ;;
+            *)
+                echo "Unsupported architecture: $(uname -m)" >&2
+                exit 1
+                ;;
+        esac
+    fi
 
-    echo "$arch-$os"
+    echo "$TOOLCHAIN_ARCH-$TOOLCHAIN_OS"
 }
 
 print_toolchain() {
@@ -49,25 +53,15 @@ print_toolchain() {
 }
 
 
-DIST_BASE="https://static.rust-lang.org/dist"
-check_component() {
-    component="$1"
-    url="${DIST_BASE}/${component}-$(print_toolchain).tar.gz"
-
-    component_sub="$(echo "${component}" | sed s/-/_/g)"
-    echo "RUSTOWL_COMPONENT_${component_sub}_URL=${url}"
-    echo "RUSTOWL_COMPONENT_${component_sub}_HASH=$(curl "$url.sha256" 2>/dev/null | awk '{ print $1 }')"
-}
-
 print_env() {
     echo "TOOLCHAIN_CHANNEL=${TOOLCHAIN_CHANNEL}"
-    echo "RUSTOWL_TOOLCHAIN=$(print_toolchain)"
+    toolchain="$(print_toolchain)"
+    echo "RUSTOWL_TOOLCHAIN=$toolchain"
     echo "HOST_TUPLE=$(host_tuple)"
-    check_component "rustc"
-    check_component "rust-std"
-    check_component "cargo"
-    check_component "rustc-dev"
-    check_component "llvm-tools"
+    sysroot="${SYSROOT:-"$HOME/.rustowl/sysroot/$toolchain"}"
+    echo "SYSROOT=$sysroot"
+    echo "PATH=$sysroot/bin:$PATH"
+    echo "RUSTC_BOOTSTRAP=rustowlc"
 }
 
 print_env

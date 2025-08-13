@@ -2,23 +2,42 @@
 
 script_dir="$(cd $(dirname "$0"); pwd)"
 
+IFS='
+'
 export $(/bin/sh "$script_dir/print-env.sh" "$(cat "${script_dir}/channel")")
+unset IFS
 
-export SYSROOT="${SYSROOT:-"$HOME/.rustowl/sysroot/${RUSTOWL_TOOLCHAIN}"}"
-export PATH="${SYSROOT}/bin:$PATH"
+DIST_BASE="https://static.rust-lang.org/dist"
+download_component() {
+    url="${DIST_BASE}/$1-${RUSTOWL_TOOLCHAIN}.${2:-"tar.gz"}"
+    echo "Downloading from $url" 1>&2
 
-export RUSTC_BOOTSTRAP=rustowlc
+    curl -fsSL "$url"
+}
 
 # install_toolchain <sysroot-path>
+install_component() {
+    temp="$(mktemp -d)"
+    download_component "$1" | tar xzf - -C "$temp" > /dev/null
+    echo "Component $1 extracted" 1>&2
+
+    component="$1-${RUSTOWL_TOOLCHAIN}"
+    for com in $(cat "$temp/$component/components"); do
+        base="$temp/$component/$com"
+        (cd "$base" && find * -type f -exec /bin/sh -c "mkdir -p \"$2/\$(dirname \"{}\")\" && mv \"$base/{}\" \"$2/{}\"" \;)
+    done
+
+    rm -rf "$temp"
+    echo "Component $1 installed." 1>&2
+}
 install_toolchain() {
     mkdir -p "$1"
 
-    for url in $(env | grep "RUSTOWL_COMPONENT_.*_URL" | cut -d= -f2); do
-        temp="$(mktemp -d)"
-        curl "$url" | tar xzf - -C "$temp"
-        /bin/sh "$(find "$temp" -type f -maxdepth 2 | grep "install.sh")" --destdir="$1" --prefix= > /dev/null
-        rm -rf "$temp"
+    components="rustc rust-std cargo rustc-dev llvm-tools"
+    for component in $components; do
+        install_component "$component" "$1" &
     done
+    wait
 }
 
 #
