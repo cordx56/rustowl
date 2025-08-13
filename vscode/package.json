@@ -112,7 +112,7 @@
     "run-test": "node out/tests/runTest.js",
     "coverage": "c8 --include=\"out/src/**/*.js\" --all --reporter=text pnpm run test",
     "fmt": "prettier -w .",
-    "build": "vsce package"
+    "build": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.9",
