@@ -37,15 +37,19 @@ jobs:
         uses: actions/checkout@v5
 
       # Using fat LTO causes failure to link on Windows ARM
-      # And install some dependencies
-      - name: Windows ARM setup
+      - name: Set build profile
         run: |
           if [[ "${{ matrix.os }}" == "windows-11-arm" ]]; then
             echo "build_profile=arm-windows-release" >> $GITHUB_ENV
-            choco install ninja vswhere nasm
           else
             echo "build_profile=release" >> $GITHUB_ENV
           fi
+
+      - name: Setup msbuild for ARM
+        if: matrix.os == 'windows-11-arm'
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: arm64
 
       - name: setup env
         run: |
