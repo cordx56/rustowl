@@ -70,15 +70,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Read pnpm version (vscode)
-        id: pnpm_vscode
-        uses: ./.github/actions/pnpm-version
-        with:
-          package_json: ./vscode/package.json
       - name: Setup PNPM And Install dependencies
         uses: pnpm/action-setup@v4
         with:
-          version: ${{ steps.pnpm_vscode.outputs.version }}
+          package_json_file: ./vscode/package.json
           run_install: |
             - cwd: ./vscode
 
