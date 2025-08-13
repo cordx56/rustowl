@@ -10,38 +10,42 @@ TOOLCHAIN_CHANNEL="$1"
 
 # print host-tuple
 host_tuple() {
-    # Get OS
-    case "$(uname -s)" in
-        Linux)
-            os="unknown-linux-gnu"
-            ;;
-        Darwin)
-            os="apple-darwin"
-            ;;
-        CYGWIN*|MINGW32*|MSYS*|MINGW*)
-            os="pc-windows-msvc"
-            ;;
-        *)
-            echo "Unsupported OS: $(uname -s)" >&2
-            exit 1
-            ;;
-    esac
+    if [ -z "$OS" ]; then
+        # Get OS
+        case "$(uname -s)" in
+            Linux)
+                OS="unknown-linux-gnu"
+                ;;
+            Darwin)
+                OS="apple-darwin"
+                ;;
+            CYGWIN*|MINGW32*|MSYS*|MINGW*)
+                OS="pc-windows-msvc"
+                ;;
+            *)
+                echo "Unsupported OS: $(uname -s)" >&2
+                exit 1
+                ;;
+        esac
+    fi
 
-    # Get architecture
-    case "$(uname -m)" in
-        arm64|aarch64)
-            arch="aarch64"
-            ;;
-        x86_64|amd64)
-            arch="x86_64"
-            ;;
-        *)
-            echo "Unsupported architecture: $(uname -m)" >&2
-            exit 1
-            ;;
-    esac
+    if [ -z "$ARCH" ]; then
+        # Get architecture
+        case "$(uname -m)" in
+            arm64|aarch64)
+                ARCH="aarch64"
+                ;;
+            x86_64|amd64)
+                ARCH="x86_64"
+                ;;
+            *)
+                echo "Unsupported architecture: $(uname -m)" >&2
+                exit 1
+                ;;
+        esac
+    fi
 
-    echo "$arch-$os"
+    echo "$ARCH-$OS"
 }
 
 print_toolchain() {

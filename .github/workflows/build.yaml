@@ -45,11 +45,10 @@ jobs:
             echo "build_profile=release" >> $GITHUB_ENV
           fi
 
-      - name: Setup msbuild for ARM
+      # uname on Windows on ARM returns "x86_64"
+      - name: Set ARCH flag for Windows on ARM
         if: matrix.os == 'windows-11-arm'
-        uses: microsoft/setup-msbuild@v2
-        with:
-          msbuild-architecture: arm64
+        run: echo "ARCH=aarch64" >> $GITHUB_ENV
 
       - name: setup env
         run: |
