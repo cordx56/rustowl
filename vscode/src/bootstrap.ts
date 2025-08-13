@@ -198,8 +198,27 @@ const writeErrorLog = async (
 
 const showDetailedError = async (errorOutput: string, logPath: string) => {
   const errorLines = errorOutput.trim().split("\n");
-  const summary =
-    errorLines.length > 0 ? errorLines[0] : "Unknown error occurred";
+
+  // Extract meaningful error summary from stderr (not just first line which may be logging)
+  let summary = "Toolchain setup failed";
+
+  // Look for actual error messages (lines starting with "error:")
+  const errorLine = errorLines.find((line) => line.trim().startsWith("error:"));
+  if (errorLine) {
+    summary = errorLine.trim();
+  } else {
+    // Look for other failure indicators
+    const failureLine = errorLines.find(
+      (line) =>
+        line.toLowerCase().includes("failed") ||
+        line.toLowerCase().includes("cannot") ||
+        line.toLowerCase().includes("unable to") ||
+        line.toLowerCase().includes("permission denied"),
+    );
+    if (failureLine) {
+      summary = failureLine.trim();
+    }
+  }
 
   // Create a more detailed error message
   let detailedMessage = `RustOwl toolchain setup failed:\n\n${summary}`;
