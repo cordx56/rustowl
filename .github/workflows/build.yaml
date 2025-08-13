@@ -56,7 +56,7 @@ jobs:
         if: ${{ env.is_linux == 'true' }}
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.14.1
+          version: 0.13.0
 
       - name: Build
         run: |
@@ -73,6 +73,7 @@ jobs:
             ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
           else
             ./target/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
+          fi
 
       - name: Set archive name
         run: |
