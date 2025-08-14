@@ -1,5 +1,6 @@
 use rayon::prelude::*;
 use rustc_borrowck::consumers::{BorrowSet, PoloniusLocationTable, PoloniusOutput};
+use rustc_index::Idx;
 use rustc_middle::mir::Local;
 use rustowl::{models::*, utils};
 use std::collections::{BTreeSet, HashMap};
@@ -9,26 +10,14 @@ pub fn get_accurate_live(
     location_table: &PoloniusLocationTable,
     basic_blocks: &[MirBasicBlock],
 ) -> HashMap<Local, Vec<Range>> {
-    let output = &datafrog;
-    let mut lives = HashMap::new();
-    for (location_idx, vars) in output.var_live_on_entry.iter() {
-        let location = location_table.to_rich_location(*location_idx);
-        for var in vars {
-            lives.entry(*var).or_insert_with(Vec::new).push(location);
-        }
-    }
-    lives
-        .into_par_iter()
-        .map(|(local, locations)| {
-            (
-                local,
-                utils::eliminated_ranges(super::transform::rich_locations_to_ranges(
-                    basic_blocks,
-                    &locations,
-                )),
-            )
-        })
-        .collect()
+    get_range(
+        datafrog
+            .var_live_on_entry
+            .iter()
+            .map(|(p, v)| (*p, v.iter().copied())),
+        location_table,
+        basic_blocks,
+    )
 }
 
 /// returns (shared, mutable)
@@ -149,21 +138,36 @@ pub fn drop_range(
     location_table: &PoloniusLocationTable,
     basic_blocks: &[MirBasicBlock],
 ) -> HashMap<Local, Vec<Range>> {
-    let mut local_live_locs = HashMap::new();
-    for (loc_idx, locals) in datafrog.var_drop_live_on_entry.iter() {
-        let location = location_table.to_rich_location(*loc_idx);
+    get_range(
+        datafrog
+            .var_drop_live_on_entry
+            .iter()
+            .map(|(p, v)| (*p, v.iter().copied())),
+        location_table,
+        basic_blocks,
+    )
+}
+
+pub fn get_range(
+    live_on_entry: impl Iterator<Item = (impl Idx, impl Iterator<Item = impl Idx>)>,
+    location_table: &PoloniusLocationTable,
+    basic_blocks: &[MirBasicBlock],
+) -> HashMap<Local, Vec<Range>> {
+    let mut local_locs = HashMap::new();
+    for (loc_idx, locals) in live_on_entry {
+        let location = location_table.to_rich_location(loc_idx.index().into());
         for local in locals {
-            local_live_locs
-                .entry(*local)
+            local_locs
+                .entry(local.index())
                 .or_insert_with(Vec::new)
                 .push(location);
         }
     }
-    local_live_locs
+    local_locs
         .into_par_iter()
         .map(|(local, locations)| {
             (
-                local,
+                local.into(),
                 utils::eliminated_ranges(super::transform::rich_locations_to_ranges(
                     basic_blocks,
                     &locations,

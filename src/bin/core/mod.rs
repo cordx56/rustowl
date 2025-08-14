@@ -98,7 +98,7 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         _compiler: &interface::Compiler,
         tcx: TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
-        let _ = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
+        let result = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
 
         // join all tasks after all analysis finished
         RUNTIME.block_on(async move {
@@ -111,7 +111,11 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
             }
         });
 
-        rustc_driver::Compilation::Continue
+        if result.is_ok() {
+            rustc_driver::Compilation::Continue
+        } else {
+            rustc_driver::Compilation::Stop
+        }
     }
 }
 
