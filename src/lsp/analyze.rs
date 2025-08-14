@@ -121,7 +121,7 @@ impl Analyzer {
 
         let mut command = toolchain::setup_cargo_command().await;
 
-        let mut args = vec!["check"];
+        let mut args = vec!["check", "--workspace"];
         if all_targets {
             args.push("--all-targets");
         }
@@ -254,9 +254,8 @@ pub struct AnalyzeEventIter {
 impl AnalyzeEventIter {
     pub async fn next_event(&mut self) -> Option<AnalyzerEvent> {
         tokio::select! {
-            Some(v) = self.receiver.recv() => Some(v),
+            v = self.receiver.recv() => v,
             _ = self.notify.notified() => None,
-            else => None,
         }
     }
 }

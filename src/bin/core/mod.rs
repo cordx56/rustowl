@@ -9,10 +9,9 @@ use rustc_session::config;
 use rustowl::models::*;
 use std::collections::HashMap;
 use std::env;
-use std::sync::{LazyLock, atomic::AtomicBool};
+use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
 use tokio::{
-    runtime::{Builder, Handle, Runtime},
-    sync::Mutex,
+    runtime::{Builder, Runtime},
     task::JoinSet,
 };
 
@@ -35,8 +34,6 @@ static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
         .build()
         .unwrap()
 });
-// tokio runtime handler
-static HANDLE: LazyLock<Handle> = LazyLock::new(|| RUNTIME.handle().clone());
 
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
@@ -44,37 +41,35 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     log::info!("start borrowck of {def_id:?}");
 
-    let mut def_ids = vec![def_id];
-    def_ids.extend_from_slice(tcx.nested_bodies_within(def_id));
+    let analyzer = MirAnalyzer::init(
+        // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
+        // This can be done since the TyCtxt object lives until the analysis tasks joined
+        // in after_analysis method.
+        unsafe { std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx) },
+        def_id,
+    );
 
-    RUNTIME.block_on(async move {
-        for def_id in def_ids {
-            let analyzer = MirAnalyzer::init(
-                // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
-                // This can be done since the TyCtxt object lives until the analysis tasks joined
-                // in after_analysis method.
-                unsafe { std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx) },
-                def_id,
-            );
-
-            let mut locked = TASKS.lock().await;
-            match analyzer {
-                MirAnalyzerInitResult::Cached(cached) => {
-                    handle_analyzed_result(tcx, cached);
-                }
-                MirAnalyzerInitResult::Analyzer(analyzer) => {
-                    locked.spawn_on(analyzer, &HANDLE);
-                }
+    {
+        let mut tasks = TASKS.lock().unwrap();
+        match analyzer {
+            MirAnalyzerInitResult::Cached(cached) => {
+                handle_analyzed_result(tcx, cached);
+            }
+            MirAnalyzerInitResult::Analyzer(analyzer) => {
+                tasks.spawn_on(analyzer, RUNTIME.handle());
             }
         }
 
-        let mut tasks = TASKS.lock().await;
         log::info!("there are {} tasks", tasks.len());
         while let Some(Ok(analyzer)) = tasks.try_join_next() {
             log::info!("one task joined");
             handle_analyzed_result(tcx, analyzer.analyze());
         }
-    });
+    }
+
+    for def_id in tcx.nested_bodies_within(def_id) {
+        let _ = mir_borrowck(tcx, def_id);
+    }
 
     Ok(tcx
         .arena
@@ -99,8 +94,12 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         let result = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
 
         // join all tasks after all analysis finished
+        //
+        // allow clippy::await_holding_lock because `tokio::sync::Mutex` cannot use
+        // for TASKS because block_on cannot be used in `mir_borrowck`.
+        #[allow(clippy::await_holding_lock)]
         RUNTIME.block_on(async move {
-            while let Some(Ok(analyzer)) = { TASKS.lock().await.join_next().await } {
+            while let Some(Ok(analyzer)) = { TASKS.lock().unwrap().join_next().await } {
                 log::info!("one task joined");
                 handle_analyzed_result(tcx, analyzer.analyze());
             }
