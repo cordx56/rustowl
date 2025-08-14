@@ -278,9 +278,11 @@ impl Backend {
     }
 
     pub async fn shutdown_subprocesses(&self) {
-        let mut tokens = self.process_tokens.write().await;
-        while let Some((_, token)) = tokens.pop_last() {
-            token.cancel();
+        {
+            let mut tokens = self.process_tokens.write().await;
+            while let Some((_, token)) = tokens.pop_last() {
+                token.cancel();
+            }
         }
         self.processes.write().await.shutdown().await;
     }
