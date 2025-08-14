@@ -47,17 +47,17 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
     let mut def_ids = vec![def_id];
     def_ids.extend_from_slice(tcx.nested_bodies_within(def_id));
 
-    for def_id in def_ids {
-        let analyzer = MirAnalyzer::init(
-            // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
-            // This can be done since the TyCtxt object lives until the analysis tasks joined
-            // in after_analysis method.
-            unsafe { std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx) },
-            def_id,
-        );
-        RUNTIME.block_on(async move {
-            let mut locked = TASKS.lock().await;
+    RUNTIME.block_on(async move {
+        for def_id in def_ids {
+            let analyzer = MirAnalyzer::init(
+                // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
+                // This can be done since the TyCtxt object lives until the analysis tasks joined
+                // in after_analysis method.
+                unsafe { std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx) },
+                def_id,
+            );
 
+            let mut locked = TASKS.lock().await;
             match analyzer {
                 MirAnalyzerInitResult::Cached(cached) => {
                     handle_analyzed_result(tcx, cached);
@@ -66,10 +66,8 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
                     locked.spawn_on(analyzer, &HANDLE);
                 }
             }
-        });
-    }
+        }
 
-    RUNTIME.block_on(async move {
         let mut tasks = TASKS.lock().await;
         log::info!("there are {} tasks", tasks.len());
         while let Some(Ok(analyzer)) = tasks.try_join_next() {
