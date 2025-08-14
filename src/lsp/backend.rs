@@ -61,6 +61,7 @@ impl Backend {
         Ok(AnalyzeResponse {})
     }
     async fn do_analyze(&self) {
+        self.shutdown_subprocesses().await;
         self.analyze_with_options(false, false).await;
     }
 
