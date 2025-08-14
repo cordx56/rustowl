@@ -134,6 +134,7 @@ impl MirAnalyzer<'_> {
                 analyzed: analyzed.clone(),
             });
         }
+        drop(cache);
 
         // collect user defined vars
         // this should be done in local thread
