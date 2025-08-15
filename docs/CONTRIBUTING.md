@@ -9,40 +9,68 @@ In this document we describe how to contribute our project, as follows:
 - How to setup development environment
 - Checklist before submitting PR
 
+## Table of Contents
+
+- [Contribution guide](#contribution-guide)
+  - [Table of Contents](#table-of-contents)
+  - [Set up your environment](#set-up-your-environment)
+    - [Prerequisites](#prerequisites)
+      - [Common Requirements](#common-requirements)
+      - [Platform-Specific Tools](#platform-specific-tools)
+        - [Linux](#linux)
+        - [macOS](#macos)
+    - [Rust code](#rust-code)
+      - [Build and test using the nightly environment](#build-and-test-using-the-nightly-environment)
+      - [Build with stable Rust compiler](#build-with-stable-rust-compiler)
+    - [VS Code extension](#vs-code-extension)
+    - [Neovim Plugin](#neovim-plugin)
+    - [Emacs Plugin](#emacs-plugin)
+  - [Before submitting PR](#before-submitting-pr)
+    - [Development Checks](#development-checks)
+    - [Security and Memory Safety Testing](#security-and-memory-safety-testing)
+    - [Performance Testing](#performance-testing)
+    - [Binary Size Monitoring](#binary-size-monitoring)
+    - [Manual Checks](#manual-checks)
+      - [Rust code correctness and formatting](#rust-code-correctness-and-formatting)
+      - [VS Code extension Style](#vs-code-extension-style)
+      - [Neovim Plugin Checks](#neovim-plugin-checks)
+  - [Development Workflow](#development-workflow)
+    - [Recommended Development Process](#recommended-development-process)
+  - [Troubleshooting](#troubleshooting)
+    - [Script Permissions](#script-permissions)
+    - [Missing Tools](#missing-tools)
+    - [CI Failures](#ci-failures)
+
 ## Set up your environment
 
-Here we describe how to set up your development environment.
+### Prerequisites
 
-### Manual Development Setup
-
-Set up your development environment manually by installing the required tools for your platform.
-
-#### Prerequisites
-
-**Common Requirements:**
+#### Common Requirements
 
 - Rust toolchain (automatically managed via `rust-toolchain.toml`)
 - Basic build tools
 
-**Platform-Specific Tools:**
+#### Platform-Specific Tools
 
-**Linux:**
+##### Linux
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y valgrind bc gnuplot build-essential
+sudo apt-get install -y valgrind bc gnuplot build-essential # For Rustowl Itself
+sudo apt-get install -y neovim # Optional: Install Neovim for neovim plugin development
+sudo apt-get install -y emacs # Optional: Install Emacs for emacs plugin development
+sudo apt-get install -y visual-studio-code # Optional: Install VS Code for VS Code extension development
 ```
 
-**macOS:**
+##### macOS
 
 ```bash
 brew install gnuplot
 # Optional: brew install valgrind (limited support)
+brew install neovim # Optional: Install Neovim for neovim plugin development
+brew install emacs # Optional: Install Emacs for emacs plugin development
+# TODO add for vscode
 ```
-
-**Node.js Development (for VS Code extension):**
-
-- Node.js and pnpm for VS Code extension development
 
 ### Rust code
 
@@ -54,7 +82,6 @@ Our project uses `rust-toolchain.toml` to automatically manage the correct Rust 
 #### Build and test using the nightly environment
 
 For building, testing, or installing, you can do the same as any common Rust project using the `cargo` command.
-Here, `cargo` must be a `rustup`-proxied command, which is usually installed with `rustup`.
 
 #### Build with stable Rust compiler
 
@@ -63,15 +90,25 @@ To distribute release binary, we use stable Rust compiler to ship RustOwl with s
 The executable binary named `rustowlc`, which is one of the components of RustOwl, behaves like a Rust compiler.
 So we would like to compile `rustowlc`, which uses nightly features, with the stable Rust compiler.
 
-Note: Using this method is strongly discouraged officially. See [Unstable Book](doc.rust-lang.org/nightly/unstable-book/compiler-flags/rustc-bootstrap.html).
+> [!NOTE]
+> Using this method is strongly discouraged officially. See [Unstable Book](doc.rust-lang.org/nightly/unstable-book/compiler-flags/rustc-bootstrap.html).
 
 To compile `rustowlc` with stable compiler, you should set environment variable as `RUSTC_BOOTSTRAP=1`.
 
-For example building with stable 1.89.0 Rust compiler:
+Our script automates most of the work, so to build with the toolchain specified in [channel](../scripts/build/channel) file:
 
 ```bash
-RUSTC_BOOTSTRAP=1 rustup run 1.89.0 cargo build --release
+./scripts/build/toolchain cargo build --release
 ```
+
+To do it manually:
+
+```bash
+# 1.89.0 can be any version
+RUSTC_BOOTSTRAP=1 rustup +1.89.0 run cargo build --release
+```
+
+As new rust version releases, there api's change. Thus, rustowl code also change. You might see errors as version is newer. We strive to make code in main branch compatible with latest rust version, which gets specified in the [channel](../scripts/build/channel) file.
 
 Note that by using normal `cargo` command RustOwl will be built with nightly compiler since there is a `rust-toolchain.toml` which specifies nightly compiler for development environment.
 
@@ -84,9 +121,23 @@ To get started, you have to install dependencies by running following command in
 pnpm install
 ```
 
+### Neovim Plugin
+
+You need to install [stylua](https://github.com/JohnnyMorganz/StyLua) and [selene](https://github.com/Kampfkarren/selene) for code formatting and linting.
+
+Now write your code, see [lua](../lua), [ftplugin](../ftplugin), [nvim-tests](../nvim-tests).
+
+Please write a test using [mini.test](https://github.com/echasnovski/mini.test) before submitting a pr, you can run tests using [run_nvim_tests.sh](../scripts/run_nvim_tests.sh).
+
+### Emacs Plugin
+
+<!-- TODO Complete this after @MuntasirSZN pr merges. -->
+
 ## Before submitting PR
 
 Before submitting PR, you have to check below:
+
+<!-- TODO Remove start -->
 
 ### Development Checks
 
@@ -175,6 +226,10 @@ Check for binary size regressions:
 ./scripts/size-check.sh --save new-baseline
 ```
 
+<!-- TODO Remove end
+
+Remove those, those have explanation in scripts/README.md file. Just give a brief overview. -->
+
 ### Manual Checks
 
 If the automated scripts are not available, ensure:
@@ -190,6 +245,12 @@ If the automated scripts are not available, ensure:
 - Correctly formatted by `pnpm fmt`
 - Linting passes with `pnpm lint`
 - Type checking passes with `pnpm check-types`
+
+#### Neovim Plugin Checks
+
+- Correctly formatted by `stylua`
+- Linting passes with `selene`
+- Tests passing with `mini.test`
 
 ## Development Workflow
 
@@ -210,23 +271,23 @@ If the automated scripts are not available, ensure:
    ```
 
 3. **Before committing**:
+
    ```bash
-   # Run comprehensive validation
+   # For Rust Code
    ./scripts/dev-checks.sh
    ./scripts/security.sh
    ./scripts/bench.sh --load before-changes
    ./scripts/size-check.sh
+   # For Neovim
+   ./scripts/run_nvim_tests.sh
+   stylua .
+   selene .
    ```
-
-### Integration with CI
-
-Our scripts are designed to match CI workflows:
-
-- **`security.sh`** ↔ **`.github/workflows/security.yml`**
-- **`bench.sh`** ↔ **`.github/workflows/bench-performance.yml`**
-- **`dev-checks.sh`** ↔ **`.github/workflows/checks.yml`**
-
-This ensures local testing provides the same results as CI.
+   <!-- TODO Add after @MuntasirSZN pr merges -->
+   <!-- # For Emacs
+   eask script run test
+   eask format elisp-autofmt rustowl.el
+   eask lint <linter> -->
 
 ## Troubleshooting
 
@@ -239,22 +300,6 @@ chmod +x scripts/*.sh
 ### Missing Tools
 
 Install the required tools manually using the platform-specific commands in the Prerequisites section above.
-
-### Platform-Specific Issues
-
-#### Linux
-
-```bash
-sudo apt-get update
-sudo apt-get install -y valgrind bc gnuplot build-essential
-```
-
-#### macOS
-
-```bash
-brew install gnuplot
-# Valgrind has limited support on macOS
-```
 
 ### CI Failures
 
