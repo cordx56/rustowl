@@ -10,7 +10,11 @@
     - [`OprType`](#oprtype)
     - [`Decoration`](#decoration)
   - [Methods](#methods) - [`rustowl/cursor`](#rustowlcursor) - [Request payload](#request-payload) - [Response payload](#response-payload)
-  <!--toc:end-->
+  - [Methods](#methods)
+    - [`rustowl/cursor`](#rustowlcursor)
+      - [Request payload](#request-payload)
+      - [Response payload](#response-payload)
+<!--toc:end-->
 
 `rustowl`, is an LSP server which provides RustOwl information.
 To display various types of decorations, RustOwl supports some custom methods from the client.
