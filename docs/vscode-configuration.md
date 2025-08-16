@@ -21,7 +21,6 @@ This document describes configuration options for the RustOwl VS Code extension.
 
 Install the extension from the Marketplace or Open VSX. The extension will download and run the rustowl binary automatically when activated.
 
-Quick Start
 
 1. Install the extension in VS Code.
 2. Open a Rust Cargo workspace.
