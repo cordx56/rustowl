@@ -11,35 +11,20 @@ In this document we describe how to contribute our project, as follows:
 
 ## Table of Contents
 
-- [Contribution guide](#contribution-guide)
-  - [Table of Contents](#table-of-contents)
-  - [Set up your environment](#set-up-your-environment)
-    - [Prerequisites](#prerequisites)
-      - [Common Requirements](#common-requirements)
-      - [Platform-Specific Tools](#platform-specific-tools)
-        - [Linux](#linux)
-        - [macOS](#macos)
-    - [Rust code](#rust-code)
-      - [Build and test using the nightly environment](#build-and-test-using-the-nightly-environment)
-      - [Build with stable Rust compiler](#build-with-stable-rust-compiler)
-    - [VS Code extension](#vs-code-extension)
-    - [Neovim Plugin](#neovim-plugin)
-    - [Emacs Plugin](#emacs-plugin)
-  - [Before submitting PR](#before-submitting-pr)
-    - [Development Checks](#development-checks)
-    - [Security and Memory Safety Testing](#security-and-memory-safety-testing)
-    - [Performance Testing](#performance-testing)
-    - [Binary Size Monitoring](#binary-size-monitoring)
-    - [Manual Checks](#manual-checks)
-      - [Rust code correctness and formatting](#rust-code-correctness-and-formatting)
-      - [VS Code extension Style](#vs-code-extension-style)
-      - [Neovim Plugin Checks](#neovim-plugin-checks)
-  - [Development Workflow](#development-workflow)
-    - [Recommended Development Process](#recommended-development-process)
-  - [Troubleshooting](#troubleshooting)
-    - [Script Permissions](#script-permissions)
-    - [Missing Tools](#missing-tools)
-    - [CI Failures](#ci-failures)
+- [Set up your environment](#set-up-your-environment)
+  - [Prerequisites](#prerequisites)
+    - [Common Requirements](#common-requirements)
+    - [Platform-Specific Tools](#platform-specific-tools)
+  - [Rust code](#rust-code)
+  - [Editor extensions](#editor-extensions)
+- [Before submitting PR](#before-submitting-pr)
+  - [Development Checks](#development-checks)
+  - [Security and Memory Safety Testing](#security-and-memory-safety-testing)
+  - [Performance Testing](#performance-testing)
+  - [Binary Size Monitoring](#binary-size-monitoring)
+  - [Manual Checks](#manual-checks)
+- [Development Workflow](#development-workflow)
+- [Troubleshooting](#troubleshooting)
 
 ## Set up your environment
 
@@ -137,11 +122,9 @@ Please write a test using [mini.test](https://github.com/echasnovski/mini.test) 
 
 Before submitting PR, you have to check below:
 
-<!-- TODO Remove start -->
-
 ### Development Checks
 
-We provide a comprehensive development checks script that validates code quality:
+Use the helper scripts in `./scripts` to run development checks and fixes. Examples:
 
 ```bash
 # Run all development checks
@@ -151,82 +134,21 @@ We provide a comprehensive development checks script that validates code quality
 ./scripts/dev-checks.sh --fix
 ```
 
-This script performs:
-
-- Rust version compatibility check
-- Code formatting validation (`cargo fmt`)
-- Linting with Clippy (`cargo clippy`)
-- Build verification
-- Unit test execution
-- VS Code extension checks (formatting, linting, type checking)
+Refer to individual scripts for details (security, benchmarking, size checks). For CI-consistent runs, prefer the scripts above instead of invoking tools manually.
 
 ### Security and Memory Safety Testing
 
-Run comprehensive security analysis before submitting:
-
-```bash
-# Run all available security tests
-./scripts/security.sh
-
-# Check which security tools are available
-./scripts/security.sh --check
-
-# Run specific test categories
-./scripts/security.sh --no-miri        # Skip Miri tests
-./scripts/security.sh --no-valgrind    # Skip Valgrind tests
-./scripts/security.sh --no-audit       # Skip cargo-audit
-```
-
-The security script includes:
-
-- **Miri**: Undefined behavior detection
-- **Valgrind**: Memory error detection (Linux)
-- **cargo-audit**: Security vulnerability scanning
-- **cargo-machete**: Unused dependency detection (macOS)
-- **Platform-specific tools**: Instruments (macOS)
+Use `./scripts/security.sh` to run the available security and UB detection tools. See the script for options to skip Miri/Valgrind/audit steps.
 
 ### Performance Testing
 
-Validate that your changes don't introduce performance regressions:
-
-```bash
-# Run performance benchmarks
-./scripts/bench.sh
-
-# Create a baseline for comparison
-./scripts/bench.sh --save my-baseline
-
-# Compare against a baseline with custom threshold
-./scripts/bench.sh --load my-baseline --threshold 3%
-
-# Clean build and open HTML report
-./scripts/bench.sh --clean --open
-```
-
-Performance testing features:
-
-- Criterion benchmark integration
-- Baseline creation and comparison
-- Configurable regression thresholds (default: 5%)
-- Automatic test package detection
-- HTML report generation
+Use `./scripts/bench.sh` to run performance benchmarks. Create and compare baselines using the script's flags.
 
 ### Binary Size Monitoring
 
-Check for binary size regressions:
+Use `./scripts/size-check.sh` to analyze and compare binary sizes. Save/Load baselines via the script flags.
 
-```bash
-# Analyze current binary sizes
-./scripts/size-check.sh
-
-# Compare against a saved baseline
-./scripts/size-check.sh --load previous-baseline
-
-# Save current sizes as baseline
-./scripts/size-check.sh --save new-baseline
-```
-
-<!-- TODO Remove end
+<!-- TODO Remove end"}
 
 Remove those, those have explanation in scripts/README.md file. Just give a brief overview. -->
 
@@ -283,6 +205,7 @@ If the automated scripts are not available, ensure:
    stylua .
    selene .
    ```
+
    <!-- TODO Add after @MuntasirSZN pr merges -->
    <!-- # For Emacs
    eask script run test

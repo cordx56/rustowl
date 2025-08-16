@@ -116,6 +116,8 @@ The initial analysis may take some time, but from the second run onward, compile
 
 ## Other editor support
 
+For detailed editor configuration and usage see the docs in the `docs/` directory: [Installation](docs/installation.md), [Usage](docs/usage.md), [Neovim](docs/neovim-configuration.md), [VS Code](docs/vscode-configuration.md), [Emacs](docs/emacs-configuration.md), [LSP spec](docs/lsp-spec.md), [Build guide](docs/build.md).
+
 We support Neovim and Emacs.
 You have to [install RustOwl](docs/installation.md) before using RustOwl with other editors.
 

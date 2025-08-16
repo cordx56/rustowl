@@ -1,5 +1,11 @@
 # RustOwl Configuration (Neovim)
 
+Quick Start
+
+1. Install RustOwl (see docs/installation.md) and the Neovim plugin via your plugin manager.
+2. Add the minimal setup to your lazy.nvim config and open a Rust Cargo workspace.
+3. Hover the cursor over a variable and wait ~500ms to see visualizations.
+
 This document describes all available configuration options for the RustOwl Neovim plugin.
 
 ## Table of Contents

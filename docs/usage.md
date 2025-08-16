@@ -1,5 +1,11 @@
 # RustOwl usage
 
+Quick Start
+
+1. Install RustOwl (docs/installation.md) and the editor extension for your editor.
+2. Open a Rust Cargo workspace and save a Rust file to trigger analysis.
+3. Place the cursor on a variable or function call and wait a short idle time to see visualizations.
+
 Here, I describe how to use RustOwl in your workflow.
 
 ## Getting started
