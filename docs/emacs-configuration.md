@@ -15,7 +15,7 @@
   - [Troubleshooting](#troubleshooting)
   <!--toc:end-->
 
-Quick Start
+## Quick Start
 
 1. Install RustOwl (see docs/installation.md) and install the Emacs package via `elpaca` or `use-package`.
 2. Open a Rust Cargo workspace in Emacs.
