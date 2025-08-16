@@ -44,7 +44,7 @@ sudo apt-get update
 sudo apt-get install -y valgrind bc gnuplot build-essential # For Rustowl Itself
 sudo apt-get install -y neovim # Optional: Install Neovim for neovim plugin development
 sudo apt-get install -y emacs # Optional: Install Emacs for emacs plugin development
-sudo apt-get install -y visual-studio-code # Optional: Install VS Code for VS Code extension development
+# Install Visual Studio Code as in their documentation
 ```
 
 ##### macOS
@@ -54,7 +54,7 @@ brew install gnuplot
 # Optional: brew install valgrind (limited support)
 brew install neovim # Optional: Install Neovim for neovim plugin development
 brew install emacs # Optional: Install Emacs for emacs plugin development
-# TODO add for vscode
+# Install Visual Studio Code as in their documentation
 ```
 
 ### Rust code
@@ -147,10 +147,6 @@ Use `./scripts/bench.sh` to run performance benchmarks. Create and compare basel
 ### Binary Size Monitoring
 
 Use `./scripts/size-check.sh` to analyze and compare binary sizes. Save/Load baselines via the script flags.
-
-<!-- TODO Remove end"}
-
-Remove those, those have explanation in scripts/README.md file. Just give a brief overview. -->
 
 ### Manual Checks
 
