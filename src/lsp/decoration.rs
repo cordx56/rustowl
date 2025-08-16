@@ -587,7 +587,7 @@ impl utils::MirVisitor for CalcDecos {
                 Some(mir_var_name) => {
                     format!("variable `{mir_var_name}`")
                 }
-                None => "anonymus variable".to_owned(),
+                None => "anonymous variable".to_owned(),
             };
             // merge Drop object lives
             let drop_copy_live = if *drop {
