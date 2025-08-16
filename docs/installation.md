@@ -1,6 +1,23 @@
 # Installation
 
-Quick Start
+## Table Of Contents
+
+<!--toc:start-->
+
+- [Installation](#installation)
+  - [Table Of Contents](#table-of-contents)
+  - [Quick Start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [cargo-binstall (recommended)](#cargo-binstall-recommended)
+  - [Windows (winget)](#windows-winget)
+  - [Arch Linux (AUR)](#arch-linux-aur)
+  - [Nix flake](#nix-flake)
+  - [GitHub Releases](#github-releases)
+  - [Docker](#docker)
+  - [Build manually](#build-manually)
+  <!--toc:end-->
+
+## Quick Start
 
 - Install via cargo-binstall (recommended):
 
@@ -37,7 +54,6 @@ winget install rustowl
 ## Arch Linux (AUR)
 
 We provide AUR packages that either install prebuilt binaries or build from source.
-
 Prebuilt binaries (recommended):
 
 ```sh
@@ -57,6 +73,10 @@ yay -S rustowl-git
 ```
 
 Replace `yay` with your AUR helper of choice.
+
+## Nix flake
+
+There is a [third-party Nix flake repository](https://github.com/nix-community/rustowl-flake) in the Nix community.
 
 ## GitHub Releases
 

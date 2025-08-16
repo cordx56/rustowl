@@ -1,10 +1,25 @@
 # RustOwl Configuration (Emacs)
 
+## Table Of Contents
+
+<!--toc:start-->
+
+- [RustOwl Configuration (Emacs)](#rustowl-configuration-emacs)
+  - [Table Of Contents](#table-of-contents)
+  - [Basic Setup](#basic-setup)
+  - [What the package does](#what-the-package-does)
+  - [Defaults and variables](#defaults-and-variables)
+  - [How highlighting works](#how-highlighting-works)
+  - [Enabling / Disabling](#enabling-disabling)
+  - [Examples](#examples)
+  - [Troubleshooting](#troubleshooting)
+  <!--toc:end-->
+
 Quick Start
 
 1. Install RustOwl (see docs/installation.md) and install the Emacs package via `elpaca` or `use-package`.
 2. Open a Rust Cargo workspace in Emacs.
-3. Place the cursor on a variable and wait ~2s (default) to see overlays with lifetime and borrow info.
+3. Place the cursor on a variable and wait ~2 seconds (default) to see overlays with lifetime and borrow info.
 
 This document describes how to use RustOwl from Emacs. It mirrors the detail level of `docs/neovim-configuration.md` and is derived from `rustowl.el`.
 
@@ -32,7 +47,7 @@ Use-package example:
 
 - Registers an LSP client for `rust-mode`, `rust-ts-mode`, and `rustic-mode` using `rustowl` as the executable.
 - Sends `rustowl/analyze` on save (see `rustowl-enable-analyze-on-save`).
-- Sends `rustowl/cursor` when the cursor has been idle for `rustowl-cursor-timeout` seconds (default 2.0s) and applies underlines via overlays.
+- Sends `rustowl/cursor` when the cursor has been idle for `rustowl-cursor-timeout` seconds (default 2.0 seconds) and applies underlines via overlays.
 
 ## Defaults and variables
 

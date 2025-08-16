@@ -1,5 +1,20 @@
 # RustOwl Configuration (VS Code)
 
+## Table Of Contents
+
+<!--toc:start-->
+
+- [RustOwl Configuration (VS Code)](#rustowl-configuration-vs-code)
+  - [Table Of Contents](#table-of-contents)
+  - [Quick Start](#quick-start)
+  - [Configuration](#configuration)
+  - [Settings (configuration keys)](#settings-configuration-keys)
+  - [Commands](#commands)
+  - [Behavior](#behavior)
+  - [Examples](#examples)
+  - [Troubleshooting](#troubleshooting)
+  <!--toc:end-->
+
 This document describes configuration options for the RustOwl VS Code extension.
 
 ## Quick Start
@@ -11,11 +26,6 @@ Quick Start
 1. Install the extension in VS Code.
 2. Open a Rust Cargo workspace.
 3. Save a Rust file and hover over a variable after a short idle time to see decorations.
-
-## Behavior
-
-- Runs analysis when you save Rust files inside a Cargo workspace.
-- Shows decorations when hovering the cursor over variables or function calls after a short idle time.
 
 ## Configuration
 
