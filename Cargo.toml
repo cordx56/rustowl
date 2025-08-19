@@ -1,6 +1,6 @@
 [package]
 name = "rustowl"
-version = "0.3.4"
+version = "1.0.0-rc.1"
 authors = ["cordx56 <cordx56@cordx.cx>"]
 edition = "2024"
 description = "Visualize Ownership and Lifetimes in Rust"
