@@ -30,7 +30,15 @@ harness = false
 name = "rustowl_bench_simple"
 
 [dependencies]
-cargo_metadata = "0.21"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+simple_logger = { version = "5", features = ["stderr"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "process", "fs"] }
+tower-lsp = "0.20"
+process_alive = "0.1"
+cargo_metadata = "0.22"
+uuid = { version = "1", features = ["v4"] }
 clap = { version = "4", features = ["cargo", "derive"] }
 clap_complete = "4"
 clap_complete_nushell = "4"
@@ -69,6 +77,13 @@ uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemalloc-sys = "0.6"
+tikv-jemallocator = "0.6"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+zip = "4.5.0"
 
 [build-dependencies]
 clap = { version = "4", features = ["derive"] }
