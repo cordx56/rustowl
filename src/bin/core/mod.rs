@@ -19,7 +19,7 @@ pub struct RustcCallback;
 impl rustc_driver::Callbacks for RustcCallback {}
 
 static ATOMIC_TRUE: AtomicBool = AtomicBool::new(true);
-static TASKS: LazyLock<Mutex<JoinSet<MirAnalyzer<'static>>>> =
+static TASKS: LazyLock<Mutex<JoinSet<AnalyzeResult>>> =
     LazyLock::new(|| Mutex::new(JoinSet::new()));
 // make tokio runtime
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
@@ -41,13 +41,7 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     log::info!("start borrowck of {def_id:?}");
 
-    let analyzer = MirAnalyzer::init(
-        // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
-        // This can be done since the TyCtxt object lives until the analysis tasks joined
-        // in after_analysis method.
-        unsafe { std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx) },
-        def_id,
-    );
+    let analyzer = MirAnalyzer::init(tcx, def_id);
 
     {
         let mut tasks = TASKS.lock().unwrap();
@@ -56,14 +50,14 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
                 handle_analyzed_result(tcx, cached);
             }
             MirAnalyzerInitResult::Analyzer(analyzer) => {
-                tasks.spawn_on(analyzer, RUNTIME.handle());
+                tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
             }
         }
 
         log::info!("there are {} tasks", tasks.len());
-        while let Some(Ok(analyzer)) = tasks.try_join_next() {
+        while let Some(Ok(result)) = tasks.try_join_next() {
             log::info!("one task joined");
-            handle_analyzed_result(tcx, analyzer.analyze());
+            handle_analyzed_result(tcx, result);
         }
     }
 
@@ -99,9 +93,9 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         // for TASKS because block_on cannot be used in `mir_borrowck`.
         #[allow(clippy::await_holding_lock)]
         RUNTIME.block_on(async move {
-            while let Some(Ok(analyzer)) = { TASKS.lock().unwrap().join_next().await } {
+            while let Some(Ok(result)) = { TASKS.lock().unwrap().join_next().await } {
                 log::info!("one task joined");
-                handle_analyzed_result(tcx, analyzer.analyze());
+                handle_analyzed_result(tcx, result);
             }
             if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
                 cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);

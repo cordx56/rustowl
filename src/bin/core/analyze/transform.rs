@@ -1,16 +1,16 @@
 use rayon::prelude::*;
-use rustc_borrowck::consumers::RichLocation;
+use rustc_borrowck::consumers::{BorrowIndex, BorrowSet, RichLocation};
 use rustc_hir::def_id::LocalDefId;
 use rustc_middle::{
     mir::{
-        BasicBlocks, Body, BorrowKind, Local, Operand, Rvalue, StatementKind, TerminatorKind,
-        VarDebugInfoContents,
+        BasicBlocks, Body, BorrowKind, Local, Location, Operand, Rvalue, StatementKind,
+        TerminatorKind, VarDebugInfoContents,
     },
     ty::{TyCtxt, TypeFoldable, TypeFolder},
 };
 use rustc_span::source_map::SourceMap;
 use rustowl::models::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// RegionEraser to erase region variables from MIR body
 /// This is required to hash MIR body
@@ -207,4 +207,53 @@ pub fn rich_locations_to_ranges(
             }
         })
         .collect()
+}
+
+/// Our representation of [`rustc_borrowck::consumers::BorrowData`]
+#[allow(unused)]
+pub enum BorrowData {
+    Shared { borrowed: Local, assigned: Local },
+    Mutable { borrowed: Local, assigned: Local },
+}
+
+/// A map type from [`BorrowIndex`] to [`BorrowData`]
+pub struct BorrowMap {
+    location_map: Vec<(Location, BorrowData)>,
+    local_map: HashMap<Local, HashSet<BorrowIndex>>,
+}
+impl BorrowMap {
+    /// Get [`BorrowMap`] from [`BorrowSet`]
+    pub fn new(borrow_set: &BorrowSet<'_>) -> Self {
+        let mut location_map = Vec::new();
+        // BorrowIndex corresponds to Location index
+        for (location, data) in borrow_set.location_map().iter() {
+            let data = if data.kind().mutability().is_mut() {
+                BorrowData::Mutable {
+                    borrowed: data.borrowed_place().local,
+                    assigned: data.assigned_place().local,
+                }
+            } else {
+                BorrowData::Shared {
+                    borrowed: data.borrowed_place().local,
+                    assigned: data.assigned_place().local,
+                }
+            };
+            location_map.push((*location, data));
+        }
+        let local_map = borrow_set
+            .local_map()
+            .iter()
+            .map(|(local, borrows)| (*local, borrows.iter().copied().collect()))
+            .collect();
+        Self {
+            location_map,
+            local_map,
+        }
+    }
+    pub fn get_from_borrow_index(&self, borrow: BorrowIndex) -> Option<&(Location, BorrowData)> {
+        self.location_map.get(borrow.index())
+    }
+    pub fn local_map(&self) -> &HashMap<Local, HashSet<BorrowIndex>> {
+        &self.local_map
+    }
 }
