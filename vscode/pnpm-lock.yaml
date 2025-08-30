@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@types/vscode':
+        specifier: ^1.103.0
+        version: 1.103.0
       semver-parser:
         specifier: ^4.1.8
         version: 4.1.8
@@ -36,9 +39,6 @@ importers:
       '@types/sinon':
         specifier: ^17.0.4
         version: 17.0.4
-      '@types/vscode':
-        specifier: ^1.103.0
-        version: 1.103.0
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.41.0
         version: 8.41.0(@typescript-eslint/parser@8.41.0(eslint@9.34.0)(typescript@5.9.2))(eslint@9.34.0)(typescript@5.9.2)
