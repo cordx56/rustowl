@@ -1,9 +1,10 @@
+use super::transform::{BorrowData, BorrowMap};
 use rayon::prelude::*;
-use rustc_borrowck::consumers::{BorrowSet, PoloniusLocationTable, PoloniusOutput};
+use rustc_borrowck::consumers::{PoloniusLocationTable, PoloniusOutput};
 use rustc_index::Idx;
 use rustc_middle::mir::Local;
 use rustowl::{models::*, utils};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 pub fn get_accurate_live(
     datafrog: &PoloniusOutput,
@@ -24,7 +25,7 @@ pub fn get_accurate_live(
 pub fn get_borrow_live(
     datafrog: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
-    borrow_set: &BorrowSet<'_>,
+    borrow_map: &BorrowMap,
     basic_blocks: &[MirBasicBlock],
 ) -> (HashMap<Local, Vec<Range>>, HashMap<Local, Vec<Range>>) {
     let output = datafrog;
@@ -33,18 +34,20 @@ pub fn get_borrow_live(
     for (location_idx, borrow_idc) in output.loan_live_at.iter() {
         let location = location_table.to_rich_location(*location_idx);
         for borrow_idx in borrow_idc {
-            let borrow_data = &borrow_set[*borrow_idx];
-            let local = borrow_data.borrowed_place().local;
-            if borrow_data.kind().mutability().is_mut() {
-                mutable_borrows
-                    .entry(local)
-                    .or_insert_with(Vec::new)
-                    .push(location);
-            } else {
-                shared_borrows
-                    .entry(local)
-                    .or_insert_with(Vec::new)
-                    .push(location);
+            match borrow_map.get_from_borrow_index(*borrow_idx) {
+                Some((_, BorrowData::Shared { borrowed, .. })) => {
+                    shared_borrows
+                        .entry(*borrowed)
+                        .or_insert_with(Vec::new)
+                        .push(location);
+                }
+                Some((_, BorrowData::Mutable { borrowed, .. })) => {
+                    mutable_borrows
+                        .entry(*borrowed)
+                        .or_insert_with(Vec::new)
+                        .push(location);
+                }
+                _ => {}
             }
         }
     }
@@ -77,57 +80,81 @@ pub fn get_borrow_live(
 }
 
 pub fn get_must_live(
-    insensitive: &PoloniusOutput,
+    datafrog: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
-    borrow_set: &BorrowSet<'_>,
+    borrow_map: &BorrowMap,
     basic_blocks: &[MirBasicBlock],
 ) -> HashMap<Local, Vec<Range>> {
+    // obtain a map that region -> region contained locations
     let mut region_locations = HashMap::new();
-    for (location_idx, region_idc) in insensitive.origin_live_on_entry.iter() {
-        let location = location_table.to_rich_location(*location_idx);
+    for (location_idx, region_idc) in datafrog.origin_live_on_entry.iter() {
         for region_idx in region_idc {
             region_locations
                 .entry(*region_idx)
-                .or_insert_with(Vec::new)
-                .push(location);
+                .or_insert_with(HashSet::new)
+                .insert(*location_idx);
         }
     }
 
-    // local -> all borrows on that local
-    let mut borrow_locals = HashMap::new();
-    for (local, borrow_idc) in borrow_set.local_map().iter() {
+    // obtain a map that borrow index -> local
+    let mut borrow_local = HashMap::new();
+    for (local, borrow_idc) in borrow_map.local_map().iter() {
         for borrow_idx in borrow_idc {
-            borrow_locals.insert(*borrow_idx, *local);
+            borrow_local.insert(*borrow_idx, *local);
         }
     }
 
-    // compute regions where the local must be live
-    let mut local_must_regions: HashMap<Local, BTreeSet<super::Region>> = HashMap::new();
-    for (region_idx, borrow_idc) in insensitive.origin_contains_loan_anywhere.iter() {
-        for borrow_idx in borrow_idc {
-            if let Some(local) = borrow_locals.get(borrow_idx) {
-                local_must_regions
-                    .entry(*local)
-                    .or_default()
-                    .insert(*region_idx);
+    // check all regions' subset that must be satisfied
+    let mut subsets = HashMap::new();
+    for (_, subset) in datafrog.subset.iter() {
+        for (sup, subs) in subset.iter() {
+            subsets
+                .entry(*sup)
+                .or_insert_with(HashSet::new)
+                .extend(subs.iter().copied());
+        }
+    }
+    // obtain a map that region -> locations
+    // a region must contains the locations
+    let mut region_must_locations = HashMap::new();
+    for (sup, subs) in subsets.iter() {
+        for sub in subs {
+            if let Some(locs) = region_locations.get(sub) {
+                region_must_locations
+                    .entry(*sup)
+                    .or_insert_with(HashSet::new)
+                    .extend(locs.iter().copied());
+            }
+        }
+    }
+    // obtain a map that local -> locations
+    // a local must lives in the locations
+    let mut local_must_locations = HashMap::new();
+    for (_location, region_borrows) in datafrog.origin_contains_loan_at.iter() {
+        for (region, borrows) in region_borrows.iter() {
+            for borrow in borrows {
+                if let Some(locs) = region_must_locations.get(region)
+                    && let Some(local) = borrow_local.get(borrow)
+                {
+                    local_must_locations
+                        .entry(*local)
+                        .or_insert_with(HashSet::new)
+                        .extend(locs.iter().copied());
+                }
             }
         }
     }
 
-    HashMap::from_iter(local_must_regions.iter().map(|(local, regions)| {
+    HashMap::from_iter(local_must_locations.iter().map(|(local, locations)| {
         (
             *local,
-            super::erase_superset(
-                super::transform::rich_locations_to_ranges(
-                    basic_blocks,
-                    &regions
-                        .par_iter()
-                        .filter_map(|v| region_locations.get(v).cloned())
-                        .flatten()
-                        .collect::<Vec<_>>(),
-                ),
-                false,
-            ),
+            utils::eliminated_ranges(super::transform::rich_locations_to_ranges(
+                basic_blocks,
+                &locations
+                    .iter()
+                    .map(|v| location_table.to_rich_location(*v))
+                    .collect::<Vec<_>>(),
+            )),
         )
     }))
 }
