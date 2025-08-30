@@ -1,6 +1,6 @@
 [package]
 name = "rustowl"
-version = "0.3.4"
+version = "1.0.0-rc.1"
 edition = "2024"
 authors = ["cordx56 <cordx56@cordx.cx>"]
 description = "Visualize Ownership and Lifetimes in Rust"
@@ -19,7 +19,7 @@ simple_logger = { version = "5", features = ["stderr"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "io-std", "io-util", "process", "fs"] }
 tower-lsp = "0.20"
 process_alive = "0.1"
-cargo_metadata = "0.21"
+cargo_metadata = "0.22"
 uuid = { version = "1", features = ["v4"] }
 clap = { version = "4", features = ["cargo", "derive"] }
 flate2 = "1"
@@ -37,7 +37,7 @@ tikv-jemalloc-sys = "0.6"
 tikv-jemallocator = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-zip = "4.3.0"
+zip = "4.5.0"
 
 [build-dependencies]
 clap_complete_nushell = "4"

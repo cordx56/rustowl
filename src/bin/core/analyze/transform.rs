@@ -169,10 +169,10 @@ fn statement_location_to_range(
     statement: usize,
 ) -> Option<Range> {
     basic_blocks.get(basic_block).and_then(|bb| {
-        if bb.statements.len() < statement {
-            bb.terminator.as_ref().map(|v| v.range())
-        } else {
+        if statement < bb.statements.len() {
             bb.statements.get(statement).map(|v| v.range())
+        } else {
+            bb.terminator.as_ref().map(|v| v.range())
         }
     })
 }

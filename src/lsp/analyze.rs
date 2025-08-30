@@ -47,7 +47,11 @@ impl Analyzer {
                 "--filter-platform".to_owned(),
                 toolchain::HOST_TUPLE.to_owned(),
             ])
-            .current_dir(&path)
+            .current_dir(if path.is_file() {
+                path.parent().unwrap()
+            } else {
+                &path
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
 
@@ -60,17 +64,15 @@ impl Analyzer {
             None
         };
 
-        if path.is_file() && path.extension().map(|v| v == "rs").unwrap_or(false) {
-            Ok(Self {
-                path,
-                metadata: None,
-            })
-        } else if path.is_dir()
-            && let Some(metadata) = metadata
-        {
+        if let Some(metadata) = metadata {
             Ok(Self {
                 path: metadata.workspace_root.as_std_path().to_path_buf(),
                 metadata: Some(metadata),
+            })
+        } else if path.is_file() && path.extension().map(|v| v == "rs").unwrap_or(false) {
+            Ok(Self {
+                path,
+                metadata: None,
             })
         } else {
             log::warn!("Invalid analysis target: {}", path.display());
@@ -119,7 +121,7 @@ impl Analyzer {
 
         let mut command = toolchain::setup_cargo_command().await;
 
-        let mut args = vec!["check"];
+        let mut args = vec!["check", "--workspace"];
         if all_targets {
             args.push("--all-targets");
         }
@@ -252,9 +254,8 @@ pub struct AnalyzeEventIter {
 impl AnalyzeEventIter {
     pub async fn next_event(&mut self) -> Option<AnalyzerEvent> {
         tokio::select! {
-            Some(v) = self.receiver.recv() => Some(v),
+            v = self.receiver.recv() => v,
             _ = self.notify.notified() => None,
-            else => None,
         }
     }
 }

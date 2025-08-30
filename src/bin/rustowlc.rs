@@ -66,10 +66,14 @@ fn main() {
         .init()
         .unwrap();
 
-    rayon::ThreadPoolBuilder::new()
-        .stack_size(4 * 1024 * 1024)
-        .build_global()
-        .unwrap();
+    // rayon panics without this only on Windows
+    #[cfg(target_os = "windows")]
+    {
+        rayon::ThreadPoolBuilder::new()
+            .stack_size(4 * 1024 * 1024)
+            .build_global()
+            .unwrap();
+    }
 
     exit(core::run_compiler())
 }
