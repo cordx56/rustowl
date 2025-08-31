@@ -102,6 +102,7 @@ pub trait MirVisitor {
     fn visit_stmt(&mut self, stmt: &MirStatement) {}
     fn visit_term(&mut self, term: &MirTerminator) {}
 }
+
 pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
     visitor.visit_func(func);
     for decl in &func.decls {

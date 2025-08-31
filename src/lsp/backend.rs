@@ -17,7 +17,6 @@ pub struct AnalyzeResponse {}
 
 /// RustOwl LSP server backend
 pub struct Backend {
-    #[allow(unused)]
     client: Client,
     analyzers: Arc<RwLock<Vec<Analyzer>>>,
     status: Arc<RwLock<progress::AnalysisStatus>>,

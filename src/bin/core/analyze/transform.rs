@@ -217,10 +217,17 @@ pub fn rich_locations_to_ranges(
 }
 
 /// Our representation of [`rustc_borrowck::consumers::BorrowData`]
-#[allow(unused)]
 pub enum BorrowData {
-    Shared { borrowed: Local, assigned: Local },
-    Mutable { borrowed: Local, assigned: Local },
+    Shared {
+        borrowed: Local,
+        #[allow(dead_code)]
+        assigned: Local,
+    },
+    Mutable {
+        borrowed: Local,
+        #[allow(dead_code)]
+        assigned: Local,
+    },
 }
 
 /// A map type from [`BorrowIndex`] to [`BorrowData`]

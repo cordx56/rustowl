@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
