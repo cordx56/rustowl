@@ -154,12 +154,6 @@ impl MirVariables {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "snake_case", tag = "type")]
-pub enum Item {
-    Function { span: Range, mir: Function },
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct File {
     pub items: SmallVec<[Function; 4]>, // Most files have few functions
 }
@@ -214,15 +208,11 @@ impl Crate {
                     // Pre-allocate capacity for better performance
                     let new_size = existing.items.len() + mir.items.len();
                     if existing.items.capacity() < new_size {
-                        existing.items.reserve(mir.items.len());
+                        existing.items.reserve_exact(new_size - existing.items.capacity());
                     }
 
-                    // Use a HashSet for O(1) lookup instead of dedup_by
-                    let mut seen_ids =
-                        std::collections::HashSet::with_capacity(existing.items.len());
-                    for item in &existing.items {
-                        seen_ids.insert(item.fn_id);
-                    }
+                    let mut seen_ids = std::collections::HashSet::with_capacity(existing.items.len());
+                    seen_ids.extend(existing.items.iter().map(|i| i.fn_id));
 
                     mir.items.retain(|item| seen_ids.insert(item.fn_id));
                     existing.items.append(&mut mir.items);
@@ -341,11 +331,11 @@ pub type DeclVec = SmallVec<[MirDecl; 16]>; // Most functions have moderate numb
 
 // Helper functions for conversions since we can't impl traits on type aliases
 pub fn range_vec_into_vec(ranges: RangeVec) -> Vec<Range> {
-    smallvec::SmallVec::into_vec(ranges)
+    ranges.into_vec()
 }
 
 pub fn range_vec_from_vec(vec: Vec<Range>) -> RangeVec {
-    SmallVec::from_vec(vec)
+    RangeVec::from_vec(vec)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

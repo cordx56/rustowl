@@ -20,9 +20,10 @@ The cache system stores analyzed MIR (Mid-level Intermediate Representation) dat
   - Set to `false` or `0` to disable caching entirely
 
 - **`RUSTOWL_CACHE_DIR`**: Set custom cache directory
-  - Default (cargo workspace runs): `{target_dir}/rustowl/cache`
+  - Default (cargo workspace runs): `{target_dir}/owl/cache`
   - For single-file analysis, set `RUSTOWL_CACHE_DIR` explicitly.
   - Example: `export RUSTOWL_CACHE_DIR=/tmp/rustowl-cache`
+
 ### Advanced Configuration
 
 - **`RUSTOWL_CACHE_MAX_ENTRIES`**: Maximum number of cache entries (default: 1000)
@@ -49,16 +50,6 @@ export RUSTOWL_CACHE_MAX_ENTRIES=5000
 export RUSTOWL_CACHE_MAX_MEMORY_MB=500
 ```
 
-### For CI/CD Environments
-
-```bash
-# Disable file validation for faster startup in CI
-export RUSTOWL_CACHE_VALIDATE_FILES=false
-
-# Use FIFO eviction for more predictable behavior
-export RUSTOWL_CACHE_EVICTION=fifo
-```
-
 ### For Development
 
 ```bash
@@ -81,10 +72,12 @@ These statistics are logged during analysis and when the cache is saved.
 ## Cache File Format
 
 Cache files are stored as JSON in the cache directory with the format:
+
 - `{crate_name}.json` - Main cache file
 - `{crate_name}.json.tmp` - Temporary file used for atomic writes
 
 The cache includes metadata for each entry:
+
 - Creation and last access timestamps
 - Access count for LRU calculations
 - File modification times for validation

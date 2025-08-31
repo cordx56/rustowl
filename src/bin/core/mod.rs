@@ -133,7 +133,7 @@ pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
     let krate = Crate(HashMap::from([(
         analyzed.file_name.to_owned(),
         File {
-            items: SmallVec::from_vec(vec![analyzed.analyzed]),
+            items: smallvec::smallvec![analyzed.analyzed],
         },
     )]));
     // get currently-compiling crate name

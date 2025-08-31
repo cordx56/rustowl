@@ -603,8 +603,9 @@ impl utils::MirVisitor for CalcDecos {
                     overlapped: false,
                 });
             }
-            let mut borrow_ranges = range_vec_into_vec(shared_borrow.clone());
-            borrow_ranges.extend_from_slice(&range_vec_into_vec(mutable_borrow.clone()));
+            let mut borrow_ranges = Vec::with_capacity(shared_borrow.len() + mutable_borrow.len());
+            borrow_ranges.extend(shared_borrow.iter().copied());
+            borrow_ranges.extend(mutable_borrow.iter().copied());
             let shared_mut = utils::common_ranges(&borrow_ranges);
             for range in shared_mut {
                 self.decorations.push(Deco::SharedMut {

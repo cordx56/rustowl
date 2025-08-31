@@ -80,46 +80,43 @@ pub fn collect_basic_blocks(
                 StatementKind::Assign(v) => {
                     let (place, rval) = &**v;
                     let target_local_index = place.local.as_u32();
-                    let rv =
-                        match rval {
-                            Rvalue::Use(Operand::Move(p)) => {
-                                let local = p.local;
-                                super::range_from_span(source, statement.source_info.span, offset)
-                                    .map(|range| MirRval::Move {
-                                        target_local: FnLocal::new(
-                                            local.as_u32(),
-                                            fn_id.local_def_index.as_u32(),
-                                        ),
-                                        range,
-                                    })
-                            }
-                            Rvalue::Ref(_region, kind, place) => {
-                                let mutable = matches!(kind, BorrowKind::Mut { .. });
-                                let local = place.local;
-                                let outlive = None;
-                                super::range_from_span(source, statement.source_info.span, offset)
-                                    .map(|range| MirRval::Borrow {
-                                        target_local: FnLocal::new(
-                                            local.as_u32(),
-                                            fn_id.local_def_index.as_u32(),
-                                        ),
-                                        range,
-                                        mutable,
-                                        outlive,
-                                    })
-                            }
-                            _ => None,
-                        };
-                    super::range_from_span(source, statement.source_info.span, offset).map(
-                        |range| MirStatement::Assign {
-                            target_local: FnLocal::new(
-                                target_local_index,
-                                fn_id.local_def_index.as_u32(),
-                            ),
-                            range,
-                            rval: rv,
-                        },
-                    )
+                    let range_opt =
+                        super::range_from_span(source, statement.source_info.span, offset);
+                    let rv = match rval {
+                        Rvalue::Use(Operand::Move(p)) => {
+                            let local = p.local;
+                            range_opt.map(|range| MirRval::Move {
+                                target_local: FnLocal::new(
+                                    local.as_u32(),
+                                    fn_id.local_def_index.as_u32(),
+                                ),
+                                range,
+                            })
+                        }
+                        Rvalue::Ref(_region, kind, place) => {
+                            let mutable = matches!(kind, BorrowKind::Mut { .. });
+                            let local = place.local;
+                            let outlive = None;
+                            range_opt.map(|range| MirRval::Borrow {
+                                target_local: FnLocal::new(
+                                    local.as_u32(),
+                                    fn_id.local_def_index.as_u32(),
+                                ),
+                                range,
+                                mutable,
+                                outlive,
+                            })
+                        }
+                        _ => None,
+                    };
+                    range_opt.map(|range| MirStatement::Assign {
+                        target_local: FnLocal::new(
+                            target_local_index,
+                            fn_id.local_def_index.as_u32(),
+                        ),
+                        range,
+                        rval: rv,
+                    })
                 }
                 _ => super::range_from_span(source, statement.source_info.span, offset)
                     .map(|range| MirStatement::Other { range }),

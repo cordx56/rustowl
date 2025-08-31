@@ -30,20 +30,25 @@ impl Default for CacheConfig {
 }
 
 pub fn is_cache() -> bool {
-    !env::var("RUSTOWL_CACHE")
-        .map(|v| v == "false" || v == "0")
-        .unwrap_or(false)
+    !env::var("RUSTOWL_CACHE").map(|v| {
+        let v = v.trim().to_ascii_lowercase();
+        v == "false" || v == "0"
+    })
 }
 
 pub fn set_cache_path(cmd: &mut Command, target_dir: impl AsRef<Path>) {
     cmd.env(
         "RUSTOWL_CACHE_DIR",
-        target_dir.as_ref().join("rustowl").join("cache"),
+        target_dir.as_ref().join("cache"),
     );
 }
 
 pub fn get_cache_path() -> Option<PathBuf> {
-    env::var("RUSTOWL_CACHE_DIR").map(PathBuf::from).ok()
+    env::var("RUSTOWL_CACHE_DIR")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Get cache configuration from environment variables
@@ -66,12 +71,17 @@ pub fn get_cache_config() -> CacheConfig {
 
     // Configure eviction policy
     if let Ok(policy) = env::var("RUSTOWL_CACHE_EVICTION") {
-        config.use_lru_eviction = policy.to_lowercase() == "lru";
+        match policy.trim().to_ascii_lowercase().as_str() {
+            "lru" => config.use_lru_eviction = true,
+            "fifo" => config.use_lru_eviction = false,
+            _ => {} // keep default
+        }
     }
 
     // Configure file validation
     if let Ok(validate) = env::var("RUSTOWL_CACHE_VALIDATE_FILES") {
-        config.validate_file_mtime = validate != "false" && validate != "0";
+        let v = validate.trim().to_ascii_lowercase();
+        config.validate_file_mtime = !(v == "false" || v == "0");
     }
 
     config

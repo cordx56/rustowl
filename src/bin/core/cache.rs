@@ -79,8 +79,8 @@ impl CacheEntry {
     pub fn new(function: Function, file_mtime: Option<u64>) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
 
         // Estimate data size via serialization to capture heap usage
         let data_size = serde_json::to_vec(&function).map(|v| v.len()).unwrap_or(0);
@@ -99,8 +99,8 @@ impl CacheEntry {
     pub fn mark_accessed(&mut self) {
         self.last_accessed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+            .map(|d| d.as_secs())
+            .unwrap_or(self.last_accessed);
         self.access_count = self.access_count.saturating_add(1);
     }
 }

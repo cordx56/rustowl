@@ -239,8 +239,8 @@ mod miri_memory_safety_tests {
         // Test vector capacity management
         let large_function = Function::with_capacity(999, 1000, 500);
 
-        assert!(large_function.basic_blocks.capacity() >= 8); // SmallVec minimum
-        assert!(large_function.decls.capacity() >= 16); // SmallVec minimum
+        assert!(large_function.basic_blocks.capacity() >= 1000);
+        assert!(large_function.decls.capacity() >= 500);
     }
 
     #[test]
@@ -265,7 +265,6 @@ mod miri_memory_safety_tests {
 
         // Test unicode handling
         let unicode_string = "🦀 Rust 🔥 Memory Safety 🛡️".to_string();
-        let _file = File::new();
 
         // Ensure unicode doesn't cause memory issues
         assert!(unicode_string.len() > unicode_string.chars().count());
