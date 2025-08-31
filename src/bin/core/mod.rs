@@ -7,7 +7,6 @@ use rustc_interface::interface;
 use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
-use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::env;
 use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
