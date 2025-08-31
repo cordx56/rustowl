@@ -178,10 +178,10 @@ impl CacheData {
                 let function = entry.function.clone();
                 self.entries.insert(key, entry);
                 self.update_memory_stats();
-                
+
                 // Evict if needed after reinsertion to prevent temporary overshoot
                 self.maybe_evict_entries();
-                
+
                 self.stats.hits += 1;
                 return Some(function);
             }
@@ -218,10 +218,10 @@ impl CacheData {
 
         self.entries.insert(key, entry);
         self.update_memory_stats();
-        
+
         // Evict again after insertion to prevent temporary overshoot
         self.maybe_evict_entries();
-        
+
         log::debug!(
             "Cache entry inserted. Total entries: {}, Memory usage: {} bytes",
             self.entries.len(),

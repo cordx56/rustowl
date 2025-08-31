@@ -208,10 +208,13 @@ impl Crate {
                     // Pre-allocate capacity for better performance
                     let new_size = existing.items.len() + mir.items.len();
                     if existing.items.capacity() < new_size {
-                        existing.items.reserve_exact(new_size - existing.items.capacity());
+                        existing
+                            .items
+                            .reserve_exact(new_size - existing.items.capacity());
                     }
 
-                    let mut seen_ids = std::collections::HashSet::with_capacity(existing.items.len());
+                    let mut seen_ids =
+                        std::collections::HashSet::with_capacity(existing.items.len());
                     seen_ids.extend(existing.items.iter().map(|i| i.fn_id));
 
                     mir.items.retain(|item| seen_ids.insert(item.fn_id));
