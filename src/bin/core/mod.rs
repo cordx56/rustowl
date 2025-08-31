@@ -101,8 +101,13 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
             if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
                 // Log cache statistics before writing
                 let stats = cache.get_stats();
-                log::info!("Cache statistics: {} hits, {} misses, {:.1}% hit rate, {} evictions", 
-                          stats.hits, stats.misses, stats.hit_rate() * 100.0, stats.evictions);
+                log::info!(
+                    "Cache statistics: {} hits, {} misses, {:.1}% hit rate, {} evictions",
+                    stats.hits,
+                    stats.misses,
+                    stats.hit_rate() * 100.0,
+                    stats.evictions
+                );
                 cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
             }
         });

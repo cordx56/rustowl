@@ -143,16 +143,10 @@ mod miri_memory_safety_tests {
         let mut crate2 = Crate(HashMap::new());
 
         // Add some files to crates
-        crate1
-            .0
-            .insert("lib.rs".to_string(), File::new());
-        crate1
-            .0
-            .insert("main.rs".to_string(), File::new());
+        crate1.0.insert("lib.rs".to_string(), File::new());
+        crate1.0.insert("main.rs".to_string(), File::new());
 
-        crate2
-            .0
-            .insert("helper.rs".to_string(), File::new());
+        crate2.0.insert("helper.rs".to_string(), File::new());
 
         // Add crates to workspace
         workspace.0.insert("crate1".to_string(), crate1);

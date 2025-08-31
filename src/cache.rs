@@ -46,30 +46,30 @@ pub fn get_cache_path() -> Option<PathBuf> {
 /// Get cache configuration from environment variables
 pub fn get_cache_config() -> CacheConfig {
     let mut config = CacheConfig::default();
-    
+
     // Configure max entries
     if let Ok(max_entries) = env::var("RUSTOWL_CACHE_MAX_ENTRIES") {
         if let Ok(value) = max_entries.parse::<usize>() {
             config.max_entries = value;
         }
     }
-    
+
     // Configure max memory in MB
     if let Ok(max_memory_mb) = env::var("RUSTOWL_CACHE_MAX_MEMORY_MB") {
         if let Ok(value) = max_memory_mb.parse::<usize>() {
             config.max_memory_bytes = value * 1024 * 1024;
         }
     }
-    
+
     // Configure eviction policy
     if let Ok(policy) = env::var("RUSTOWL_CACHE_EVICTION") {
         config.use_lru_eviction = policy.to_lowercase() == "lru";
     }
-    
+
     // Configure file validation
     if let Ok(validate) = env::var("RUSTOWL_CACHE_VALIDATE_FILES") {
         config.validate_file_mtime = validate != "false" && validate != "0";
     }
-    
+
     config
 }

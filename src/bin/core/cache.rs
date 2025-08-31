@@ -3,12 +3,12 @@ use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_middle::ty::TyCtxt;
 use rustc_query_system::ich::StableHashingContext;
 use rustc_stable_hash::{FromStableHash, SipHasher128Hash};
-use rustowl::models::*;
 use rustowl::cache::CacheConfig;
+use rustowl::models::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{Write, BufWriter, BufReader};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -82,9 +82,9 @@ impl CacheEntry {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         // Estimate data size for memory management
-        let data_size = std::mem::size_of::<Function>() 
+        let data_size = std::mem::size_of::<Function>()
             + function.basic_blocks.len() * std::mem::size_of::<MirBasicBlock>()
             + function.decls.len() * std::mem::size_of::<MirDecl>();
 
@@ -192,7 +192,7 @@ impl CacheData {
 
     pub fn get_cache(&mut self, file_hash: &str, mir_hash: &str) -> Option<Function> {
         let key = Self::make_key(file_hash, mir_hash);
-        
+
         if let Some(entry) = self.entries.get_mut(&key) {
             // Validate entry if file modification time checking is enabled
             if self.config.validate_file_mtime {
@@ -211,7 +211,13 @@ impl CacheData {
 
             self.stats.hits += 1;
             self.update_memory_stats();
-            Some(self.entries.get(&Self::make_key(file_hash, mir_hash)).unwrap().function.clone())
+            Some(
+                self.entries
+                    .get(&Self::make_key(file_hash, mir_hash))
+                    .unwrap()
+                    .function
+                    .clone(),
+            )
         } else {
             self.stats.misses += 1;
             None
@@ -223,14 +229,14 @@ impl CacheData {
     }
 
     pub fn insert_cache_with_file_path(
-        &mut self, 
-        file_hash: String, 
-        mir_hash: String, 
+        &mut self,
+        file_hash: String,
+        mir_hash: String,
         analyzed: Function,
-        file_path: Option<&str>
+        file_path: Option<&str>,
     ) {
         let key = Self::make_key(&file_hash, &mir_hash);
-        
+
         // Get file modification time if available and validation is enabled
         let file_mtime = if self.config.validate_file_mtime {
             file_path.and_then(Self::get_file_mtime)
@@ -239,27 +245,28 @@ impl CacheData {
         };
 
         let entry = CacheEntry::new(analyzed, file_mtime);
-        
+
         // Check if we need to evict entries before inserting
         self.maybe_evict_entries();
-        
+
         self.entries.insert(key, entry);
         self.update_memory_stats();
-        log::debug!("Cache entry inserted. Total entries: {}, Memory usage: {} bytes", 
-                   self.entries.len(), self.stats.total_memory_bytes);
+        log::debug!(
+            "Cache entry inserted. Total entries: {}, Memory usage: {} bytes",
+            self.entries.len(),
+            self.stats.total_memory_bytes
+        );
     }
 
     /// Update memory usage statistics
     fn update_memory_stats(&mut self) {
         self.stats.total_entries = self.entries.len();
-        self.stats.total_memory_bytes = self.entries.values()
-            .map(|entry| entry.data_size)
-            .sum();
+        self.stats.total_memory_bytes = self.entries.values().map(|entry| entry.data_size).sum();
     }
 
     /// Check if eviction is needed and perform it
     fn maybe_evict_entries(&mut self) {
-        let needs_eviction = self.entries.len() >= self.config.max_entries 
+        let needs_eviction = self.entries.len() >= self.config.max_entries
             || self.stats.total_memory_bytes >= self.config.max_memory_bytes;
 
         if needs_eviction {
@@ -276,11 +283,14 @@ impl CacheData {
 
         if self.config.use_lru_eviction {
             // LRU eviction: remove least recently used entries
-            while (self.entries.len() > target_entries || self.stats.total_memory_bytes > target_memory) 
-                && !self.entries.is_empty() {
-                
+            while (self.entries.len() > target_entries
+                || self.stats.total_memory_bytes > target_memory)
+                && !self.entries.is_empty()
+            {
                 // Find entry with oldest last_accessed time
-                let oldest_key = self.entries.iter()
+                let oldest_key = self
+                    .entries
+                    .iter()
                     .min_by_key(|(_, entry)| entry.last_accessed)
                     .map(|(key, _)| key.clone());
 
@@ -293,8 +303,10 @@ impl CacheData {
             }
         } else {
             // FIFO eviction: remove oldest entries by insertion order
-            while (self.entries.len() > target_entries || self.stats.total_memory_bytes > target_memory) 
-                && !self.entries.is_empty() {
+            while (self.entries.len() > target_entries
+                || self.stats.total_memory_bytes > target_memory)
+                && !self.entries.is_empty()
+            {
                 self.entries.shift_remove_index(0);
                 evicted_count += 1;
             }
@@ -302,10 +314,14 @@ impl CacheData {
 
         self.stats.evictions += evicted_count;
         self.update_memory_stats();
-        
+
         if evicted_count > 0 {
-            log::info!("Evicted {} cache entries. Remaining: {} entries, {} bytes", 
-                      evicted_count, self.entries.len(), self.stats.total_memory_bytes);
+            log::info!(
+                "Evicted {} cache entries. Remaining: {} entries, {} bytes",
+                evicted_count,
+                self.entries.len(),
+                self.stats.total_memory_bytes
+            );
         }
     }
 
@@ -417,10 +433,10 @@ impl CacheData {
 pub fn get_cache(krate: &str) -> Option<CacheData> {
     if let Some(cache_path) = rustowl::cache::get_cache_path() {
         let cache_path = cache_path.join(format!("{krate}.json"));
-        
+
         // Get configuration from environment
         let config = rustowl::cache::get_cache_config();
-        
+
         // Try to read and parse the cache file
         match std::fs::read_to_string(&cache_path) {
             Ok(content) => {
@@ -428,8 +444,11 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
                     Ok(mut cache_data) => {
                         // Check version compatibility
                         if !cache_data.is_compatible() {
-                            log::warn!("Cache version incompatible (found: {}, expected: {}), creating new cache", 
-                                      cache_data.version, CACHE_VERSION);
+                            log::warn!(
+                                "Cache version incompatible (found: {}, expected: {}), creating new cache",
+                                cache_data.version,
+                                CACHE_VERSION
+                            );
                             return Some(CacheData::with_config(config));
                         }
 
@@ -438,23 +457,31 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
                         cache_data.stats = CacheStats::default();
                         cache_data.update_memory_stats();
 
-                        log::info!("Cache loaded: {} entries, {} bytes from {}", 
-                                  cache_data.entries.len(), 
-                                  cache_data.stats.total_memory_bytes,
-                                  cache_path.display());
-                        
+                        log::info!(
+                            "Cache loaded: {} entries, {} bytes from {}",
+                            cache_data.entries.len(),
+                            cache_data.stats.total_memory_bytes,
+                            cache_path.display()
+                        );
+
                         Some(cache_data)
                     }
                     Err(e) => {
-                        log::warn!("Failed to parse cache file ({}), creating new cache: {}", 
-                                  cache_path.display(), e);
+                        log::warn!(
+                            "Failed to parse cache file ({}), creating new cache: {}",
+                            cache_path.display(),
+                            e
+                        );
                         Some(CacheData::with_config(config))
                     }
                 }
             }
             Err(e) => {
-                log::info!("Cache file not found or unreadable ({}), creating new cache: {}", 
-                          cache_path.display(), e);
+                log::info!(
+                    "Cache file not found or unreadable ({}), creating new cache: {}",
+                    cache_path.display(),
+                    e
+                );
                 Some(CacheData::with_config(config))
             }
         }
@@ -469,7 +496,11 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
     if let Some(cache_dir) = rustowl::cache::get_cache_path() {
         // Ensure cache directory exists
         if let Err(e) = std::fs::create_dir_all(&cache_dir) {
-            log::error!("Failed to create cache directory {}: {}", cache_dir.display(), e);
+            log::error!(
+                "Failed to create cache directory {}: {}",
+                cache_dir.display(),
+                e
+            );
             return;
         }
 
@@ -490,17 +521,23 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
             Ok(()) => {
                 // Atomically move temporary file to final location
                 if let Err(e) = std::fs::rename(&temp_path, &cache_path) {
-                    log::error!("Failed to move cache file from {} to {}: {}", 
-                               temp_path.display(), cache_path.display(), e);
+                    log::error!(
+                        "Failed to move cache file from {} to {}: {}",
+                        temp_path.display(),
+                        cache_path.display(),
+                        e
+                    );
                     // Clean up temporary file
                     let _ = std::fs::remove_file(&temp_path);
                 } else {
                     let stats = cache.get_stats();
-                    log::info!("Cache saved: {} entries, {} bytes, hit rate: {:.1}% to {}", 
-                              stats.total_entries,
-                              stats.total_memory_bytes,
-                              stats.hit_rate() * 100.0,
-                              cache_path.display());
+                    log::info!(
+                        "Cache saved: {} entries, {} bytes, hit rate: {:.1}% to {}",
+                        stats.total_entries,
+                        stats.total_memory_bytes,
+                        stats.hit_rate() * 100.0,
+                        cache_path.display()
+                    );
                 }
             }
             Err(e) => {
@@ -521,13 +558,13 @@ fn write_cache_file(path: &Path, data: &str) -> Result<(), std::io::Error> {
         .create(true)
         .truncate(true)
         .open(path)?;
-    
+
     let mut writer = BufWriter::new(file);
     writer.write_all(data.as_bytes())?;
     writer.flush()?;
-    
+
     // Ensure data is written to disk
     writer.into_inner()?.sync_all()?;
-    
+
     Ok(())
 }
