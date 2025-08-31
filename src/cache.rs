@@ -48,15 +48,17 @@ pub fn get_cache_config() -> CacheConfig {
     let mut config = CacheConfig::default();
 
     // Configure max entries
-    if let Ok(max_entries) = env::var("RUSTOWL_CACHE_MAX_ENTRIES") {
-        if let Ok(value) = max_entries.parse::<usize>() {
-            config.max_entries = value;
-        }
+    if let Ok(max_entries) = env::var("RUSTOWL_CACHE_MAX_ENTRIES")
+        && let Ok(value) = max_entries.parse::<usize>()
+    {
+        config.max_entries = value;
     }
 
     // Configure max memory in MB
     if let Ok(max_memory_mb) = env::var("RUSTOWL_CACHE_MAX_MEMORY_MB") {
-        if let Ok(value) = max_memory_mb.parse::<usize>() {
+        if let Ok(max_memory_mb) = env::var("RUSTOWL_CACHE_MAX_MEMORY_MB")
+            && let Ok(value) = max_memory_mb.parse::<usize>()
+        {
             config.max_memory_bytes = value * 1024 * 1024;
         }
     }
