@@ -83,9 +83,7 @@ impl CacheEntry {
             .as_secs();
 
         // Estimate data size via serialization to capture heap usage
-        let data_size = serde_json::to_vec(&function)
-            .map(|v| v.len())
-            .unwrap_or(0);
+        let data_size = serde_json::to_vec(&function).map(|v| v.len()).unwrap_or(0);
 
         Self {
             function,
@@ -260,8 +258,10 @@ impl CacheData {
 
                 if let Some(key) = oldest_key {
                     if let Some(removed) = self.entries.shift_remove(&key) {
-                        self.stats.total_memory_bytes =
-                            self.stats.total_memory_bytes.saturating_sub(removed.data_size);
+                        self.stats.total_memory_bytes = self
+                            .stats
+                            .total_memory_bytes
+                            .saturating_sub(removed.data_size);
                         evicted_count += 1;
                     }
                 } else {
@@ -275,8 +275,10 @@ impl CacheData {
                 && !self.entries.is_empty()
             {
                 if let Some((_, removed)) = self.entries.shift_remove_index(0) {
-                    self.stats.total_memory_bytes =
-                        self.stats.total_memory_bytes.saturating_sub(removed.data_size);
+                    self.stats.total_memory_bytes = self
+                        .stats
+                        .total_memory_bytes
+                        .saturating_sub(removed.data_size);
                     evicted_count += 1;
                 }
             }

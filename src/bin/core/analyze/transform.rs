@@ -227,8 +227,16 @@ pub fn rich_locations_to_ranges(
 
 /// Our representation of [`rustc_borrowck::consumers::BorrowData`]
 pub enum BorrowData {
-    Shared { borrowed: Local },
-    Mutable { borrowed: Local },
+    Shared {
+        borrowed: Local,
+        #[allow(dead_code)]
+        assigned: Local,
+    },
+    Mutable {
+        borrowed: Local,
+        #[allow(dead_code)]
+        assigned: Local,
+    },
 }
 
 /// A map type from [`BorrowIndex`] to [`BorrowData`]
@@ -245,10 +253,12 @@ impl BorrowMap {
             let data = if data.kind().mutability().is_mut() {
                 BorrowData::Mutable {
                     borrowed: data.borrowed_place().local,
+                    assigned: data.assigned_place().local,
                 }
             } else {
                 BorrowData::Shared {
                     borrowed: data.borrowed_place().local,
+                    assigned: data.assigned_place().local,
                 }
             };
             location_map.push((*location, data));

@@ -18,6 +18,7 @@ pub enum CargoCheckMessage {
     CompilerArtifact {
         target: CargoCheckMessageTarget,
     },
+    #[allow(unused)]
     BuildFinished {},
 }
 

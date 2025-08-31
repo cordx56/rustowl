@@ -36,7 +36,10 @@ pub fn is_cache() -> bool {
 }
 
 pub fn set_cache_path(cmd: &mut Command, target_dir: impl AsRef<Path>) {
-    cmd.env("RUSTOWL_CACHE_DIR", target_dir.as_ref().join("cache"));
+    cmd.env(
+        "RUSTOWL_CACHE_DIR",
+        target_dir.as_ref().join("rustowl").join("cache"),
+    );
 }
 
 pub fn get_cache_path() -> Option<PathBuf> {
