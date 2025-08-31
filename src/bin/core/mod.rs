@@ -7,6 +7,7 @@ use rustc_interface::interface;
 use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
+use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::env;
 use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
@@ -67,7 +68,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
 
     Ok(tcx
         .arena
-        .alloc(ConcreteOpaqueTypes(indexmap::IndexMap::default())))
+        .alloc(ConcreteOpaqueTypes(rustc_data_structures::fx::FxIndexMap::default())))
 }
 
 pub struct AnalyzerCallback;
@@ -121,7 +122,7 @@ pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
     let krate = Crate(HashMap::from([(
         analyzed.file_name.to_owned(),
         File {
-            items: vec![analyzed.analyzed],
+            items: SmallVec::from_vec(vec![analyzed.analyzed]),
         },
     )]));
     // get currently-compiling crate name

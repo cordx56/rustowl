@@ -1148,6 +1148,7 @@ checksum = "f2481980430f9f78649238835720ddccc57e52df14ffce1c6f37391d61b563e9"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.5",
+ "serde",
 ]
 
 [[package]]
@@ -1837,6 +1838,7 @@ dependencies = [
  "clap_mangen",
  "criterion",
  "flate2",
+ "indexmap",
  "log",
  "process_alive",
  "rayon",
@@ -1846,6 +1848,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simple_logger",
+ "smallvec",
  "tar",
  "tempfile",
  "tikv-jemalloc-sys",
@@ -2065,6 +2068,9 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "socket2"

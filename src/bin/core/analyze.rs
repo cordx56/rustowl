@@ -12,6 +12,8 @@ use rustc_middle::{
 };
 use rustc_span::Span;
 use rustowl::models::*;
+use rustowl::models::range_vec_from_vec;
+use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -45,7 +47,7 @@ pub struct MirAnalyzer {
     local_decls: HashMap<Local, String>,
     user_vars: HashMap<Local, (Range, String)>,
     input: PoloniusInput,
-    basic_blocks: Vec<MirBasicBlock>,
+    basic_blocks: SmallVec<[MirBasicBlock; 8]>,
     fn_id: LocalDefId,
     file_hash: String,
     mir_hash: String,
@@ -181,50 +183,52 @@ impl MirAnalyzer {
 
     /// collect declared variables in MIR body
     /// final step of analysis
-    fn collect_decls(&self) -> Vec<MirDecl> {
+    fn collect_decls(&self) -> DeclVec {
         let user_vars = &self.user_vars;
         let lives = &self.accurate_live;
         let must_live_at = &self.must_live;
 
         let drop_range = &self.drop_range;
-        self.local_decls
-            .iter()
-            .map(|(local, ty)| {
-                let ty = ty.clone();
-                let must_live_at = must_live_at.get(local).cloned().unwrap_or(Vec::new());
-                let lives = lives.get(local).cloned().unwrap_or(Vec::new());
-                let shared_borrow = self.shared_live.get(local).cloned().unwrap_or(Vec::new());
-                let mutable_borrow = self.mutable_live.get(local).cloned().unwrap_or(Vec::new());
-                let drop = self.is_drop(*local);
-                let drop_range = drop_range.get(local).cloned().unwrap_or(Vec::new());
-                let fn_local = FnLocal::new(local.as_u32(), self.fn_id.local_def_index.as_u32());
-                if let Some((span, name)) = user_vars.get(local).cloned() {
-                    MirDecl::User {
-                        local: fn_local,
-                        name,
-                        span,
-                        ty,
-                        lives,
-                        shared_borrow,
-                        mutable_borrow,
-                        must_live_at,
-                        drop,
-                        drop_range,
-                    }
-                } else {
-                    MirDecl::Other {
-                        local: fn_local,
-                        ty,
-                        lives,
-                        shared_borrow,
-                        mutable_borrow,
-                        drop,
-                        drop_range,
-                        must_live_at,
-                    }
+        let mut result = DeclVec::with_capacity(self.local_decls.len());
+        
+        for (local, ty) in &self.local_decls {
+            let ty = ty.clone();
+            let must_live_at = must_live_at.get(local).cloned().unwrap_or_default();
+            let lives = lives.get(local).cloned().unwrap_or_default();
+            let shared_borrow = self.shared_live.get(local).cloned().unwrap_or_default();
+            let mutable_borrow = self.mutable_live.get(local).cloned().unwrap_or_default();
+            let drop = self.is_drop(*local);
+            let drop_range = drop_range.get(local).cloned().unwrap_or_default();
+            
+            let fn_local = FnLocal::new(local.as_u32(), self.fn_id.local_def_index.as_u32());
+            let decl = if let Some((span, name)) = user_vars.get(local).cloned() {
+                MirDecl::User {
+                    local: fn_local,
+                    name,
+                    span,
+                    ty,
+                    lives: range_vec_from_vec(lives),
+                    shared_borrow: range_vec_from_vec(shared_borrow),
+                    mutable_borrow: range_vec_from_vec(mutable_borrow),
+                    must_live_at: range_vec_from_vec(must_live_at),
+                    drop,
+                    drop_range: range_vec_from_vec(drop_range),
                 }
-            })
-            .collect()
+            } else {
+                MirDecl::Other {
+                    local: fn_local,
+                    ty,
+                    lives: range_vec_from_vec(lives),
+                    shared_borrow: range_vec_from_vec(shared_borrow),
+                    mutable_borrow: range_vec_from_vec(mutable_borrow),
+                    drop,
+                    drop_range: range_vec_from_vec(drop_range),
+                    must_live_at: range_vec_from_vec(must_live_at),
+                }
+            };
+            result.push(decl);
+        }
+        result
     }
 
     fn is_drop(&self, local: Local) -> bool {

@@ -1,4 +1,5 @@
 use crate::models::*;
+use crate::models::range_vec_into_vec;
 
 pub fn is_super_range(r1: Range, r2: Range) -> bool {
     (r1.from() < r2.from() && r2.until() <= r1.until())
@@ -41,7 +42,8 @@ pub fn merge_ranges(r1: Range, r2: Range) -> Option<Range> {
 }
 
 /// eliminate common ranges and flatten ranges
-pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
+pub fn eliminated_ranges(ranges: Vec<Range>) -> Vec<Range> {
+    let mut ranges = ranges;
     let mut i = 0;
     'outer: while i < ranges.len() {
         let mut j = 0;
@@ -60,7 +62,13 @@ pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
     ranges
 }
 
-pub fn exclude_ranges(mut from: Vec<Range>, excludes: Vec<Range>) -> Vec<Range> {
+/// Version of eliminated_ranges that works with SmallVec
+pub fn eliminated_ranges_small(ranges: RangeVec) -> Vec<Range> {
+    eliminated_ranges(range_vec_into_vec(ranges))
+}
+
+pub fn exclude_ranges(from: Vec<Range>, excludes: Vec<Range>) -> Vec<Range> {
+    let mut from = from;
     let mut i = 0;
     'outer: while i < from.len() {
         let mut j = 0;
@@ -80,6 +88,11 @@ pub fn exclude_ranges(mut from: Vec<Range>, excludes: Vec<Range>) -> Vec<Range> 
         i += 1;
     }
     eliminated_ranges(from)
+}
+
+/// Version of exclude_ranges that works with SmallVec
+pub fn exclude_ranges_small(from: RangeVec, excludes: Vec<Range>) -> Vec<Range> {
+    exclude_ranges(range_vec_into_vec(from), excludes)
 }
 
 #[allow(unused)]

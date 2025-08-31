@@ -4,7 +4,7 @@ use rustc_query_system::ich::StableHashingContext;
 use rustc_stable_hash::{FromStableHash, SipHasher128Hash};
 use rustowl::models::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::io::Write;
 use std::sync::{LazyLock, Mutex};
 
@@ -54,27 +54,45 @@ impl<'tcx> Hasher<'tcx> {
     }
 }
 
-/// Single file cache body
-///
-/// this is a map: file hash -> (MIR body hash -> analyze result)
-///
-/// Note: Cache can be utilized when neither
-/// the MIR body nor the entire file is modified.
+/// Optimized cache using a flattened structure with combined keys
+/// This reduces memory overhead and improves cache performance
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(transparent)]
-pub struct CacheData(HashMap<String, HashMap<String, Function>>);
+pub struct CacheData(IndexMap<String, Function>);
+
 impl CacheData {
     pub fn new() -> Self {
-        Self(HashMap::new())
+        Self(IndexMap::with_capacity(64))
     }
+    
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self(IndexMap::with_capacity(capacity))
+    }
+    
+    /// Create a combined cache key from file and MIR hashes
+    fn make_key(file_hash: &str, mir_hash: &str) -> String {
+        format!("{file_hash}:{mir_hash}")
+    }
+    
     pub fn get_cache(&self, file_hash: &str, mir_hash: &str) -> Option<Function> {
-        self.0.get(file_hash).and_then(|v| v.get(mir_hash)).cloned()
+        let key = Self::make_key(file_hash, mir_hash);
+        self.0.get(&key).cloned()
     }
+    
     pub fn insert_cache(&mut self, file_hash: String, mir_hash: String, analyzed: Function) {
-        self.0
-            .entry(file_hash)
-            .or_default()
-            .insert(mir_hash, analyzed);
+        let key = Self::make_key(&file_hash, &mir_hash);
+        self.0.insert(key, analyzed);
+    }
+    
+    /// Remove old cache entries to prevent unlimited growth
+    pub fn cleanup_old_entries(&mut self, max_size: usize) {
+        if self.0.len() > max_size {
+            let to_remove = self.0.len() - max_size;
+            // Remove oldest entries (first in IndexMap)
+            for _ in 0..to_remove {
+                self.0.shift_remove_index(0);
+            }
+        }
     }
 }
 
