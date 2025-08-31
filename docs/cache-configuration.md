@@ -20,7 +20,7 @@ The cache system stores analyzed MIR (Mid-level Intermediate Representation) dat
   - Set to `false` or `0` to disable caching entirely
 
 - **`RUSTOWL_CACHE_DIR`**: Set custom cache directory
-  - Default (cargo workspace runs): `{target_dir}/owl/cache`
+  - Default (cargo workspace runs): `{target_dir}/cache`
   - For single-file analysis, set `RUSTOWL_CACHE_DIR` explicitly.
   - Example: `export RUSTOWL_CACHE_DIR=/tmp/rustowl-cache`
 ### Advanced Configuration

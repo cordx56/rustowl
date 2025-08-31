@@ -202,9 +202,18 @@ pub fn rich_locations_to_ranges(
     super::sort_locs(&mut starts);
     super::sort_locs(&mut mids);
 
-    starts
+    let n = starts.len().min(mids.len());
+    if n != starts.len() || n != mids.len() {
+        log::debug!(
+            "rich_locations_to_ranges: starts({}) != mids({}); truncating to {}",
+            starts.len(),
+            mids.len(),
+            n
+        );
+    }
+    starts[..n]
         .par_iter()
-        .zip(mids.par_iter())
+        .zip(mids[..n].par_iter())
         .filter_map(|(s, m)| {
             let sr = statement_location_to_range(basic_blocks, s.0.index(), s.1);
             let mr = statement_location_to_range(basic_blocks, m.0.index(), m.1);
@@ -218,16 +227,8 @@ pub fn rich_locations_to_ranges(
 
 /// Our representation of [`rustc_borrowck::consumers::BorrowData`]
 pub enum BorrowData {
-    Shared {
-        borrowed: Local,
-        #[allow(dead_code)]
-        assigned: Local,
-    },
-    Mutable {
-        borrowed: Local,
-        #[allow(dead_code)]
-        assigned: Local,
-    },
+    Shared { borrowed: Local },
+    Mutable { borrowed: Local },
 }
 
 /// A map type from [`BorrowIndex`] to [`BorrowData`]
@@ -244,12 +245,10 @@ impl BorrowMap {
             let data = if data.kind().mutability().is_mut() {
                 BorrowData::Mutable {
                     borrowed: data.borrowed_place().local,
-                    assigned: data.assigned_place().local,
                 }
             } else {
                 BorrowData::Shared {
                     borrowed: data.borrowed_place().local,
-                    assigned: data.assigned_place().local,
                 }
             };
             location_map.push((*location, data));

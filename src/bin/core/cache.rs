@@ -82,10 +82,10 @@ impl CacheEntry {
             .unwrap()
             .as_secs();
 
-        // Estimate data size for memory management
-        let data_size = std::mem::size_of::<Function>()
-            + function.basic_blocks.len() * std::mem::size_of::<MirBasicBlock>()
-            + function.decls.len() * std::mem::size_of::<MirDecl>();
+        // Estimate data size via serialization to capture heap usage
+        let data_size = serde_json::to_vec(&function)
+            .map(|v| v.len())
+            .unwrap_or(0);
 
         Self {
             function,
@@ -240,7 +240,7 @@ impl CacheData {
 
     /// Perform intelligent cache eviction
     fn evict_entries(&mut self) {
-        let target_entries = (self.config.max_entries * 8) / 10; // Keep 80% after eviction
+        let target_entries = ((self.config.max_entries * 8) / 10).max(1); // Keep >=1 entry
         let target_memory = (self.config.max_memory_bytes * 8) / 10;
 
         let mut evicted_count = 0;
@@ -259,8 +259,11 @@ impl CacheData {
                     .map(|(key, _)| key.clone());
 
                 if let Some(key) = oldest_key {
-                    self.entries.shift_remove(&key);
-                    evicted_count += 1;
+                    if let Some(removed) = self.entries.shift_remove(&key) {
+                        self.stats.total_memory_bytes =
+                            self.stats.total_memory_bytes.saturating_sub(removed.data_size);
+                        evicted_count += 1;
+                    }
                 } else {
                     break;
                 }
@@ -271,8 +274,11 @@ impl CacheData {
                 || self.stats.total_memory_bytes > target_memory)
                 && !self.entries.is_empty()
             {
-                self.entries.shift_remove_index(0);
-                evicted_count += 1;
+                if let Some((_, removed)) = self.entries.shift_remove_index(0) {
+                    self.stats.total_memory_bytes =
+                        self.stats.total_memory_bytes.saturating_sub(removed.data_size);
+                    evicted_count += 1;
+                }
             }
         }
 
