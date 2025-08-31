@@ -7,8 +7,8 @@ use rustowl::cache::CacheConfig;
 use rustowl::models::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, Write};
+use std::fs::OpenOptions;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -108,6 +108,7 @@ impl CacheEntry {
     }
 
     /// Check if this cache entry is still valid based on file modification time
+    #[allow(dead_code)]
     pub fn is_valid(&self, current_file_mtime: Option<u64>) -> bool {
         match (self.file_mtime, current_file_mtime) {
             (Some(cached_mtime), Some(current_mtime)) => cached_mtime >= current_mtime,
@@ -121,6 +122,7 @@ impl CacheEntry {
 pub struct CacheStats {
     pub hits: u64,
     pub misses: u64,
+    #[allow(dead_code)]
     pub invalidations: u64,
     pub evictions: u64,
     pub total_entries: usize,
@@ -157,13 +159,17 @@ pub struct CacheData {
 const CACHE_VERSION: u32 = 2;
 
 impl CacheData {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::with_config(CacheConfig::default())
     }
 
+    #[allow(dead_code)]
     pub fn with_capacity(capacity: usize) -> Self {
-        let mut config = CacheConfig::default();
-        config.max_entries = capacity;
+        let config = CacheConfig {
+            max_entries: capacity,
+            ..Default::default()
+        };
         Self::with_config(config)
     }
 
@@ -224,6 +230,7 @@ impl CacheData {
         }
     }
 
+    #[allow(dead_code)]
     pub fn insert_cache(&mut self, file_hash: String, mir_hash: String, analyzed: Function) {
         self.insert_cache_with_file_path(file_hash, mir_hash, analyzed, None);
     }
@@ -326,20 +333,20 @@ impl CacheData {
     }
 
     /// Remove invalid cache entries based on file modification times
+    #[allow(dead_code)]
     pub fn validate_and_cleanup(&mut self, file_paths: &HashMap<String, String>) -> usize {
         let mut removed_count = 0;
         let mut keys_to_remove = Vec::new();
 
         for (key, entry) in &self.entries {
             // Extract file hash from key
-            if let Some(file_hash) = key.split(':').next() {
-                if let Some(file_path) = file_paths.get(file_hash) {
+            if let Some(file_hash) = key.split(':').next()
+                && let Some(file_path) = file_paths.get(file_hash) {
                     let current_mtime = Self::get_file_mtime(file_path);
                     if !entry.is_valid(current_mtime) {
                         keys_to_remove.push(key.clone());
                     }
                 }
-            }
         }
 
         for key in keys_to_remove {
@@ -350,7 +357,7 @@ impl CacheData {
         if removed_count > 0 {
             self.stats.invalidations += removed_count;
             self.update_memory_stats();
-            log::info!("Invalidated {} outdated cache entries", removed_count);
+            log::info!("Invalidated {removed_count} outdated cache entries");
         }
 
         removed_count as usize
@@ -368,6 +375,7 @@ impl CacheData {
 
     /// Remove old cache entries to prevent unlimited growth
     /// This method is kept for backward compatibility but now uses intelligent eviction
+    #[allow(dead_code)]
     pub fn cleanup_old_entries(&mut self, max_size: usize) {
         if max_size < self.config.max_entries {
             self.config.max_entries = max_size;
@@ -376,6 +384,7 @@ impl CacheData {
     }
 
     /// Get detailed cache information for debugging
+    #[allow(dead_code)]
     pub fn debug_info(&self) -> String {
         format!(
             "Cache Info:\n\
@@ -403,6 +412,7 @@ impl CacheData {
     }
 
     /// Clear all cache entries
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.entries.clear();
         self.stats = CacheStats::default();
@@ -410,16 +420,19 @@ impl CacheData {
     }
 
     /// Get the number of entries in the cache
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Check if the cache is empty
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
     /// Shrink the cache to fit current entries
+    #[allow(dead_code)]
     pub fn shrink_to_fit(&mut self) {
         self.entries.shrink_to_fit();
     }
@@ -511,7 +524,7 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
         let serialized = match serde_json::to_string_pretty(cache) {
             Ok(data) => data,
             Err(e) => {
-                log::error!("Failed to serialize cache data: {}", e);
+                log::error!("Failed to serialize cache data: {e}");
                 return;
             }
         };

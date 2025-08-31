@@ -48,7 +48,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
         let mut tasks = TASKS.lock().unwrap();
         match analyzer {
             MirAnalyzerInitResult::Cached(cached) => {
-                handle_analyzed_result(tcx, cached);
+                handle_analyzed_result(tcx, *cached);
             }
             MirAnalyzerInitResult::Analyzer(analyzer) => {
                 tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());

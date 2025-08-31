@@ -55,12 +55,10 @@ pub fn get_cache_config() -> CacheConfig {
     }
 
     // Configure max memory in MB
-    if let Ok(max_memory_mb) = env::var("RUSTOWL_CACHE_MAX_MEMORY_MB") {
-        if let Ok(max_memory_mb) = env::var("RUSTOWL_CACHE_MAX_MEMORY_MB")
-            && let Ok(value) = max_memory_mb.parse::<usize>()
-        {
-            config.max_memory_bytes = value * 1024 * 1024;
-        }
+    if let Ok(max_memory_mb) = env::var("RUSTOWL_CACHE_MAX_MEMORY_MB")
+        && let Ok(value) = max_memory_mb.parse::<usize>()
+    {
+        config.max_memory_bytes = value * 1024 * 1024;
     }
 
     // Configure eviction policy

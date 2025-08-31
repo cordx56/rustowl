@@ -29,7 +29,7 @@ pub struct AnalyzeResult {
 }
 
 pub enum MirAnalyzerInitResult {
-    Cached(AnalyzeResult),
+    Cached(Box<AnalyzeResult>),
     Analyzer(MirAnalyzeFuture),
 }
 
@@ -105,12 +105,12 @@ impl MirAnalyzer {
             && let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash)
         {
             log::info!("MIR cache hit: {fn_id:?}");
-            return MirAnalyzerInitResult::Cached(AnalyzeResult {
+            return MirAnalyzerInitResult::Cached(Box::new(AnalyzeResult {
                 file_name,
                 file_hash,
                 mir_hash,
                 analyzed,
-            });
+            }));
         }
         drop(cache);
 
