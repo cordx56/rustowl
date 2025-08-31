@@ -99,6 +99,10 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
                 handle_analyzed_result(tcx, result);
             }
             if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
+                // Log cache statistics before writing
+                let stats = cache.get_stats();
+                log::info!("Cache statistics: {} hits, {} misses, {:.1}% hit rate, {} evictions", 
+                          stats.hits, stats.misses, stats.hit_rate() * 100.0, stats.evictions);
                 cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
             }
         });
@@ -113,10 +117,12 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
 
 pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
     if let Some(cache) = cache::CACHE.lock().unwrap().as_mut() {
-        cache.insert_cache(
+        // Pass file name for potential file modification time validation
+        cache.insert_cache_with_file_path(
             analyzed.file_hash.clone(),
             analyzed.mir_hash.clone(),
             analyzed.analyzed.clone(),
+            Some(&analyzed.file_name),
         );
     }
     let krate = Crate(HashMap::from([(

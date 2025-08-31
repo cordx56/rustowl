@@ -109,7 +109,7 @@ impl MirAnalyzer {
                 file_name,
                 file_hash,
                 mir_hash,
-                analyzed: analyzed.clone(),
+                analyzed,
             });
         }
         drop(cache);
