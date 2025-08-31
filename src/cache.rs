@@ -30,10 +30,12 @@ impl Default for CacheConfig {
 }
 
 pub fn is_cache() -> bool {
-    !env::var("RUSTOWL_CACHE").map(|v| {
-        let v = v.trim().to_ascii_lowercase();
-        v == "false" || v == "0"
-    })
+    !env::var("RUSTOWL_CACHE")
+        .map(|v| {
+            let v = v.trim().to_ascii_lowercase();
+            v == "false" || v == "0"
+        })
+        .unwrap_or(false)
 }
 
 pub fn set_cache_path(cmd: &mut Command, target_dir: impl AsRef<Path>) {
