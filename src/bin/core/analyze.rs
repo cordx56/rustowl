@@ -11,8 +11,8 @@ use rustc_middle::{
     ty::TyCtxt,
 };
 use rustc_span::Span;
-use rustowl::models::*;
 use rustowl::models::range_vec_from_vec;
+use rustowl::models::*;
 use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::future::Future;
@@ -190,7 +190,7 @@ impl MirAnalyzer {
 
         let drop_range = &self.drop_range;
         let mut result = DeclVec::with_capacity(self.local_decls.len());
-        
+
         for (local, ty) in &self.local_decls {
             let ty = ty.clone();
             let must_live_at = must_live_at.get(local).cloned().unwrap_or_default();
@@ -199,7 +199,7 @@ impl MirAnalyzer {
             let mutable_borrow = self.mutable_live.get(local).cloned().unwrap_or_default();
             let drop = self.is_drop(*local);
             let drop_range = drop_range.get(local).cloned().unwrap_or_default();
-            
+
             let fn_local = FnLocal::new(local.as_u32(), self.fn_id.local_def_index.as_u32());
             let decl = if let Some((span, name)) = user_vars.get(local).cloned() {
                 MirDecl::User {

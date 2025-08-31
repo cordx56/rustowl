@@ -1,10 +1,10 @@
+use indexmap::IndexMap;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_middle::ty::TyCtxt;
 use rustc_query_system::ich::StableHashingContext;
 use rustc_stable_hash::{FromStableHash, SipHasher128Hash};
 use rustowl::models::*;
 use serde::{Deserialize, Serialize};
-use indexmap::IndexMap;
 use std::io::Write;
 use std::sync::{LazyLock, Mutex};
 
@@ -64,26 +64,26 @@ impl CacheData {
     pub fn new() -> Self {
         Self(IndexMap::with_capacity(64))
     }
-    
+
     pub fn with_capacity(capacity: usize) -> Self {
         Self(IndexMap::with_capacity(capacity))
     }
-    
+
     /// Create a combined cache key from file and MIR hashes
     fn make_key(file_hash: &str, mir_hash: &str) -> String {
         format!("{file_hash}:{mir_hash}")
     }
-    
+
     pub fn get_cache(&self, file_hash: &str, mir_hash: &str) -> Option<Function> {
         let key = Self::make_key(file_hash, mir_hash);
         self.0.get(&key).cloned()
     }
-    
+
     pub fn insert_cache(&mut self, file_hash: String, mir_hash: String, analyzed: Function) {
         let key = Self::make_key(&file_hash, &mir_hash);
         self.0.insert(key, analyzed);
     }
-    
+
     /// Remove old cache entries to prevent unlimited growth
     pub fn cleanup_old_entries(&mut self, max_size: usize) {
         if self.0.len() > max_size {

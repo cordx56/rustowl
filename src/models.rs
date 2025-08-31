@@ -1,8 +1,8 @@
 #![allow(unused)]
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
-use indexmap::IndexMap;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -29,12 +29,12 @@ impl Loc {
         // Skip CR characters without allocating a new string
         let mut char_count = 0u32;
         let mut byte_count = 0usize;
-        
+
         for ch in source.chars() {
             if byte_count >= byte_pos {
                 break;
             }
-            
+
             // Skip CR characters (compiler ignores them)
             if ch != '\r' {
                 byte_count += ch.len_utf8();
@@ -45,7 +45,7 @@ impl Loc {
                 byte_count += ch.len_utf8();
             }
         }
-        
+
         Self(char_count)
     }
 }
@@ -218,13 +218,14 @@ impl Crate {
                     if existing.items.capacity() < new_size {
                         existing.items.reserve(mir.items.len());
                     }
-                    
+
                     // Use a HashSet for O(1) lookup instead of dedup_by
-                    let mut seen_ids = std::collections::HashSet::with_capacity(existing.items.len());
+                    let mut seen_ids =
+                        std::collections::HashSet::with_capacity(existing.items.len());
                     for item in &existing.items {
                         seen_ids.insert(item.fn_id);
                     }
-                    
+
                     mir.items.retain(|item| seen_ids.insert(item.fn_id));
                     existing.items.append(&mut mir.items);
                 }

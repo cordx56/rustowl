@@ -1,5 +1,5 @@
-use crate::models::*;
 use crate::models::range_vec_into_vec;
+use crate::models::*;
 
 pub fn is_super_range(r1: Range, r2: Range) -> bool {
     (r1.from() < r2.from() && r2.until() <= r1.until())
