@@ -1,7 +1,7 @@
 use crate::{lsp::progress, models::*, utils};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use tower_lsp_server::{lsp_types, UriExt};
+use tower_lsp_server::{UriExt, lsp_types};
 
 // TODO: Variable name should be checked?
 //const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];

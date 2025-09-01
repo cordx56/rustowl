@@ -142,17 +142,17 @@ impl Range {
             Some(Self { from, until })
         }
     }
-    
+
     /// Returns the starting location of the range.
     pub fn from(&self) -> Loc {
         self.from
     }
-    
+
     /// Returns the ending location of the range.
     pub fn until(&self) -> Loc {
         self.until
     }
-    
+
     /// Returns the size of the range in characters.
     pub fn size(&self) -> u32 {
         self.until.0 - self.from.0

@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::{sync::RwLock, task::JoinSet};
 use tokio_util::sync::CancellationToken;
+use tower_lsp_server::jsonrpc::Result;
 use tower_lsp_server::lsp_types::{self, *};
 use tower_lsp_server::{Client, LanguageServer, LspService, UriExt};
-use tower_lsp_server::jsonrpc::Result;
 
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -288,13 +288,13 @@ impl Backend {
 }
 
 impl LanguageServer for Backend {
-    async fn initialize(
-        &self,
-        params: InitializeParams,
-    ) -> Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         let mut workspaces = Vec::new();
         if let Some(wss) = params.workspace_folders {
-            workspaces.extend(wss.iter().filter_map(|v| v.uri.to_file_path().map(|p| p.into_owned())));
+            workspaces.extend(
+                wss.iter()
+                    .filter_map(|v| v.uri.to_file_path().map(|p| p.into_owned())),
+            );
         }
         for path in workspaces {
             self.add_analyze_target(&path).await;
@@ -345,10 +345,7 @@ impl LanguageServer for Backend {
         Ok(init_res)
     }
 
-    async fn did_change_workspace_folders(
-        &self,
-        params: DidChangeWorkspaceFoldersParams,
-    ) {
+    async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
         for added in params.event.added {
             if let Some(path) = added.uri.to_file_path()
                 && self.add_analyze_target(&path).await
