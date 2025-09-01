@@ -4,7 +4,7 @@
 //! ownership information, lifetimes, and analysis results extracted
 //! from Rust code via compiler integration.
 
-use foldhash::fast::RandomState as FoldHasher;
+use foldhash::quality::RandomState as FoldHasher;
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -280,7 +280,10 @@ impl Crate {
                             .reserve_exact(new_size - existing.items.capacity());
                     }
 
-                    let mut seen_ids = FoldIndexSet::with_capacity(existing.items.len());
+                    let mut seen_ids = FoldIndexSet::with_capacity_and_hasher(
+                        existing.items.len(),
+                        FoldHasher::default(),
+                    );
                     seen_ids.extend(existing.items.iter().map(|i| i.fn_id));
 
                     mir.items.retain(|item| seen_ids.insert(item.fn_id));
