@@ -1,13 +1,13 @@
 mod analyze;
 mod cache;
 
+use crate::models::FoldIndexMap;
 use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
 use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
-use std::collections::HashMap;
 use std::env;
 use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
 use tokio::{

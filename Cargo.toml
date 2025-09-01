@@ -36,6 +36,7 @@ clap_complete = "4"
 clap_complete_nushell = "4"
 eros = "0.1.0"
 flate2 = "1"
+foldhash = "0.2.0"
 indexmap = { version = "2", features = ["rayon", "serde"] }
 log = "0.4"
 process_alive = "0.1"

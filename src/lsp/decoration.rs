@@ -1,5 +1,5 @@
+use crate::models::FoldIndexSet;
 use crate::{lsp::progress, models::*, utils};
-use std::collections::HashSet;
 use std::path::PathBuf;
 use tower_lsp_server::{UriExt, lsp_types};
 

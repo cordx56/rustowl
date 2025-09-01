@@ -4,10 +4,16 @@
 //! ownership information, lifetimes, and analysis results extracted
 //! from Rust code via compiler integration.
 
-use indexmap::IndexMap;
+use foldhash::fast::RandomState as FoldHasher;
+use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::collections::HashMap;
+
+/// An IndexMap with FoldHasher for fast + high-quality hashing.
+pub type FoldIndexMap<K, V> = IndexMap<K, V, FoldHasher>;
+
+/// An IndexSet with FoldHasher for fast + high-quality hashing.
+pub type FoldIndexSet<K> = IndexSet<K, FoldHasher>;
 
 /// Represents a local variable within a function scope.
 ///
@@ -241,7 +247,7 @@ impl File {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(transparent)]
-pub struct Workspace(pub HashMap<String, Crate>);
+pub struct Workspace(pub FoldIndexMap<String, Crate>);
 
 impl Workspace {
     pub fn merge(&mut self, other: Self) {
@@ -258,7 +264,7 @@ impl Workspace {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(transparent)]
-pub struct Crate(pub HashMap<String, File>);
+pub struct Crate(pub FoldIndexMap<String, File>);
 
 impl Crate {
     pub fn merge(&mut self, other: Self) {
@@ -274,8 +280,7 @@ impl Crate {
                             .reserve_exact(new_size - existing.items.capacity());
                     }
 
-                    let mut seen_ids =
-                        std::collections::HashSet::with_capacity(existing.items.len());
+                    let mut seen_ids = FoldIndexSet::with_capacity(existing.items.len());
                     seen_ids.extend(existing.items.iter().map(|i| i.fn_id));
 
                     mir.items.retain(|item| seen_ids.insert(item.fn_id));

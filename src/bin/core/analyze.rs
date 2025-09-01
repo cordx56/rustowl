@@ -2,6 +2,7 @@ mod polonius_analyzer;
 mod transform;
 
 use super::cache;
+use crate::models::FoldIndexMap;
 use rustc_borrowck::consumers::{
     ConsumerOptions, PoloniusInput, PoloniusOutput, get_body_with_borrowck_facts,
 };
@@ -14,7 +15,6 @@ use rustc_span::Span;
 use rustowl::models::range_vec_from_vec;
 use rustowl::models::*;
 use smallvec::SmallVec;
-use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 

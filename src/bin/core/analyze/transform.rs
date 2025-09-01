@@ -1,3 +1,4 @@
+use crate::models::{FoldIndexMap, FoldIndexSet};
 use rayon::prelude::*;
 use rustc_borrowck::consumers::{BorrowIndex, BorrowSet, RichLocation};
 use rustc_hir::def_id::LocalDefId;
@@ -11,7 +12,6 @@ use rustc_middle::{
 use rustc_span::source_map::SourceMap;
 use rustowl::models::*;
 use smallvec::SmallVec;
-use std::collections::{HashMap, HashSet};
 
 /// RegionEraser to erase region variables from MIR body
 /// This is required to hash MIR body

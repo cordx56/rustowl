@@ -50,8 +50,8 @@
 
 #[cfg(test)]
 mod miri_memory_safety_tests {
+    use crate::models::FoldIndexMap;
     use crate::models::*;
-    use std::collections::HashMap;
 
     #[test]
     fn test_loc_arithmetic_memory_safety() {
