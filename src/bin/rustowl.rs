@@ -48,7 +48,7 @@ async fn handle_command(command: Commands) {
         Commands::Check(command_options) => {
             let path = command_options.path.unwrap_or_else(|| {
                 env::current_dir().unwrap_or_else(|_| {
-                    tracing::error!("Failed to get current directory, using '.'");
+                    log::error!("Failed to get current directory, using '.'");
                     std::path::PathBuf::from(".")
                 })
             });
