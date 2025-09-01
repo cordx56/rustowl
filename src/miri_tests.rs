@@ -50,7 +50,7 @@
 
 #[cfg(test)]
 mod miri_memory_safety_tests {
-    use crate::models::FoldIndexMap;
+    use crate::models::FoldIndexMap as HashMap;
     use crate::models::*;
 
     #[test]
