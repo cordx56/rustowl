@@ -1,4 +1,4 @@
-use crate::{cache::*, models::*, toolchain};
+use crate::{cache::*, error::*, models::*, toolchain};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -37,7 +37,7 @@ pub struct Analyzer {
 }
 
 impl Analyzer {
-    pub async fn new(path: impl AsRef<Path>) -> Result<Self, ()> {
+    pub async fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
 
         let mut cargo_cmd = toolchain::setup_cargo_command().await;
@@ -77,7 +77,7 @@ impl Analyzer {
             })
         } else {
             log::warn!("Invalid analysis target: {}", path.display());
-            Err(())
+            Err(RustOwlError::Analysis(format!("Invalid analysis target: {}", path.display())))
         }
     }
     pub fn target_path(&self) -> &Path {

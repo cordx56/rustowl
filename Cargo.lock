@@ -682,6 +682,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "eros"
+version = "0.2.0-rc.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97bef9f39c405c3864340503b8bb4bad3faf426c2cba12a6753f27392a9048c1"
+
+[[package]]
 name = "errno"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1837,6 +1843,7 @@ dependencies = [
  "clap_complete_nushell",
  "clap_mangen",
  "criterion",
+ "eros",
  "flate2",
  "indexmap",
  "log",
