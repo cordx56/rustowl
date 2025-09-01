@@ -203,3 +203,120 @@ pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
     }
     0
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_is_super_range() {
+        let r1 = Range::new(Loc(0), Loc(10)).unwrap();
+        let r2 = Range::new(Loc(2), Loc(8)).unwrap();
+        let r3 = Range::new(Loc(5), Loc(15)).unwrap();
+        
+        assert!(is_super_range(r1, r2)); // r1 contains r2
+        assert!(!is_super_range(r2, r1)); // r2 doesn't contain r1
+        assert!(!is_super_range(r1, r3)); // r1 doesn't fully contain r3
+        assert!(!is_super_range(r3, r1)); // r3 doesn't contain r1
+    }
+    
+    #[test]
+    fn test_common_range() {
+        let r1 = Range::new(Loc(0), Loc(10)).unwrap();
+        let r2 = Range::new(Loc(5), Loc(15)).unwrap();
+        let r3 = Range::new(Loc(20), Loc(30)).unwrap();
+        
+        // Overlapping ranges
+        let common = common_range(r1, r2).unwrap();
+        assert_eq!(common.from(), Loc(5));
+        assert_eq!(common.until(), Loc(10));
+        
+        // Non-overlapping ranges
+        assert!(common_range(r1, r3).is_none());
+        
+        // Order shouldn't matter
+        let common2 = common_range(r2, r1).unwrap();
+        assert_eq!(common, common2);
+    }
+    
+    #[test]
+    fn test_merge_ranges() {
+        let r1 = Range::new(Loc(0), Loc(10)).unwrap();
+        let r2 = Range::new(Loc(5), Loc(15)).unwrap();
+        let r3 = Range::new(Loc(10), Loc(20)).unwrap(); // Adjacent
+        let r4 = Range::new(Loc(25), Loc(30)).unwrap(); // Disjoint
+        
+        // Overlapping ranges should merge
+        let merged = merge_ranges(r1, r2).unwrap();
+        assert_eq!(merged.from(), Loc(0));
+        assert_eq!(merged.until(), Loc(15));
+        
+        // Adjacent ranges should merge
+        let merged = merge_ranges(r1, r3).unwrap();
+        assert_eq!(merged.from(), Loc(0));
+        assert_eq!(merged.until(), Loc(20));
+        
+        // Disjoint ranges shouldn't merge
+        assert!(merge_ranges(r1, r4).is_none());
+    }
+    
+    #[test]
+    fn test_eliminated_ranges() {
+        let ranges = vec![
+            Range::new(Loc(0), Loc(10)).unwrap(),
+            Range::new(Loc(5), Loc(15)).unwrap(),
+            Range::new(Loc(12), Loc(20)).unwrap(),
+            Range::new(Loc(25), Loc(30)).unwrap(),
+        ];
+        
+        let eliminated = eliminated_ranges(ranges);
+        assert_eq!(eliminated.len(), 2);
+        
+        // Should have merged the overlapping ranges
+        assert!(eliminated.iter().any(|r| r.from() == Loc(0) && r.until() == Loc(20)));
+        assert!(eliminated.iter().any(|r| r.from() == Loc(25) && r.until() == Loc(30)));
+    }
+    
+    #[test]
+    fn test_exclude_ranges() {
+        let from = vec![Range::new(Loc(0), Loc(20)).unwrap()];
+        let excludes = vec![Range::new(Loc(5), Loc(15)).unwrap()];
+        
+        let result = exclude_ranges(from, excludes);
+        
+        // Should split the original range around the exclusion
+        assert_eq!(result.len(), 2);
+        assert!(result.iter().any(|r| r.from() == Loc(0) && r.until() == Loc(4)));
+        assert!(result.iter().any(|r| r.from() == Loc(16) && r.until() == Loc(20)));
+    }
+    
+    #[test]
+    fn test_index_to_line_char() {
+        let source = "hello\nworld\ntest";
+        
+        assert_eq!(index_to_line_char(source, Loc(0)), (0, 0)); // 'h'
+        assert_eq!(index_to_line_char(source, Loc(6)), (1, 0)); // 'w'
+        assert_eq!(index_to_line_char(source, Loc(12)), (2, 0)); // 't'
+    }
+    
+    #[test]
+    fn test_line_char_to_index() {
+        let source = "hello\nworld\ntest";
+        
+        assert_eq!(line_char_to_index(source, 0, 0), 0); // 'h'
+        assert_eq!(line_char_to_index(source, 1, 0), 6); // 'w'  
+        assert_eq!(line_char_to_index(source, 2, 0), 12); // 't'
+    }
+    
+    #[test]
+    fn test_index_line_char_roundtrip() {
+        let source = "hello\nworld\ntest\nwith unicode: 🦀";
+        
+        for i in 0..source.chars().count() {
+            let loc = Loc(i as u32);
+            let (line, char) = index_to_line_char(source, loc);
+            let back_to_index = line_char_to_index(source, line, char);
+            assert_eq!(loc.0, back_to_index);
+        }
+    }
+}
