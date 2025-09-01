@@ -1,24 +1,56 @@
+//! Data models for RustOwl ownership and lifetime analysis.
+//!
+//! This module contains the core data structures used to represent
+//! ownership information, lifetimes, and analysis results extracted
+//! from Rust code via compiler integration.
+
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::collections::HashMap;
 
+/// Represents a local variable within a function scope.
+///
+/// This structure uniquely identifies a local variable by combining
+/// its local ID within the function and the function ID itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FnLocal {
+    /// Local variable ID within the function
     pub id: u32,
+    /// Function ID this local belongs to
     pub fn_id: u32,
 }
 
 impl FnLocal {
+    /// Creates a new function-local variable identifier.
+    ///
+    /// # Arguments
+    /// * `id` - The local variable ID within the function
+    /// * `fn_id` - The function ID this local belongs to
     pub fn new(id: u32, fn_id: u32) -> Self {
         Self { id, fn_id }
     }
 }
 
+/// Represents a character position in source code.
+///
+/// This is a character-based position that handles Unicode correctly
+/// and automatically filters out carriage return characters to match
+/// compiler behavior.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[serde(transparent)]
 pub struct Loc(pub u32);
+
 impl Loc {
+    /// Creates a new location from source text and byte position.
+    ///
+    /// Converts a byte position to a character position, handling Unicode
+    /// correctly and filtering out CR characters as the compiler does.
+    ///
+    /// # Arguments
+    /// * `source` - The source code text
+    /// * `byte_pos` - Byte position in the source
+    /// * `offset` - Offset to subtract from byte position
     pub fn new(source: &str, byte_pos: u32, offset: u32) -> Self {
         let byte_pos = byte_pos.saturating_sub(offset);
         let byte_pos = byte_pos as usize;
@@ -50,6 +82,7 @@ impl Loc {
 
 impl std::ops::Add<i32> for Loc {
     type Output = Loc;
+    /// Add an offset to a location, with saturation to prevent underflow.
     fn add(self, rhs: i32) -> Self::Output {
         if rhs < 0 && (self.0 as i32) < -rhs {
             Loc(0)
@@ -61,6 +94,7 @@ impl std::ops::Add<i32> for Loc {
 
 impl std::ops::Sub<i32> for Loc {
     type Output = Loc;
+    /// Subtract an offset from a location, with saturation to prevent underflow.
     fn sub(self, rhs: i32) -> Self::Output {
         if 0 < rhs && (self.0 as i32) < rhs {
             Loc(0)
@@ -82,6 +116,10 @@ impl From<Loc> for u32 {
     }
 }
 
+/// Represents a character range in source code.
+///
+/// A range is defined by a starting and ending location, where the
+/// ending location is exclusive (half-open interval).
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Range {
     from: Loc,
@@ -89,6 +127,14 @@ pub struct Range {
 }
 
 impl Range {
+    /// Creates a new range if the end position is after the start position.
+    ///
+    /// # Arguments
+    /// * `from` - Starting location (inclusive)
+    /// * `until` - Ending location (exclusive)
+    ///
+    /// # Returns
+    /// `Some(Range)` if valid, `None` if `until <= from`
     pub fn new(from: Loc, until: Loc) -> Option<Self> {
         if until.0 <= from.0 {
             None
@@ -96,25 +142,40 @@ impl Range {
             Some(Self { from, until })
         }
     }
+    
+    /// Returns the starting location of the range.
     pub fn from(&self) -> Loc {
         self.from
     }
+    
+    /// Returns the ending location of the range.
     pub fn until(&self) -> Loc {
         self.until
     }
+    
+    /// Returns the size of the range in characters.
     pub fn size(&self) -> u32 {
         self.until.0 - self.from.0
     }
 }
 
+/// Represents a MIR (Mid-level IR) variable with lifetime information.
+///
+/// MIR variables can be either user-defined variables or compiler-generated
+/// temporaries, each with their own live and dead ranges.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum MirVariable {
+    /// A user-defined variable
     User {
+        /// Variable index within the function
         index: u32,
+        /// Range where the variable is live
         live: Range,
+        /// Range where the variable is dead/dropped
         dead: Range,
     },
+    /// A compiler-generated temporary or other variable
     Other {
         index: u32,
         live: Range,
