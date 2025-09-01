@@ -30,6 +30,7 @@ harness = false
 name = "rustowl_bench_simple"
 
 [dependencies]
+async-trait = "0.1"
 cargo_metadata = "0.22"
 clap = { version = "4", features = ["cargo", "derive"] }
 clap_complete = "4"
@@ -67,7 +68,7 @@ tokio = { version = "1", features = [
   "time",
 ] }
 tokio-util = "0.7"
-tower-lsp = "0.20"
+tower-lsp-server = "0.22"
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

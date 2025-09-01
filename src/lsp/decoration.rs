@@ -1,7 +1,7 @@
 use crate::{lsp::progress, models::*, utils};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use tower_lsp::lsp_types;
+use tower_lsp_server::{lsp_types, UriExt};
 
 // TODO: Variable name should be checked?
 //const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
@@ -240,7 +240,7 @@ pub struct CursorRequest {
 }
 impl CursorRequest {
     pub fn path(&self) -> Option<PathBuf> {
-        self.document.uri.to_file_path().ok()
+        self.document.uri.to_file_path().map(|p| p.into_owned())
     }
     pub fn position(&self) -> lsp_types::Position {
         self.position

@@ -1,6 +1,5 @@
 //! Error handling for RustOwl using the eros crate for context-aware error handling.
 
-use eros::*;
 use std::fmt;
 
 /// Main error type for RustOwl operations
@@ -27,14 +26,14 @@ pub enum RustOwlError {
 impl fmt::Display for RustOwlError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RustOwlError::Io(err) => write!(f, "I/O error: {}", err),
-            RustOwlError::CargoMetadata(msg) => write!(f, "Cargo metadata error: {}", msg),
-            RustOwlError::Toolchain(msg) => write!(f, "Toolchain error: {}", msg),
-            RustOwlError::Json(err) => write!(f, "JSON error: {}", err),
-            RustOwlError::Cache(msg) => write!(f, "Cache error: {}", msg),
-            RustOwlError::Lsp(msg) => write!(f, "LSP error: {}", msg),
-            RustOwlError::Analysis(msg) => write!(f, "Analysis error: {}", msg),
-            RustOwlError::Config(msg) => write!(f, "Configuration error: {}", msg),
+            RustOwlError::Io(err) => write!(f, "I/O error: {err}"),
+            RustOwlError::CargoMetadata(msg) => write!(f, "Cargo metadata error: {msg}"),
+            RustOwlError::Toolchain(msg) => write!(f, "Toolchain error: {msg}"),
+            RustOwlError::Json(err) => write!(f, "JSON error: {err}"),
+            RustOwlError::Cache(msg) => write!(f, "Cache error: {msg}"),
+            RustOwlError::Lsp(msg) => write!(f, "LSP error: {msg}"),
+            RustOwlError::Analysis(msg) => write!(f, "Analysis error: {msg}"),
+            RustOwlError::Config(msg) => write!(f, "Configuration error: {msg}"),
         }
     }
 }
