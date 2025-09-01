@@ -167,19 +167,26 @@ pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
 pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
     let mut line = 0;
     let mut col = 0;
-    // it seems that the compiler is ignoring CR
-    for (i, c) in s.replace("\r", "").chars().enumerate() {
-        if idx == Loc::from(i as u32) {
+    let mut char_idx = 0u32;
+    
+    // Process characters directly without allocating a new string
+    for c in s.chars() {
+        if char_idx == idx.0 {
             return (line, col);
         }
-        if c == '\n' {
-            line += 1;
-            col = 0;
-        } else if c != '\r' {
-            col += 1;
+        
+        // Skip CR characters (compiler ignores them)
+        if c != '\r' {
+            if c == '\n' {
+                line += 1;
+                col = 0;
+            } else {
+                col += 1;
+            }
+            char_idx += 1;
         }
     }
-    (0, 0)
+    (line, col)
 }
 
 /// Converts line and column numbers to a character index.
@@ -189,19 +196,26 @@ pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
 /// with the Rust compiler by ignoring them.
 pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
     let mut col = 0;
-    // it seems that the compiler is ignoring CR
-    for (i, c) in s.replace("\r", "").chars().enumerate() {
+    let mut char_idx = 0u32;
+    
+    // Process characters directly without allocating a new string
+    for c in s.chars() {
         if line == 0 && col == char {
-            return i as u32;
+            return char_idx;
         }
-        if c == '\n' && 0 < line {
-            line -= 1;
-            col = 0;
-        } else if c != '\r' {
-            col += 1;
+        
+        // Skip CR characters (compiler ignores them)
+        if c != '\r' {
+            if c == '\n' && line > 0 {
+                line -= 1;
+                col = 0;
+            } else {
+                col += 1;
+            }
+            char_idx += 1;
         }
     }
-    0
+    char_idx
 }
 
 #[cfg(test)]

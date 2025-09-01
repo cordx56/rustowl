@@ -263,10 +263,12 @@ impl CacheData {
                     .entries
                     .iter()
                     .min_by_key(|(_, entry)| entry.last_accessed)
-                    .map(|(key, _)| key.clone());
+                    .map(|(key, _)| key);
 
                 if let Some(key) = oldest_key {
-                    if let Some(removed) = self.entries.shift_remove(&key) {
+                    // Clone the key only when we need to remove it
+                    let key_to_remove = key.clone();
+                    if let Some(removed) = self.entries.shift_remove(&key_to_remove) {
                         self.stats.total_memory_bytes = self
                             .stats
                             .total_memory_bytes
