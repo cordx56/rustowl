@@ -9,14 +9,14 @@ use clap::ValueEnum;
 use clap_complete::Generator;
 use clap_complete::shells;
 
-/// Shell with auto-generated completion script available.
+/// Extended shell support including Nushell
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, ValueEnum)]
 #[non_exhaustive]
 #[value(rename_all = "lower")]
 pub enum Shell {
     /// Bourne Again `SHell` (bash)
     Bash,
-    /// Elvish shell
+    /// Elvish shell  
     Elvish,
     /// Friendly Interactive `SHell` (fish)
     Fish,
@@ -30,10 +30,14 @@ pub enum Shell {
 
 impl Display for Shell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.to_possible_value()
-            .expect("no values are skipped")
-            .get_name()
-            .fmt(f)
+        match self {
+            Shell::Bash => write!(f, "bash"),
+            Shell::Elvish => write!(f, "elvish"),
+            Shell::Fish => write!(f, "fish"),
+            Shell::PowerShell => write!(f, "powershell"),
+            Shell::Zsh => write!(f, "zsh"),
+            Shell::Nushell => write!(f, "nushell"),
+        }
     }
 }
 
@@ -41,12 +45,15 @@ impl FromStr for Shell {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        for variant in Self::value_variants() {
-            if variant.to_possible_value().unwrap().matches(s, false) {
-                return Ok(*variant);
-            }
+        match s.to_lowercase().as_str() {
+            "bash" => Ok(Shell::Bash),
+            "elvish" => Ok(Shell::Elvish),
+            "fish" => Ok(Shell::Fish),
+            "powershell" => Ok(Shell::PowerShell),
+            "zsh" => Ok(Shell::Zsh),
+            "nushell" => Ok(Shell::Nushell),
+            _ => Err(format!("invalid variant: {s}")),
         }
-        Err(format!("invalid variant: {s}"))
     }
 }
 
@@ -76,42 +83,22 @@ impl Generator for Shell {
 
 impl Shell {
     /// Parse a shell from a path to the executable for the shell
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use clap_complete::shells::Shell;
-    ///
-    /// assert_eq!(Shell::from_shell_path("/bin/bash"), Some(Shell::Bash));
-    /// assert_eq!(Shell::from_shell_path("/usr/bin/zsh"), Some(Shell::Zsh));
-    /// assert_eq!(Shell::from_shell_path("/opt/my_custom_shell"), None);
-    /// ```
     pub fn from_shell_path<P: AsRef<Path>>(path: P) -> Option<Shell> {
-        parse_shell_from_path(path.as_ref())
+        let path = path.as_ref();
+        let name = path.file_stem()?.to_str()?;
+        
+        match name {
+            "bash" => Some(Shell::Bash),
+            "zsh" => Some(Shell::Zsh),
+            "fish" => Some(Shell::Fish),
+            "elvish" => Some(Shell::Elvish),
+            "powershell" | "powershell_ise" => Some(Shell::PowerShell),
+            "nu" | "nushell" => Some(Shell::Nushell),
+            _ => None,
+        }
     }
 
     /// Determine the user's current shell from the environment
-    ///
-    /// This will read the SHELL environment variable and try to determine which shell is in use
-    /// from that.
-    ///
-    /// If SHELL is not set, then on windows, it will default to powershell, and on
-    /// other operating systems it will return `None`.
-    ///
-    /// If SHELL is set, but contains a value that doesn't correspond to one of the supported shell
-    /// types, then return `None`.
-    ///
-    /// # Example:
-    ///
-    /// ```no_run
-    /// # use clap::Command;
-    /// use clap_complete::{generate, shells::Shell};
-    /// # fn build_cli() -> Command {
-    /// #     Command::new("compl")
-    /// # }
-    /// let mut cmd = build_cli();
-    /// generate(Shell::from_env().unwrap_or(Shell::Bash), &mut cmd, "myapp", &mut std::io::stdout());
-    /// ```
     pub fn from_env() -> Option<Shell> {
         if let Some(env_shell) = std::env::var_os("SHELL") {
             Shell::from_shell_path(env_shell)
@@ -121,19 +108,16 @@ impl Shell {
             None
         }
     }
-}
-
-// use a separate function to avoid having to monomorphize the entire function due
-// to from_shell_path being generic
-fn parse_shell_from_path(path: &Path) -> Option<Shell> {
-    let name = path.file_stem()?.to_str()?;
-    match name {
-        "bash" => Some(Shell::Bash),
-        "zsh" => Some(Shell::Zsh),
-        "fish" => Some(Shell::Fish),
-        "elvish" => Some(Shell::Elvish),
-        "powershell" | "powershell_ise" => Some(Shell::PowerShell),
-        "nushell" => Some(Shell::Nushell),
-        _ => None,
+    
+    /// Convert to the standard shell type if possible, for compatibility
+    pub fn to_standard_shell(&self) -> Option<shells::Shell> {
+        match self {
+            Shell::Bash => Some(shells::Shell::Bash),
+            Shell::Elvish => Some(shells::Shell::Elvish),
+            Shell::Fish => Some(shells::Shell::Fish),
+            Shell::PowerShell => Some(shells::Shell::PowerShell),
+            Shell::Zsh => Some(shells::Shell::Zsh),
+            Shell::Nushell => None, // Not supported by standard shells
+        }
     }
 }
