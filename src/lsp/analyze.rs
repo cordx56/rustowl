@@ -77,7 +77,10 @@ impl Analyzer {
             })
         } else {
             log::warn!("Invalid analysis target: {}", path.display());
-            Err(RustOwlError::Analysis(format!("Invalid analysis target: {}", path.display())))
+            Err(RustOwlError::Analysis(format!(
+                "Invalid analysis target: {}",
+                path.display()
+            )))
         }
     }
     pub fn target_path(&self) -> &Path {
