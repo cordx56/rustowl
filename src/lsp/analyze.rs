@@ -109,19 +109,8 @@ impl Analyzer {
         all_features: bool,
     ) -> AnalyzeEventIter {
         let package_name = metadata.root_package().as_ref().unwrap().name.to_string();
-<<<<<<< HEAD
         let target_dir = metadata.target_directory.as_std_path().join("owl");
         log::info!("clear cargo cache");
-||||||| parent of 755690d (chore: cleaup)
-        let target_dir = metadata.target_directory.as_std_path().join(crate::TARGET_DIR_NAME);
-        tracing::info!("clear cargo cache");
-=======
-        let target_dir = metadata
-            .target_directory
-            .as_std_path()
-            .join(crate::TARGET_DIR_NAME);
-        tracing::info!("clear cargo cache");
->>>>>>> 755690d (chore: cleaup)
         let mut command = toolchain::setup_cargo_command().await;
         command
             .args(["clean", "--package", &package_name])
