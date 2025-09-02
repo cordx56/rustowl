@@ -7,6 +7,7 @@ use rustc_interface::interface;
 use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
+use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::env;
 use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
@@ -65,9 +66,9 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
         let _ = mir_borrowck(tcx, def_id);
     }
 
-    Ok(tcx
-        .arena
-        .alloc(ConcreteOpaqueTypes(indexmap::IndexMap::default())))
+    Ok(tcx.arena.alloc(ConcreteOpaqueTypes(
+        rustc_data_structures::fx::FxIndexMap::default(),
+    )))
 }
 
 pub struct AnalyzerCallback;
@@ -98,6 +99,10 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
                 handle_analyzed_result(tcx, result);
             }
             if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
+                // Log cache statistics before writing
+                let stats = cache.get_stats();
+                log::info!("Cache statistics: {} hits, {} misses, {:.1}% hit rate, {} evictions", 
+                          stats.hits, stats.misses, stats.hit_rate() * 100.0, stats.evictions);
                 cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
             }
         });
@@ -112,16 +117,18 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
 
 pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
     if let Some(cache) = cache::CACHE.lock().unwrap().as_mut() {
-        cache.insert_cache(
+        // Pass file name for potential file modification time validation
+        cache.insert_cache_with_file_path(
             analyzed.file_hash.clone(),
             analyzed.mir_hash.clone(),
             analyzed.analyzed.clone(),
+            Some(&analyzed.file_name),
         );
     }
     let krate = Crate(HashMap::from([(
         analyzed.file_name.to_owned(),
         File {
-            items: vec![analyzed.analyzed],
+            items: SmallVec::from_vec(vec![analyzed.analyzed]),
         },
     )]));
     // get currently-compiling crate name
