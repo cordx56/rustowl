@@ -54,15 +54,11 @@ impl Analyzer {
                 &path
             })
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::null());
 
         let metadata = if let Ok(child) = cargo_cmd.spawn()
             && let Ok(output) = child.wait_with_output().await
         {
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                tracing::warn!("cargo metadata failed: {}", stderr);
-            }
             let data = String::from_utf8_lossy(&output.stdout);
             cargo_metadata::MetadataCommand::parse(data).ok()
         } else {
