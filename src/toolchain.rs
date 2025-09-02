@@ -49,9 +49,9 @@ async fn get_runtime_dir() -> PathBuf {
         return FALLBACK_RUNTIME_DIR.clone();
     }
 
-    log::info!("sysroot not found; start setup toolchain");
+    tracing::info!("sysroot not found; start setup toolchain");
     if let Err(e) = setup_toolchain(&*FALLBACK_RUNTIME_DIR, false).await {
-        log::error!("{e:?}");
+        tracing::error!("{e:?}");
         std::process::exit(1);
     } else {
         FALLBACK_RUNTIME_DIR.clone()
@@ -63,12 +63,12 @@ pub async fn get_sysroot() -> PathBuf {
 }
 
 async fn download(url: &str) -> Result<Vec<u8>, ()> {
-    log::info!("start downloading {url}...");
+    tracing::info!("start downloading {url}...");
     let mut resp = match reqwest::get(url).await.and_then(|v| v.error_for_status()) {
         Ok(v) => v,
         Err(e) => {
-            log::error!("failed to download tarball");
-            log::error!("{e:?}");
+            tracing::error!("failed to download tarball");
+            tracing::error!("{e:?}");
             return Err(());
         }
     };
@@ -79,8 +79,8 @@ async fn download(url: &str) -> Result<Vec<u8>, ()> {
     while let Some(chunk) = match resp.chunk().await {
         Ok(v) => v,
         Err(e) => {
-            log::error!("failed to download runtime archive");
-            log::error!("{e:?}");
+            tracing::error!("failed to download runtime archive");
+            tracing::error!("{e:?}");
             return Err(());
         }
     } {
@@ -88,10 +88,10 @@ async fn download(url: &str) -> Result<Vec<u8>, ()> {
         let current = data.len() * 100 / content_length;
         if received != current {
             received = current;
-            log::info!("{received:>3}% received");
+            tracing::info!("{received:>3}% received");
         }
     }
-    log::info!("download finished");
+    tracing::info!("download finished");
     Ok(data)
 }
 async fn download_tarball_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
@@ -99,9 +99,9 @@ async fn download_tarball_and_extract(url: &str, dest: &Path) -> Result<(), ()> 
     let decoder = GzDecoder::new(&*data);
     let mut archive = Archive::new(decoder);
     archive.unpack(dest).map_err(|_| {
-        log::error!("failed to unpack tarball");
+        tracing::error!("failed to unpack tarball");
     })?;
-    log::info!("successfully unpacked");
+    tracing::info!("successfully unpacked");
     Ok(())
 }
 #[cfg(target_os = "windows")]
@@ -113,15 +113,15 @@ async fn download_zip_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
     let mut archive = match ZipArchive::new(cursor) {
         Ok(archive) => archive,
         Err(e) => {
-            log::error!("failed to read ZIP archive");
-            log::error!("{e:?}");
+            tracing::error!("failed to read ZIP archive");
+            tracing::error!("{e:?}");
             return Err(());
         }
     };
     archive.extract(dest).map_err(|e| {
-        log::error!("failed to unpack zip: {e}");
+        tracing::error!("failed to unpack zip: {e}");
     })?;
-    log::info!("successfully unpacked");
+    tracing::info!("successfully unpacked");
     Ok(())
 }
 
@@ -129,7 +129,7 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
     let tempdir = tempfile::tempdir().map_err(|_| ())?;
     // Using `tempdir.path()` more than once causes SEGV, so we use `tempdir.path().to_owned()`.
     let temp_path = tempdir.path().to_owned();
-    log::info!("temp dir is made: {}", temp_path.display());
+    tracing::info!("temp dir is made: {}", temp_path.display());
 
     let dist_base = "https://static.rust-lang.org/dist";
     let base_url = match TOOLCHAIN_DATE {
@@ -146,7 +146,7 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
     let components = read_to_string(extracted_path.join("components"))
         .await
         .map_err(|_| {
-            log::error!("failed to read components list");
+            tracing::error!("failed to read components list");
         })?;
     let components = components.split_whitespace();
 
@@ -156,28 +156,28 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
             let rel_path = match from.strip_prefix(&component_path) {
                 Ok(v) => v,
                 Err(e) => {
-                    log::error!("path error: {e}");
+                    tracing::error!("path error: {e}");
                     return Err(());
                 }
             };
             let to = dest.join(rel_path);
             if let Err(e) = create_dir_all(to.parent().unwrap()).await {
-                log::error!("failed to create dir: {e}");
+                tracing::error!("failed to create dir: {e}");
                 return Err(());
             }
             if let Err(e) = rename(&from, &to).await {
-                log::warn!("file rename failed: {e}, falling back to copy and delete");
+                tracing::warn!("file rename failed: {e}, falling back to copy and delete");
                 if let Err(copy_err) = tokio::fs::copy(&from, &to).await {
-                    log::error!("file copy error (after rename failure): {copy_err}");
+                    tracing::error!("file copy error (after rename failure): {copy_err}");
                     return Err(());
                 }
                 if let Err(del_err) = tokio::fs::remove_file(&from).await {
-                    log::error!("file delete error (after copy): {del_err}");
+                    tracing::error!("file delete error (after copy): {del_err}");
                     return Err(());
                 }
             }
         }
-        log::info!("component {component} successfully installed");
+        tracing::info!("component {component} successfully installed");
     }
     Ok(())
 }
@@ -191,19 +191,19 @@ pub async fn setup_toolchain(dest: impl AsRef<Path>, skip_rustowl: bool) -> Resu
 pub async fn setup_rust_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
     let sysroot = sysroot_from_runtime(dest.as_ref());
     if create_dir_all(&sysroot).await.is_err() {
-        log::error!("failed to create toolchain directory");
+        tracing::error!("failed to create toolchain directory");
         return Err(());
     }
 
-    log::info!("start installing Rust toolchain...");
+    tracing::info!("start installing Rust toolchain...");
     install_component("rustc", &sysroot).await?;
     install_component("rust-std", &sysroot).await?;
     install_component("cargo", &sysroot).await?;
-    log::info!("installing Rust toolchain finished");
+    tracing::info!("installing Rust toolchain finished");
     Ok(())
 }
 pub async fn setup_rustowl_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
-    log::info!("start installing RustOwl toolchain...");
+    tracing::info!("start installing RustOwl toolchain...");
     #[cfg(not(target_os = "windows"))]
     let rustowl_toolchain_result = {
         let rustowl_tarball_url = format!(
@@ -221,19 +221,21 @@ pub async fn setup_rustowl_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
         download_zip_and_extract(&rustowl_zip_url, dest.as_ref()).await
     };
     if rustowl_toolchain_result.is_ok() {
-        log::info!("installing RustOwl toolchain finished");
+        tracing::info!("installing RustOwl toolchain finished");
     } else {
-        log::warn!("could not install RustOwl toolchain; local installed rustowlc will be used");
+        tracing::warn!(
+            "could not install RustOwl toolchain; local installed rustowlc will be used"
+        );
     }
 
-    log::info!("toolchain setup finished");
+    tracing::info!("toolchain setup finished");
     Ok(())
 }
 
 pub async fn uninstall_toolchain() {
     let sysroot = sysroot_from_runtime(&*FALLBACK_RUNTIME_DIR);
     if sysroot.is_dir() {
-        log::info!("remove sysroot: {}", sysroot.display());
+        tracing::info!("remove sysroot: {}", sysroot.display());
         remove_dir_all(&sysroot).await.unwrap();
     }
 }
@@ -247,18 +249,18 @@ pub async fn get_executable_path(name: &str) -> String {
     let sysroot = get_sysroot().await;
     let exec_bin = sysroot.join("bin").join(&exec_name);
     if exec_bin.is_file() {
-        log::info!("{name} is selected in sysroot/bin");
+        tracing::info!("{name} is selected in sysroot/bin");
         return exec_bin.to_string_lossy().to_string();
     }
 
     let mut current_exec = env::current_exe().unwrap();
     current_exec.set_file_name(&exec_name);
     if current_exec.is_file() {
-        log::info!("{name} is selected in the same directory as rustowl executable");
+        tracing::info!("{name} is selected in the same directory as rustowl executable");
         return current_exec.to_string_lossy().to_string();
     }
 
-    log::warn!("{name} not found; fallback");
+    tracing::warn!("{name} not found; fallback");
     exec_name.to_owned()
 }
 
