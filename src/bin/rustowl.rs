@@ -8,6 +8,9 @@ use rustowl::*;
 use std::env;
 use std::io;
 use tower_lsp_server::{LspService, Server};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{EnvFilter, fmt};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
@@ -18,15 +21,6 @@ use tikv_jemallocator::Jemalloc;
 #[cfg(all(not(target_env = "msvc"), not(miri)))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
-
-fn set_log_level(default: log::LevelFilter) {
-    log::set_max_level(
-        env::var("RUST_LOG")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(default),
-    );
-}
 
 /// Handles the execution of RustOwl CLI commands.
 ///
@@ -48,7 +42,7 @@ async fn handle_command(command: Commands) {
         Commands::Check(command_options) => {
             let path = command_options.path.unwrap_or_else(|| {
                 env::current_dir().unwrap_or_else(|_| {
-                    log::error!("Failed to get current directory, using '.'");
+                    tracing::error!("Failed to get current directory, using '.'");
                     std::path::PathBuf::from(".")
                 })
             });
@@ -60,10 +54,10 @@ async fn handle_command(command: Commands) {
             )
             .await
             {
-                log::info!("Successfully analyzed");
+                tracing::info!("Successfully analyzed");
                 std::process::exit(0);
             }
-            log::error!("Analyze failed");
+            tracing::error!("Analyze failed");
             std::process::exit(1);
         }
         Commands::Clean => {
@@ -94,7 +88,7 @@ async fn handle_command(command: Commands) {
             }
         }
         Commands::Completions(command_options) => {
-            set_log_level("off".parse().unwrap());
+            initialize_logging(LevelFilter::OFF);
             let shell = command_options.shell;
             generate(shell, &mut Cli::command(), "rustowl", &mut io::stdout());
         }
@@ -102,12 +96,22 @@ async fn handle_command(command: Commands) {
 }
 
 /// Initializes the logging system with colors and default log level
-fn initialize_logging() {
-    simple_logger::SimpleLogger::new()
-        .with_colors(true)
-        .init()
-        .unwrap();
-    set_log_level("info".parse().unwrap());
+fn initialize_logging(level: LevelFilter) {
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level.to_string()));
+
+    let fmt_layer = fmt::layer()
+        .with_target(true)
+        .with_level(true)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .with_writer(io::stderr)
+        .with_ansi(true);
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer)
+        .init();
 }
 
 /// Handles the case when no command is provided (version display or LSP server mode)
@@ -130,7 +134,7 @@ fn display_version(show_prefix: bool) {
 
 /// Starts the LSP server
 async fn start_lsp_server() {
-    set_log_level("warn".parse().unwrap());
+    initialize_logging(LevelFilter::WARN);
     eprintln!("RustOwl v{}", clap::crate_version!());
     eprintln!("This is an LSP server. You can use --help flag to show help.");
 
@@ -151,7 +155,7 @@ async fn main() {
         .install_default()
         .expect("crypto provider already installed");
 
-    initialize_logging();
+    initialize_logging(LevelFilter::INFO);
 
     let parsed_args = Cli::parse();
 

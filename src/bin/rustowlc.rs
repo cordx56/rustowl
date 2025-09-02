@@ -22,7 +22,9 @@ pub extern crate rustc_type_ir;
 
 pub mod core;
 
+use std::io;
 use std::process::exit;
+use tracing_subscriber::{EnvFilter, fmt};
 
 fn main() {
     // This is cited from [rustc](https://github.com/rust-lang/rust/blob/3014e79f9c8d5510ea7b3a3b70d171d0948b1e96/compiler/rustc/src/main.rs).
@@ -58,11 +60,16 @@ fn main() {
         }
     }
 
-    simple_logger::SimpleLogger::new()
-        .env()
-        .with_colors(true)
-        .init()
-        .unwrap();
+    let env_filter = EnvFilter::try_from_default_env().expect("EnvFilter failed to initialize");
+
+    fmt()
+        .with_env_filter(env_filter)
+        .with_ansi(true)
+        .with_writer(io::stderr)
+        .with_target(true)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .init();
 
     // rayon panics without this only on Windows
     #[cfg(target_os = "windows")]

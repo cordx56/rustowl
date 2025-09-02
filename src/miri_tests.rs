@@ -107,7 +107,7 @@ mod miri_memory_safety_tests {
         assert_ne!(fn_local1, fn_local2);
 
         // Test hashing (via HashMap insertion)
-        let mut map = HashMap::new();
+        let mut map = HashMap::default();
         map.insert(fn_local1, "first");
         map.insert(fn_local2, "second");
         map.insert(fn_local3, "third"); // Should overwrite first
@@ -138,9 +138,9 @@ mod miri_memory_safety_tests {
     #[test]
     fn test_workspace_operations() {
         // Test Workspace and Crate models
-        let mut workspace = Workspace(HashMap::new());
-        let mut crate1 = Crate(HashMap::new());
-        let mut crate2 = Crate(HashMap::new());
+        let mut workspace = Workspace(HashMap::default());
+        let mut crate1 = Crate(HashMap::default());
+        let mut crate2 = Crate(HashMap::default());
 
         // Add some files to crates
         crate1.0.insert("lib.rs".to_string(), File::new());
@@ -157,8 +157,8 @@ mod miri_memory_safety_tests {
         assert!(workspace.0.contains_key("crate2"));
 
         // Test workspace merging
-        let mut other_workspace = Workspace(HashMap::new());
-        let crate3 = Crate(HashMap::new());
+        let mut other_workspace = Workspace(HashMap::default());
+        let crate3 = Crate(HashMap::default());
         other_workspace.0.insert("crate3".to_string(), crate3);
 
         workspace.merge(other_workspace);
@@ -273,7 +273,7 @@ mod miri_memory_safety_tests {
     #[test]
     fn test_collections_memory_safety() {
         // Test various collection operations for memory safety
-        let mut map: HashMap<String, Vec<FnLocal>> = HashMap::new();
+        let mut map: HashMap<String, Vec<FnLocal>> = HashMap::default();
 
         // Insert data with complex nesting
         for i in 0..20 {
@@ -309,7 +309,7 @@ mod miri_memory_safety_tests {
         }
 
         for key in keys_to_remove {
-            map.remove(&key);
+            map.swap_remove(&key);
         }
 
         assert_eq!(map.len(), 18); // 20 - 2

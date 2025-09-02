@@ -2,7 +2,6 @@ mod polonius_analyzer;
 mod transform;
 
 use super::cache;
-use crate::models::FoldIndexMap;
 use rustc_borrowck::consumers::{
     ConsumerOptions, PoloniusInput, PoloniusOutput, get_body_with_borrowck_facts,
 };
@@ -12,6 +11,7 @@ use rustc_middle::{
     ty::TyCtxt,
 };
 use rustc_span::Span;
+use rustowl::models::FoldIndexMap as HashMap;
 use rustowl::models::range_vec_from_vec;
 use rustowl::models::*;
 use smallvec::SmallVec;
@@ -77,7 +77,7 @@ impl MirAnalyzer {
         let path = file_name.to_path(rustc_span::FileNameDisplayPreference::Local);
         let source = std::fs::read_to_string(path).unwrap();
         let file_name = path.to_string_lossy().to_string();
-        log::info!("facts of {fn_id:?} prepared; start analyze of {fn_id:?}");
+        tracing::info!("facts of {fn_id:?} prepared; start analyze of {fn_id:?}");
 
         // collect local declared vars
         // this must be done in local thread
@@ -104,7 +104,7 @@ impl MirAnalyzer {
         if let Some(cache) = cache.as_mut()
             && let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash)
         {
-            log::info!("MIR cache hit: {fn_id:?}");
+            tracing::info!("MIR cache hit: {fn_id:?}");
             return MirAnalyzerInitResult::Cached(Box::new(AnalyzeResult {
                 file_name,
                 file_hash,
@@ -133,11 +133,11 @@ impl MirAnalyzer {
         let borrow_data = transform::BorrowMap::new(&facts.borrow_set);
 
         let analyzer = Box::pin(async move {
-            log::info!("start re-computing borrow check with dump: true");
+            tracing::info!("start re-computing borrow check with dump: true");
             // compute accurate region, which may eliminate invalid region
             let output_datafrog =
                 PoloniusOutput::compute(&input, polonius_engine::Algorithm::DatafrogOpt, true);
-            log::info!("borrow check finished");
+            tracing::info!("borrow check finished");
 
             let accurate_live = polonius_analyzer::get_accurate_live(
                 &output_datafrog,

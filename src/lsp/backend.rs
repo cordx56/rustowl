@@ -55,7 +55,7 @@ impl Backend {
     }
 
     pub async fn analyze(&self, _params: AnalyzeRequest) -> Result<AnalyzeResponse> {
-        log::info!("rustowl/analyze request received");
+        tracing::info!("rustowl/analyze request received");
         self.do_analyze().await;
         Ok(AnalyzeResponse {})
     }
@@ -65,19 +65,19 @@ impl Backend {
     }
 
     async fn analyze_with_options(&self, all_targets: bool, all_features: bool) {
-        log::info!("wait 100ms for rust-analyzer");
+        tracing::info!("wait 100ms for rust-analyzer");
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        log::info!("stop running analysis processes");
+        tracing::info!("stop running analysis processes");
         self.shutdown_subprocesses().await;
 
-        log::info!("start analysis");
+        tracing::info!("start analysis");
         {
             *self.status.write().await = progress::AnalysisStatus::Analyzing;
         }
         let analyzers = { self.analyzers.read().await.clone() };
 
-        log::info!("analyze {} packages...", analyzers.len());
+        tracing::info!("analyze {} packages...", analyzers.len());
         for analyzer in analyzers {
             let analyzed = self.analyzed.clone();
             let client = self.client.clone();

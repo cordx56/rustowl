@@ -222,7 +222,7 @@ impl CacheData {
         // Evict again after insertion to prevent temporary overshoot
         self.maybe_evict_entries();
 
-        log::debug!(
+        tracing::debug!(
             "Cache entry inserted. Total entries: {}, Memory usage: {} bytes",
             self.entries.len(),
             self.stats.total_memory_bytes
@@ -299,7 +299,7 @@ impl CacheData {
         self.update_memory_stats();
 
         if evicted_count > 0 {
-            log::info!(
+            tracing::info!(
                 "Evicted {} cache entries. Remaining: {} entries, {} bytes",
                 evicted_count,
                 self.entries.len(),
@@ -338,7 +338,7 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
                     Ok(mut cache_data) => {
                         // Check version compatibility
                         if !cache_data.is_compatible() {
-                            log::warn!(
+                            tracing::warn!(
                                 "Cache version incompatible (found: {}, expected: {}), creating new cache",
                                 cache_data.version,
                                 CACHE_VERSION
@@ -351,7 +351,7 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
                         cache_data.stats = CacheStats::default();
                         cache_data.update_memory_stats();
 
-                        log::info!(
+                        tracing::info!(
                             "Cache loaded: {} entries, {} bytes from {}",
                             cache_data.entries.len(),
                             cache_data.stats.total_memory_bytes,
@@ -361,7 +361,7 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
                         Some(cache_data)
                     }
                     Err(e) => {
-                        log::warn!(
+                        tracing::warn!(
                             "Failed to parse cache file ({}), creating new cache: {}",
                             cache_path.display(),
                             e
@@ -371,7 +371,7 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
                 }
             }
             Err(e) => {
-                log::info!(
+                tracing::info!(
                     "Cache file not found or unreadable ({}), creating new cache: {}",
                     cache_path.display(),
                     e
@@ -380,7 +380,7 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
             }
         }
     } else {
-        log::debug!("Cache disabled via configuration");
+        tracing::debug!("Cache disabled via configuration");
         None
     }
 }
@@ -390,7 +390,7 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
     if let Some(cache_dir) = rustowl::cache::get_cache_path() {
         // Ensure cache directory exists
         if let Err(e) = std::fs::create_dir_all(&cache_dir) {
-            log::error!(
+            tracing::error!(
                 "Failed to create cache directory {}: {}",
                 cache_dir.display(),
                 e
@@ -405,7 +405,7 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
         let serialized = match serde_json::to_string_pretty(cache) {
             Ok(data) => data,
             Err(e) => {
-                log::error!("Failed to serialize cache data: {e}");
+                tracing::error!("Failed to serialize cache data: {e}");
                 return;
             }
         };
@@ -415,7 +415,7 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
             Ok(()) => {
                 // Atomically move temporary file to final location
                 if let Err(e) = std::fs::rename(&temp_path, &cache_path) {
-                    log::error!(
+                    tracing::error!(
                         "Failed to move cache file from {} to {}: {}",
                         temp_path.display(),
                         cache_path.display(),
@@ -425,7 +425,7 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
                     let _ = std::fs::remove_file(&temp_path);
                 } else {
                     let stats = cache.get_stats();
-                    log::info!(
+                    tracing::info!(
                         "Cache saved: {} entries, {} bytes, hit rate: {:.1}% to {}",
                         stats.total_entries,
                         stats.total_memory_bytes,
@@ -435,13 +435,13 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
                 }
             }
             Err(e) => {
-                log::error!("Failed to write cache to {}: {}", temp_path.display(), e);
+                tracing::error!("Failed to write cache to {}: {}", temp_path.display(), e);
                 // Clean up temporary file
                 let _ = std::fs::remove_file(&temp_path);
             }
         }
     } else {
-        log::debug!("Cache disabled, skipping write");
+        tracing::debug!("Cache disabled, skipping write");
     }
 }
 

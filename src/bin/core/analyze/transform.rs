@@ -1,4 +1,3 @@
-use crate::models::{FoldIndexMap, FoldIndexSet};
 use rayon::prelude::*;
 use rustc_borrowck::consumers::{BorrowIndex, BorrowSet, RichLocation};
 use rustc_hir::def_id::LocalDefId;
@@ -11,6 +10,7 @@ use rustc_middle::{
 };
 use rustc_span::source_map::SourceMap;
 use rustowl::models::*;
+use rustowl::models::{FoldIndexMap as HashMap, FoldIndexSet as HashSet};
 use smallvec::SmallVec;
 
 /// RegionEraser to erase region variables from MIR body
@@ -44,7 +44,10 @@ pub fn collect_user_vars(
     offset: u32,
     body: &Body<'_>,
 ) -> HashMap<Local, (Range, String)> {
-    let mut result = HashMap::with_capacity(body.var_debug_info.len());
+    let mut result = HashMap::with_capacity_and_hasher(
+        body.var_debug_info.len(),
+        foldhash::quality::RandomState::default(),
+    );
     for debug in &body.var_debug_info {
         if let VarDebugInfoContents::Place(place) = &debug.value
             && let Some(range) = super::range_from_span(source, debug.source_info.span, offset)
@@ -201,7 +204,7 @@ pub fn rich_locations_to_ranges(
 
     let n = starts.len().min(mids.len());
     if n != starts.len() || n != mids.len() {
-        log::debug!(
+        tracing::debug!(
             "rich_locations_to_ranges: starts({}) != mids({}); truncating to {}",
             starts.len(),
             mids.len(),
