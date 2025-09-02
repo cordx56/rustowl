@@ -1,7 +1,7 @@
 use crate::{lsp::progress, models::*, utils};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use tower_lsp::lsp_types;
+use tower_lsp_server::{UriExt, lsp_types};
 
 // TODO: Variable name should be checked?
 //const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
@@ -240,7 +240,7 @@ pub struct CursorRequest {
 }
 impl CursorRequest {
     pub fn path(&self) -> Option<PathBuf> {
-        self.document.uri.to_file_path().ok()
+        self.document.uri.to_file_path().map(|p| p.into_owned())
     }
     pub fn position(&self) -> lsp_types::Position {
         self.position
@@ -591,9 +591,9 @@ impl utils::MirVisitor for CalcDecos {
             };
             // merge Drop object lives
             let drop_copy_live = if *drop {
-                utils::eliminated_ranges(drop_range.clone())
+                utils::eliminated_ranges_small(drop_range.clone())
             } else {
-                utils::eliminated_ranges(lives.clone())
+                utils::eliminated_ranges_small(lives.clone())
             };
             for range in &drop_copy_live {
                 self.decorations.push(Deco::Lifetime {
@@ -603,8 +603,9 @@ impl utils::MirVisitor for CalcDecos {
                     overlapped: false,
                 });
             }
-            let mut borrow_ranges = shared_borrow.clone();
-            borrow_ranges.extend_from_slice(mutable_borrow);
+            let mut borrow_ranges = Vec::with_capacity(shared_borrow.len() + mutable_borrow.len());
+            borrow_ranges.extend(shared_borrow.iter().copied());
+            borrow_ranges.extend(mutable_borrow.iter().copied());
             let shared_mut = utils::common_ranges(&borrow_ranges);
             for range in shared_mut {
                 self.decorations.push(Deco::SharedMut {
@@ -614,7 +615,7 @@ impl utils::MirVisitor for CalcDecos {
                     overlapped: false,
                 });
             }
-            let outlive = utils::exclude_ranges(must_live_at.clone(), drop_copy_live);
+            let outlive = utils::exclude_ranges_small(must_live_at.clone(), drop_copy_live);
             for range in outlive {
                 self.decorations.push(Deco::Outlive {
                     local,
