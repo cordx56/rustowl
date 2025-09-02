@@ -1,13 +1,13 @@
 [toolchain]
 channel = "nightly-2025-06-20"
 components = [
-    "rustc",
-    "rust-std",
-    "cargo",
-    "rust-src",
-    "rustc-dev",
-    "llvm-tools",
-    "rustfmt",
-    "clippy"
+  "rustc",
+  "rust-std",
+  "cargo",
+  "rust-src",
+  "rustc-dev",
+  "llvm-tools",
+  "rustfmt",
+  "clippy",
 ]
 profile = "minimal"

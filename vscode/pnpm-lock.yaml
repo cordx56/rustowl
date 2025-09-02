@@ -15,7 +15,7 @@ importers:
         specifier: ^9.0.1
         version: 9.0.1
       zod:
-        specifier: ^4.1.1
+        specifier: ^4.1.5
         version: 4.1.5
     devDependencies:
       '@types/mocha':
@@ -34,10 +34,10 @@ importers:
         specifier: ^1.101.0
         version: 1.103.0
       '@typescript-eslint/eslint-plugin':
-        specifier: ^8.40.0
+        specifier: ^8.41.0
         version: 8.41.0(@typescript-eslint/parser@8.41.0(eslint@9.34.0)(typescript@5.9.2))(eslint@9.34.0)(typescript@5.9.2)
       '@typescript-eslint/parser':
-        specifier: ^8.40.0
+        specifier: ^8.41.0
         version: 8.41.0(eslint@9.34.0)(typescript@5.9.2)
       '@vscode/test-cli':
         specifier: ^0.0.11
