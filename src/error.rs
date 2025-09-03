@@ -61,7 +61,7 @@ pub trait ErrorContext<T> {
     fn with_context<F>(self, f: F) -> Result<T>
     where
         F: FnOnce() -> String;
-        
+
     fn context(self, msg: &str) -> Result<T>;
 }
 
@@ -75,7 +75,7 @@ where
     {
         self.map_err(|_| RustOwlError::Analysis(f()))
     }
-    
+
     fn context(self, msg: &str) -> Result<T> {
         self.with_context(|| msg.to_string())
     }
@@ -88,7 +88,7 @@ impl<T> ErrorContext<T> for Option<T> {
     {
         self.ok_or_else(|| RustOwlError::Analysis(f()))
     }
-    
+
     fn context(self, msg: &str) -> Result<T> {
         self.with_context(|| msg.to_string())
     }
