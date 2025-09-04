@@ -17,6 +17,8 @@
 //! This library is primarily used by the RustOwl binary for LSP server functionality,
 //! but can also be used directly for programmatic analysis of Rust code.
 
+use std::io::IsTerminal;
+
 /// Core caching functionality for analysis results
 pub mod cache;
 /// Command-line interface definitions
@@ -35,6 +37,31 @@ pub mod toolchain;
 pub mod utils;
 
 pub use lsp::backend::Backend;
+
+use tracing_subscriber::{EnvFilter, filter::LevelFilter, fmt, prelude::*};
+
+/// Initializes the logging system with colors and a default log level.
+///
+/// If a global subscriber is already set (e.g. by another binary), this
+/// silently returns without re-initializing.
+pub fn initialize_logging(level: LevelFilter) {
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level.to_string()));
+
+    let fmt_layer = fmt::layer()
+        .with_target(true)
+        .with_level(true)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .with_writer(std::io::stderr)
+        .with_ansi(std::io::stderr().is_terminal());
+
+    // Ignore error if already initialized
+    let _ = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer)
+        .try_init();
+}
 
 // Miri-specific memory safety tests
 #[cfg(test)]

@@ -415,9 +415,9 @@ pub fn range_vec_from_vec(vec: Vec<Range>) -> RangeVec {
 pub enum MirDecl {
     User {
         local: FnLocal,
-        name: String,
+        name: smol_str::SmolStr,
         span: Range,
-        ty: String,
+        ty: smol_str::SmolStr,
         lives: RangeVec,
         shared_borrow: RangeVec,
         mutable_borrow: RangeVec,
@@ -427,7 +427,7 @@ pub enum MirDecl {
     },
     Other {
         local: FnLocal,
-        ty: String,
+        ty: smol_str::SmolStr,
         lives: RangeVec,
         shared_borrow: RangeVec,
         mutable_borrow: RangeVec,

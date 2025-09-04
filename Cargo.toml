@@ -52,6 +52,8 @@ rustls = { version = "0.23.31", default-features = false, features = [
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 smallvec = { version = "1.15", features = ["serde", "union"] }
+smol_str = { version = "0.2", features = ["serde"] }
+memchr = { version = "2", optional = true }
 tar = "0.4.44"
 tempfile = "3"
 tokio = { version = "1", features = [
@@ -68,8 +70,12 @@ tokio = { version = "1", features = [
 tokio-util = "0.7"
 tower-lsp-server = "0.22"
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = ["smallvec", "env-filter"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "smallvec"] }
 uuid = { version = "1", features = ["v4"] }
+
+[features]
+# Enable SIMD/memchr optimizations for line/char conversions
+simd_opt = ["memchr"]
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }
@@ -86,7 +92,7 @@ tikv-jemalloc-sys = "0.6"
 tikv-jemallocator = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-zip = "4.6.0"
+zip = "4.6.1"
 
 [profile.release]
 opt-level = 3
