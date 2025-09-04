@@ -4,7 +4,6 @@
 
 #![feature(rustc_private)]
 
-pub extern crate indexmap;
 pub extern crate polonius_engine;
 pub extern crate rustc_borrowck;
 pub extern crate rustc_data_structures;
@@ -20,7 +19,6 @@ pub extern crate rustc_session;
 pub extern crate rustc_span;
 pub extern crate rustc_stable_hash;
 pub extern crate rustc_type_ir;
-pub extern crate smallvec;
 
 pub mod core;
 
@@ -60,11 +58,7 @@ fn main() {
         }
     }
 
-    simple_logger::SimpleLogger::new()
-        .env()
-        .with_colors(true)
-        .init()
-        .unwrap();
+    rustowl::initialize_logging(tracing_subscriber::filter::LevelFilter::INFO);
 
     // rayon panics without this only on Windows
     #[cfg(target_os = "windows")]
