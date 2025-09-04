@@ -29,6 +29,10 @@ pkg-fmt = "zip"
 harness = false
 name = "rustowl_bench_simple"
 
+[[bench]]
+harness = false
+name = "line_col_bench"
+
 [dependencies]
 cargo_metadata = "0.22"
 clap = { version = "4", features = ["cargo", "derive"] }
@@ -76,6 +80,7 @@ uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }
+rand = { version = "0.8", features = ["small_rng"] }
 
 [build-dependencies]
 clap = { version = "4", features = ["derive"] }
