@@ -6,11 +6,8 @@ use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 use rustowl::*;
 use std::env;
-use std::io;
 use tower_lsp_server::{LspService, Server};
 use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::{EnvFilter, fmt};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
@@ -88,30 +85,16 @@ async fn handle_command(command: Commands) {
             }
         }
         Commands::Completions(command_options) => {
-            initialize_logging(LevelFilter::OFF);
+            rustowl::initialize_logging(LevelFilter::OFF);
             let shell = command_options.shell;
-            generate(shell, &mut Cli::command(), "rustowl", &mut io::stdout());
+            generate(
+                shell,
+                &mut Cli::command(),
+                "rustowl",
+                &mut std::io::stdout(),
+            );
         }
     }
-}
-
-/// Initializes the logging system with colors and default log level
-fn initialize_logging(level: LevelFilter) {
-    let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level.to_string()));
-
-    let fmt_layer = fmt::layer()
-        .with_target(true)
-        .with_level(true)
-        .with_thread_ids(false)
-        .with_thread_names(false)
-        .with_writer(io::stderr)
-        .with_ansi(true);
-
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(fmt_layer)
-        .init();
 }
 
 /// Handles the case when no command is provided (version display or LSP server mode)
@@ -134,7 +117,7 @@ fn display_version(show_prefix: bool) {
 
 /// Starts the LSP server
 async fn start_lsp_server() {
-    initialize_logging(LevelFilter::WARN);
+    rustowl::initialize_logging(LevelFilter::WARN);
     eprintln!("RustOwl v{}", clap::crate_version!());
     eprintln!("This is an LSP server. You can use --help flag to show help.");
 
@@ -155,7 +138,7 @@ async fn main() {
         .install_default()
         .expect("crypto provider already installed");
 
-    initialize_logging(LevelFilter::INFO);
+    rustowl::initialize_logging(LevelFilter::INFO);
 
     let parsed_args = Cli::parse();
 
