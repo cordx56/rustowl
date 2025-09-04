@@ -92,24 +92,49 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         // allow clippy::await_holding_lock because `tokio::sync::Mutex` cannot use
         // for TASKS because block_on cannot be used in `mir_borrowck`.
         #[allow(clippy::await_holding_lock)]
-        RUNTIME.block_on(async move {
-            while let Some(Ok(result)) = { TASKS.lock().unwrap().join_next().await } {
+        // Drain all remaining analysis tasks synchronously
+        loop {
+            // First collect any tasks that have already finished
+            while let Some(Ok(result)) = {
+                let mut guard = TASKS.lock().unwrap();
+                guard.try_join_next()
+            } {
                 tracing::info!("one task joined");
                 handle_analyzed_result(tcx, result);
             }
-            if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
-                // Log cache statistics before writing
-                let stats = cache.get_stats();
-                tracing::info!(
-                    "Cache statistics: {} hits, {} misses, {:.1}% hit rate, {} evictions",
-                    stats.hits,
-                    stats.misses,
-                    stats.hit_rate() * 100.0,
-                    stats.evictions
-                );
-                cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
+
+            // Check if all tasks are done
+            let has_tasks = {
+                let guard = TASKS.lock().unwrap();
+                !guard.is_empty()
+            };
+            if !has_tasks {
+                break;
             }
-        });
+
+            // Wait for at least one more task to finish
+            let result = {
+                let mut guard = TASKS.lock().unwrap();
+                RUNTIME.block_on(guard.join_next())
+            };
+            if let Some(Ok(result)) = result {
+                tracing::info!("one task joined");
+                handle_analyzed_result(tcx, result);
+            }
+        }
+
+        if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
+            // Log cache statistics before writing
+            let stats = cache.get_stats();
+            tracing::info!(
+                "Cache statistics: {} hits, {} misses, {:.1}% hit rate, {} evictions",
+                stats.hits,
+                stats.misses,
+                stats.hit_rate() * 100.0,
+                stats.evictions
+            );
+            cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
+        }
 
         if result.is_ok() {
             rustc_driver::Compilation::Continue

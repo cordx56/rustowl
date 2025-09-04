@@ -1,16 +1,13 @@
 mod polonius_analyzer;
-mod transform;
 mod shared;
+mod transform;
 
 use super::cache;
 use rustc_borrowck::consumers::{
     ConsumerOptions, PoloniusInput, PoloniusOutput, get_body_with_borrowck_facts,
 };
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
-use rustc_middle::{
-    mir::Local,
-    ty::TyCtxt,
-};
+use rustc_middle::{mir::Local, ty::TyCtxt};
 use rustowl::models::FoldIndexMap as HashMap;
 use rustowl::models::range_vec_from_vec;
 use rustowl::models::*;
@@ -32,8 +29,6 @@ pub enum MirAnalyzerInitResult {
     Cached(Box<AnalyzeResult>),
     Analyzer(MirAnalyzeFuture),
 }
-
-
 
 pub struct MirAnalyzer {
     file_name: String,
