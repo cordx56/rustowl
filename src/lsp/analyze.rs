@@ -76,7 +76,7 @@ impl Analyzer {
                 metadata: None,
             })
         } else {
-            tracing::warn!("Invalid analysis target: {}", path.display());
+            tracing::error!("Invalid analysis target: {}", path.display());
             Err(RustOwlError::Analysis(format!(
                 "Invalid analysis target: {}",
                 path.display()

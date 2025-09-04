@@ -211,7 +211,7 @@ impl Backend {
         let is_analyzed = self.analyzed.read().await.is_some();
         let status = *self.status.read().await;
         if let Some(path) = params.path()
-            && let Ok(text) = std::fs::read_to_string(&path)
+            && let Ok(text) = tokio::fs::read_to_string(&path).await
         {
             let position = params.position();
             let pos = Loc(utils::line_char_to_index(
