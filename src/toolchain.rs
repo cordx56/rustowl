@@ -1,5 +1,5 @@
 use std::env;
-use std::fs::read_dir;
+
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use tokio::fs::{create_dir_all, read_to_string, remove_dir_all, rename};
@@ -27,7 +27,7 @@ pub static FALLBACK_RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 fn recursive_read_dir(path: impl AsRef<Path>) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if path.as_ref().is_dir() {
-        for entry in read_dir(&path).unwrap().flatten() {
+        for entry in std::fs::read_dir(&path).unwrap().flatten() {
             let path = entry.path();
             if path.is_dir() {
                 paths.extend_from_slice(&recursive_read_dir(&path));

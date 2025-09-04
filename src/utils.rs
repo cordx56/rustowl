@@ -177,8 +177,12 @@ pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
     // Scan newline boundaries quickly, counting chars inside each segment.
     for nl in memchr_iter(b'\n', s.as_bytes()) {
         for ch in s[seg_start..=nl].chars() {
-            if ch == '\r' { continue; }
-            if logical_idx == target { return (line, col); }
+            if ch == '\r' {
+                continue;
+            }
+            if logical_idx == target {
+                return (line, col);
+            }
             if ch == '\n' {
                 line += 1;
                 col = 0;
@@ -188,12 +192,18 @@ pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
             logical_idx += 1;
         }
         seg_start = nl + 1;
-        if logical_idx > target { break; }
+        if logical_idx > target {
+            break;
+        }
     }
     if logical_idx <= target {
         for ch in s[seg_start..].chars() {
-            if ch == '\r' { continue; }
-            if logical_idx == target { return (line, col); }
+            if ch == '\r' {
+                continue;
+            }
+            if logical_idx == target {
+                return (line, col);
+            }
             if ch == '\n' {
                 line += 1;
                 col = 0;
@@ -217,9 +227,13 @@ pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
     let mut seg_start = 0usize;
 
     for nl in memchr_iter(b'\n', s.as_bytes()) {
-        if line == 0 { break; }
+        if line == 0 {
+            break;
+        }
         for ch in s[seg_start..=nl].chars() {
-            if ch == '\r' { continue; }
+            if ch == '\r' {
+                continue;
+            }
             consumed += 1;
         }
         seg_start = nl + 1;
@@ -228,7 +242,9 @@ pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
 
     if line > 0 {
         for ch in s[seg_start..].chars() {
-            if ch == '\r' { continue; }
+            if ch == '\r' {
+                continue;
+            }
             consumed += 1;
         }
         return consumed; // best effort if line exceeds file
@@ -236,9 +252,15 @@ pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
 
     let mut col_count = 0u32;
     for ch in s[seg_start..].chars() {
-        if ch == '\r' { continue; }
-        if col_count == char { return consumed; }
-        if ch == '\n' { return consumed; }
+        if ch == '\r' {
+            continue;
+        }
+        if col_count == char {
+            return consumed;
+        }
+        if ch == '\n' {
+            return consumed;
+        }
         consumed += 1;
         col_count += 1;
     }
