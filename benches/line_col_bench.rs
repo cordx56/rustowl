@@ -14,7 +14,7 @@ fn bench_line_col(c: &mut Criterion) {
     for i in 0..10_000u32 {
         let len = (i % 40 + 5) as usize; // vary line length
         for _ in 0..len {
-            let v: u8 = rng.r#gen::<u8>();
+            let v: u8 = rng.random::<u8>();
             source.push(char::from(b'a' + (v % 26)));
         }
         if i % 17 == 0 { source.push('\r'); } // occasional CR
@@ -27,7 +27,7 @@ fn bench_line_col(c: &mut Criterion) {
 
     group.bench_function("index_to_line_char", |b| {
         b.iter(|| {
-            let idx = Loc(rng.gen_range(0..total));
+            let idx = Loc(rng.random_range(0..total));
             let (l, c) = index_to_line_char(&source, idx);
             black_box((l, c));
         });
@@ -36,7 +36,7 @@ fn bench_line_col(c: &mut Criterion) {
     group.bench_function("line_char_to_index", |b| {
         b.iter(|| {
             // random line, then column 0 for simplicity
-            let line = rng.gen_range(0..10_000u32);
+            let line = rng.random_range(0..10_000u32);
             let idx = line_char_to_index(&source, line, 0);
             black_box(idx);
         });
