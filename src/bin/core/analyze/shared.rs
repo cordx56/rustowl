@@ -14,4 +14,3 @@ pub fn range_from_span(source: &str, span: Span, offset: u32) -> Option<Range> {
 pub fn sort_locs(v: &mut [(BasicBlock, usize)]) {
     v.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
 }
-

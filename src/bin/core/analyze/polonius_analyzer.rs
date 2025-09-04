@@ -180,26 +180,70 @@ pub fn get_range(
     location_table: &PoloniusLocationTable,
     basic_blocks: &[MirBasicBlock],
 ) -> HashMap<Local, Vec<Range>> {
-    let mut local_locs = HashMap::default();
+    use rustc_borrowck::consumers::RichLocation;
+    use rustc_middle::mir::BasicBlock;
+
+    #[derive(Default)]
+    struct LocalLive {
+        starts: Vec<(BasicBlock, usize)>,
+        mids: Vec<(BasicBlock, usize)>,
+    }
+
+    // Collect start/mid locations per local without building an intermediate RichLocation Vec
+    let mut locals_live: HashMap<u32, LocalLive> = HashMap::default();
     for (loc_idx, locals) in live_on_entry {
-        let location = location_table.to_rich_location(loc_idx.index().into());
+        let rich = location_table.to_rich_location(loc_idx.index().into());
         for local in locals {
-            local_locs
-                .entry(local.index())
-                .or_insert_with(Vec::new)
-                .push(location);
+            let entry = locals_live
+                .entry(local.index().try_into().unwrap())
+                .or_insert_with(LocalLive::default);
+            match rich {
+                RichLocation::Start(l) => entry.starts.push((l.block, l.statement_index)),
+                RichLocation::Mid(l) => entry.mids.push((l.block, l.statement_index)),
+            }
         }
     }
-    local_locs
+
+    fn statement_location_to_range(
+        basic_blocks: &[MirBasicBlock],
+        block: BasicBlock,
+        statement_index: usize,
+    ) -> Option<Range> {
+        basic_blocks.get(block.index()).and_then(|bb| {
+            if statement_index < bb.statements.len() {
+                bb.statements.get(statement_index).map(|v| v.range())
+            } else {
+                bb.terminator.as_ref().map(|v| v.range())
+            }
+        })
+    }
+
+    locals_live
         .into_par_iter()
-        .map(|(local, locations)| {
-            (
-                local.into(),
-                utils::eliminated_ranges(super::transform::rich_locations_to_ranges(
-                    basic_blocks,
-                    &locations,
-                )),
-            )
+        .map(|(local_idx, mut live)| {
+            super::shared::sort_locs(&mut live.starts);
+            super::shared::sort_locs(&mut live.mids);
+            let n = live.starts.len().min(live.mids.len());
+            if n != live.starts.len() || n != live.mids.len() {
+                tracing::debug!(
+                    "get_range: starts({}) != mids({}); truncating to {}",
+                    live.starts.len(),
+                    live.mids.len(),
+                    n
+                );
+            }
+            let mut ranges = Vec::with_capacity(n);
+            for i in 0..n {
+                if let (Some(s), Some(m)) = (
+                    statement_location_to_range(basic_blocks, live.starts[i].0, live.starts[i].1),
+                    statement_location_to_range(basic_blocks, live.mids[i].0, live.mids[i].1),
+                ) {
+                    if let Some(r) = Range::new(s.from(), m.until()) {
+                        ranges.push(r);
+                    }
+                }
+            }
+            (local_idx.into(), utils::eliminated_ranges(ranges))
         })
         .collect()
 }

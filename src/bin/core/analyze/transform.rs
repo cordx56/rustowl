@@ -50,7 +50,8 @@ pub fn collect_user_vars(
     );
     for debug in &body.var_debug_info {
         if let VarDebugInfoContents::Place(place) = &debug.value
-            && let Some(range) = super::shared::range_from_span(source, debug.source_info.span, offset)
+            && let Some(range) =
+                super::shared::range_from_span(source, debug.source_info.span, offset)
         {
             result.insert(place.local, (range, debug.name.as_str().to_owned()));
         }
@@ -132,15 +133,16 @@ pub fn collect_basic_blocks(
                 .terminator
                 .as_ref()
                 .and_then(|terminator| match &terminator.kind {
-                    TerminatorKind::Drop { place, .. } => super::shared::range_from_span(
-                        source,
-                        terminator.source_info.span,
-                        offset,
-                    )
-                    .map(|range| MirTerminator::Drop {
-                        local: FnLocal::new(place.local.as_u32(), fn_id.local_def_index.as_u32()),
-                        range,
-                    }),
+                    TerminatorKind::Drop { place, .. } => {
+                        super::shared::range_from_span(source, terminator.source_info.span, offset)
+                            .map(|range| MirTerminator::Drop {
+                                local: FnLocal::new(
+                                    place.local.as_u32(),
+                                    fn_id.local_def_index.as_u32(),
+                                ),
+                                range,
+                            })
+                    }
                     TerminatorKind::Call {
                         destination,
                         fn_span,
@@ -154,8 +156,10 @@ pub fn collect_basic_blocks(
                             fn_span,
                         }
                     }),
-                    _ => super::shared::range_from_span(source, terminator.source_info.span, offset)
-                        .map(|range| MirTerminator::Other { range }),
+                    _ => {
+                        super::shared::range_from_span(source, terminator.source_info.span, offset)
+                            .map(|range| MirTerminator::Other { range })
+                    }
                 });
 
         result.push(MirBasicBlock {
