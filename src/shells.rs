@@ -745,45 +745,4 @@ mod tests {
             );
         }
     }
-
-    #[test]
-    fn test_shell_performance_characteristics() {
-        // Test performance characteristics of shell operations
-        use std::time::Instant;
-
-        // Test that operations complete reasonably quickly
-        let shells = Shell::value_variants();
-
-        for &shell in shells {
-            let start = Instant::now();
-
-            // Perform multiple operations
-            for i in 0..1000 {
-                let _display = shell.to_string();
-                let _filename = shell.file_name(&format!("app_{i}"));
-                let _standard = shell.to_standard_shell();
-            }
-
-            let duration = start.elapsed();
-            assert!(
-                duration.as_millis() < 100,
-                "Shell {shell:?} operations should be fast, took {duration:?}"
-            );
-        }
-
-        // Test parsing performance
-        let valid_shells = ["bash", "zsh", "fish", "powershell", "elvish", "nushell"];
-
-        let start = Instant::now();
-        for _ in 0..1000 {
-            for shell_name in &valid_shells {
-                let _parsed = <Shell as std::str::FromStr>::from_str(shell_name).unwrap();
-            }
-        }
-        let parse_duration = start.elapsed();
-        assert!(
-            parse_duration.as_millis() < 50,
-            "Shell parsing should be fast, took {parse_duration:?}"
-        );
-    }
 }

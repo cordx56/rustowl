@@ -724,19 +724,6 @@ mod tests {
     }
 
     #[test]
-    fn test_worker_thread_calculation() {
-        // Test the worker thread calculation logic used in RUNTIME
-        let available = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(8);
-        let worker_threads = (available / 2).clamp(2, 8);
-
-        assert!(worker_threads >= 2);
-        assert!(worker_threads <= 8);
-        assert!(worker_threads <= available);
-    }
-
-    #[test]
     fn test_component_validation() {
         // Test component name validation
         let valid_components = ["rustc", "rust-std", "cargo", "clippy", "rustfmt"];

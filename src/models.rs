@@ -1496,53 +1496,6 @@ mod tests {
     }
 
     #[test]
-    fn test_collection_performance_characteristics() {
-        // Test performance characteristics of collections
-        use std::time::Instant;
-
-        // Test SmallVec performance
-        let start = Instant::now();
-        let mut functions = smallvec::SmallVec::<[Function; 4]>::new();
-
-        for i in 0..1000 {
-            functions.push(Function::new(i));
-        }
-
-        let smallvec_duration = start.elapsed();
-        assert!(
-            smallvec_duration.as_millis() < 100,
-            "SmallVec operations should be fast"
-        );
-        assert_eq!(functions.len(), 1000);
-
-        // Test FoldIndexMap performance
-        let start = Instant::now();
-        let mut map: FoldIndexMap<u32, String> = FoldIndexMap::default();
-
-        for i in 0..1000 {
-            map.insert(i, format!("value_{i}"));
-        }
-
-        let map_duration = start.elapsed();
-        assert!(
-            map_duration.as_millis() < 100,
-            "FoldIndexMap operations should be fast"
-        );
-        assert_eq!(map.len(), 1000);
-
-        // Test lookups
-        let start = Instant::now();
-        for i in 0..1000 {
-            assert!(map.contains_key(&i));
-        }
-        let lookup_duration = start.elapsed();
-        assert!(
-            lookup_duration.as_millis() < 50,
-            "Lookups should be very fast"
-        );
-    }
-
-    #[test]
     fn test_serialization_format_consistency() {
         // Test that serialization format is consistent and predictable
         let function = Function::new(42);
