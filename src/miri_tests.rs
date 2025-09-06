@@ -337,4 +337,340 @@ mod miri_memory_safety_tests {
         let debug_fn_local = format!("{fn_local:?}");
         assert!(debug_fn_local.contains("FnLocal"));
     }
+
+    /// Exercises complex string creation, mutation, searching, slicing, and deduplication to help detect memory-safety issues.
+    ///
+    /// Builds patterned strings, prepends a prefix and appends a suffix to each, verifies prefix/suffix invariants and
+    /// that slicing via `find` yields expected substrings, then deduplicates with a `HashSet` and asserts the deduplicated
+    /// count does not exceed the number of original distinct bases.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // construct and mutate a few patterned strings, then dedupe
+    /// let mut v = Vec::new();
+    /// for i in 0..3 { v.push(format!("test_{}", i)); }
+    /// for s in &mut v { s.insert_str(0, "prefix_"); s.push_str("_suffix"); }
+    /// for s in &v { assert!(s.starts_with("prefix_") && s.ends_with("_suffix")); }
+    /// if let Some(pos) = v[0].find("test_") { let slice = &v[0][pos..]; assert!(slice.starts_with("test_")); }
+    /// let set: std::collections::HashSet<_> = v.into_iter().collect();
+    /// assert!(set.len() <= 3);
+    /// ```
+    #[test]
+    fn test_advanced_string_operations() {
+        // Test more complex string operations for memory safety
+        let mut strings = Vec::with_capacity(100);
+
+        // Test string creation with various patterns
+        for i in 0..50 {
+            let s = format!("test_{i}");
+            strings.push(s);
+        }
+
+        // Test string manipulation
+        for s in &mut strings {
+            s.push_str("_suffix");
+            s.insert_str(0, "prefix_");
+        }
+
+        // Test string searching and slicing
+        for s in &strings {
+            assert!(s.starts_with("prefix_"));
+            assert!(s.ends_with("_suffix"));
+
+            if let Some(pos) = s.find("test_") {
+                let slice = &s[pos..];
+                assert!(slice.starts_with("test_"));
+            }
+        }
+
+        // Test string deduplication
+        let mut unique_strings = std::collections::HashSet::new();
+        for s in strings {
+            unique_strings.insert(s);
+        }
+        assert_eq!(unique_strings.len(), 50);
+    }
+
+    #[test]
+    fn test_complex_nested_structures() {
+        // Test deeply nested data structures for memory safety
+        let mut workspace = Workspace(HashMap::default());
+        for crate_idx in 0..10 {
+            let mut crate_data = Crate(HashMap::default());
+            for file_idx in 0..5 {
+                let mut file = File::new();
+
+                for func_idx in 0..3 {
+                    let mut function = Function::new(func_idx + file_idx * 3 + crate_idx * 15);
+
+                    // Add basic blocks
+                    for bb_idx in 0..4 {
+                        let mut basic_block = MirBasicBlock::new();
+
+                        // Add statements
+                        for stmt_idx in 0..6 {
+                            let range =
+                                Range::new(Loc(stmt_idx * 10), Loc(stmt_idx * 10 + 5)).unwrap();
+
+                            basic_block.statements.push(MirStatement::Other { range });
+                        }
+
+                        // Add terminator
+                        if bb_idx % 2 == 0 {
+                            basic_block.terminator = Some(MirTerminator::Other {
+                                range: Range::new(Loc(60), Loc(65)).unwrap(),
+                            });
+                        }
+
+                        function.basic_blocks.push(basic_block);
+                    }
+
+                    file.items.push(function);
+                }
+
+                crate_data.0.insert(format!("file_{file_idx}.rs"), file);
+            }
+
+            workspace.0.insert(format!("crate_{crate_idx}"), crate_data);
+        }
+
+        // Verify structure
+        assert_eq!(workspace.0.len(), 10);
+
+        for (crate_name, crate_data) in &workspace.0 {
+            assert!(crate_name.starts_with("crate_"));
+            assert_eq!(crate_data.0.len(), 5);
+
+            for (file_name, file_data) in &crate_data.0 {
+                assert!(file_name.starts_with("file_"));
+                assert_eq!(file_data.items.len(), 3);
+
+                for function in &file_data.items {
+                    assert_eq!(function.basic_blocks.len(), 4);
+
+                    for (bb_idx, basic_block) in function.basic_blocks.iter().enumerate() {
+                        assert_eq!(basic_block.statements.len(), 6);
+                        if bb_idx % 2 == 0 {
+                            assert!(basic_block.terminator.is_some());
+                        } else {
+                            assert!(basic_block.terminator.is_none());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_memory_intensive_range_operations() {
+        // Test range operations with many ranges for memory safety
+        let mut ranges = Vec::with_capacity(1000);
+
+        // Create overlapping ranges
+        for i in 0..500 {
+            let start = i * 2;
+            let end = start + 10;
+            if let Some(range) = Range::new(Loc(start), Loc(end)) {
+                ranges.push(range);
+            }
+        }
+
+        // Test range merging and elimination
+        let eliminated = crate::utils::eliminated_ranges(ranges.clone());
+        assert!(eliminated.len() < ranges.len()); // Should merge some ranges
+        // Ensure eliminated ranges are non-overlapping
+        assert!(
+            eliminated
+                .windows(2)
+                .all(|w| crate::utils::common_range(w[0], w[1]).is_none())
+        );
+        // Test range exclusion
+        let excludes = vec![
+            Range::new(Loc(50), Loc(100)).unwrap(),
+            Range::new(Loc(200), Loc(250)).unwrap(),
+        ];
+
+        let excluded = crate::utils::exclude_ranges(ranges, excludes.clone());
+        assert!(!excluded.is_empty());
+
+        // Verify no excluded ranges overlap with exclude regions
+        for range in &excluded {
+            for exclude in &excludes {
+                assert!(crate::utils::common_range(*range, *exclude).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn test_mir_variable_enum_exhaustive() {
+        // Test all MirVariable enum variants and operations
+        let user_vars = (0..20)
+            .map(|i| MirVariable::User {
+                index: i,
+                live: Range::new(Loc(i * 10), Loc(i * 10 + 5)).unwrap(),
+                dead: Range::new(Loc(i * 10 + 5), Loc(i * 10 + 10)).unwrap(),
+            })
+            .collect::<Vec<_>>();
+
+        let other_vars = (0..20)
+            .map(|i| MirVariable::Other {
+                index: i + 100,
+                live: Range::new(Loc(i * 15), Loc(i * 15 + 7)).unwrap(),
+                dead: Range::new(Loc(i * 15 + 7), Loc(i * 15 + 14)).unwrap(),
+            })
+            .collect::<Vec<_>>();
+
+        // Test pattern matching and extraction
+        for var in &user_vars {
+            match var {
+                MirVariable::User { index, live, dead } => {
+                    assert!(*index < 20);
+                    assert!(live.size() == 5);
+                    assert!(dead.size() == 5);
+                    assert_eq!(live.until(), dead.from());
+                }
+                _ => panic!("Expected User variant"),
+            }
+        }
+
+        for var in &other_vars {
+            match var {
+                MirVariable::Other { index, live, dead } => {
+                    assert!(*index >= 100);
+                    assert!(live.size() == 7);
+                    assert!(dead.size() == 7);
+                    assert_eq!(live.until(), dead.from());
+                }
+                _ => panic!("Expected Other variant"),
+            }
+        }
+
+        // Test collection operations
+        let mut all_vars = MirVariables::with_capacity(40);
+        for var in user_vars.into_iter().chain(other_vars.into_iter()) {
+            all_vars.push(var);
+        }
+
+        let final_vars = all_vars.to_vec();
+        assert_eq!(final_vars.len(), 40);
+    }
+
+    #[test]
+    fn test_cache_config_memory_safety() {
+        // Test cache configuration structures for memory safety
+        use crate::cache::CacheConfig;
+
+        let mut configs = Vec::new();
+
+        // Create configurations with various settings
+        for i in 0..50 {
+            let config = CacheConfig {
+                max_entries: 1000 + i,
+                max_memory_bytes: (100 + i) * 1024 * 1024,
+                use_lru_eviction: i % 2 == 0,
+                validate_file_mtime: i % 3 == 0,
+                enable_compression: i % 4 == 0,
+            };
+            configs.push(config);
+        }
+
+        // Test cloning and manipulation
+        for config in &configs {
+            let cloned = config.clone();
+            assert_eq!(config.max_entries, cloned.max_entries);
+            assert_eq!(config.max_memory_bytes, cloned.max_memory_bytes);
+            assert_eq!(config.use_lru_eviction, cloned.use_lru_eviction);
+            assert_eq!(config.validate_file_mtime, cloned.validate_file_mtime);
+            assert_eq!(config.enable_compression, cloned.enable_compression);
+        }
+
+        // Test debug formatting
+        for config in &configs {
+            let debug_str = format!("{config:?}");
+            assert!(debug_str.contains("CacheConfig"));
+            assert!(debug_str.contains(&config.max_entries.to_string()));
+        }
+    }
+
+    /// Verifies Loc arithmetic is safe around integer boundaries (no wrapping; saturates at zero).
+    ///
+    /// Tests addition and subtraction on extreme and intermediate Loc values to ensure operations
+    /// do not wrap on overflow and underflow and that subtraction saturates at zero where appropriate.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use crate::models::Loc; // adjust path as needed
+    /// let max = Loc(u32::MAX);
+    /// let min = Loc(0);
+    /// assert!((max + 1).0 >= max.0);
+    /// assert_eq!((min - 1).0, 0);
+    /// ```
+    #[test]
+    fn test_advanced_arithmetic_safety() {
+        // Test arithmetic operations for overflow/underflow safety
+
+        // Test Loc arithmetic with extreme values
+        let max_loc = Loc(u32::MAX);
+        let min_loc = Loc(0);
+
+        // Test addition near overflow
+        let result = max_loc + 1;
+        assert_eq!(result.0, max_loc.0); // Saturates at max
+        let result = max_loc + (-1);
+        assert_eq!(result.0, u32::MAX - 1); // Should subtract correctly
+
+        // Test subtraction near underflow
+        let result = min_loc - 1;
+        assert_eq!(result.0, 0); // Should saturate at 0
+
+        let result = min_loc + (-10);
+        assert_eq!(result.0, 0); // Should saturate at 0
+
+        // Test with intermediate values
+        let mid_loc = Loc(u32::MAX / 2);
+        let result = mid_loc + (u32::MAX / 2) as i32;
+        assert_eq!(result.0, u32::MAX - 1); // Exact expected value
+        let result = mid_loc - (u32::MAX / 2) as i32;
+        assert_eq!(result.0, 0); // Exact expected value
+    }
+
+    #[test]
+    fn test_concurrent_like_operations() {
+        // Test operations that might be used in concurrent contexts
+        // (single-threaded but stress-testing for memory safety)
+
+        use std::sync::Arc;
+
+        let workspace = Arc::new(Workspace(FoldIndexMap::default()));
+        let mut handles = Vec::new();
+
+        // Simulate concurrent-like access patterns
+        for i in 0..10 {
+            let workspace_clone = Arc::clone(&workspace);
+
+            // Create some work that would be done in different "threads"
+            let work = move || {
+                let _crate_name = format!("crate_{i}");
+                let _workspace_ref = &*workspace_clone;
+
+                // Simulate reading from workspace
+                for j in 0..5 {
+                    let _key = format!("key_{j}");
+                    // Would normally do workspace_ref.0.get(&key)
+                }
+            };
+
+            handles.push(work);
+        }
+
+        // Execute all "work" sequentially (since this is single-threaded)
+        for work in handles {
+            work();
+        }
+
+        // Test that Arc and reference counting works correctly
+        assert_eq!(Arc::strong_count(&workspace), 1); // Only our reference remains
+    }
 }

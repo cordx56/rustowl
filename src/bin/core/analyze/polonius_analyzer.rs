@@ -237,10 +237,9 @@ pub fn get_range(
                 if let (Some(s), Some(m)) = (
                     statement_location_to_range(basic_blocks, live.starts[i].0, live.starts[i].1),
                     statement_location_to_range(basic_blocks, live.mids[i].0, live.mids[i].1),
-                ) {
-                    if let Some(r) = Range::new(s.from(), m.until()) {
-                        ranges.push(r);
-                    }
+                ) && let Some(r) = Range::new(s.from(), m.until())
+                {
+                    ranges.push(r);
                 }
             }
             (local_idx.into(), utils::eliminated_ranges(ranges))
