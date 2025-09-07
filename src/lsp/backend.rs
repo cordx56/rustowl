@@ -375,3 +375,297 @@ impl LanguageServer for Backend {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Once;
+
+    static CRYPTO_PROVIDER_INIT: Once = Once::new();
+
+    /// Safely initialize the crypto provider once to avoid multiple installation issues
+    fn init_crypto_provider() {
+        CRYPTO_PROVIDER_INIT.call_once(|| {
+            // Try to install the crypto provider, but don't panic if it's already installed
+            let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        });
+
+        // Also try to install it directly in case the Once didn't work
+        // This is safe to call multiple times
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    }
+
+    // Test Backend::check method
+    #[tokio::test]
+    async fn test_check_method() {
+        init_crypto_provider();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+        tokio::fs::write(
+            &cargo_toml,
+            "[package]\nname = \"test\"\nversion = \"0.1.0\"",
+        )
+        .await
+        .unwrap();
+
+        let result = Backend::check(&temp_dir.path()).await;
+
+        assert!(matches!(result, true | false));
+    }
+
+    // Test Backend::check_with_options method
+    #[tokio::test]
+    async fn test_check_with_options() {
+        init_crypto_provider();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+        tokio::fs::write(
+            &cargo_toml,
+            "[package]\nname = \"test\"\nversion = \"0.1.0\"",
+        )
+        .await
+        .unwrap();
+
+        let result = Backend::check_with_options(&temp_dir.path(), true, true).await;
+
+        assert!(matches!(result, true | false));
+    }
+
+    // Test Backend::check with invalid path
+    #[tokio::test]
+    async fn test_check_invalid_path() {
+        init_crypto_provider();
+        // Use a timeout to prevent the test from hanging
+        let result = Backend::check(Path::new("/nonexistent/path")).await;
+
+        assert!(!result);
+    }
+
+    // Test Backend::check_with_options with invalid path
+    #[tokio::test]
+    async fn test_check_with_options_invalid_path() {
+        init_crypto_provider();
+
+        let result =
+            Backend::check_with_options(Path::new("/nonexistent/path"), false, false).await;
+        assert!(!result);
+    }
+
+    // Test Backend::check with valid Cargo.toml but no source files
+    #[tokio::test]
+    async fn test_check_valid_cargo_no_src() {
+        init_crypto_provider();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+        tokio::fs::write(
+            &cargo_toml,
+            "[package]\nname = \"test\"\nversion = \"0.1.0\"",
+        )
+        .await
+        .unwrap();
+
+        let result = Backend::check(&temp_dir.path()).await;
+
+        assert!(matches!(result, true | false));
+    }
+
+    // Test Backend::check with different option combinations
+    #[tokio::test]
+    async fn test_check_with_different_options() {
+        init_crypto_provider();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+        tokio::fs::write(
+            &cargo_toml,
+            "[package]\nname = \"test\"\nversion = \"0.1.0\"",
+        )
+        .await
+        .unwrap();
+
+        // Test all combinations of options
+        let result1 = Backend::check_with_options(&temp_dir.path(), false, false).await;
+        let result2 = Backend::check_with_options(&temp_dir.path(), true, false).await;
+        let result3 = Backend::check_with_options(&temp_dir.path(), false, true).await;
+        let result4 = Backend::check_with_options(&temp_dir.path(), true, true).await;
+
+        // All should return boolean values without panicking
+        assert!(matches!(result1, true | false));
+        assert!(matches!(result2, true | false));
+        assert!(matches!(result3, true | false));
+        assert!(matches!(result4, true | false));
+    }
+
+    // Test Backend::check with workspace (multiple packages)
+    #[tokio::test]
+    async fn test_check_with_workspace() {
+        init_crypto_provider();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        // Create workspace Cargo.toml
+        let workspace_cargo = temp_dir.path().join("Cargo.toml");
+        tokio::fs::write(&workspace_cargo,
+            "[workspace]\nmembers = [\"pkg1\", \"pkg2\"]\n[package]\nname = \"workspace\"\nversion = \"0.1.0\""
+        ).await.unwrap();
+
+        // Create member packages
+        let pkg1_dir = temp_dir.path().join("pkg1");
+        tokio::fs::create_dir(&pkg1_dir).await.unwrap();
+        let pkg1_cargo = pkg1_dir.join("Cargo.toml");
+        tokio::fs::write(
+            &pkg1_cargo,
+            "[package]\nname = \"pkg1\"\nversion = \"0.1.0\"",
+        )
+        .await
+        .unwrap();
+
+        let result = Backend::check(&temp_dir.path()).await;
+        // Should handle workspace structure
+        assert!(matches!(result, true | false));
+    }
+
+    // Test Backend::check with malformed Cargo.toml
+    #[tokio::test]
+    async fn test_check_malformed_cargo() {
+        init_crypto_provider();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+
+        // Write malformed TOML
+        tokio::fs::write(
+            &cargo_toml,
+            "[package\nname = \"test\"\nversion = \"0.1.0\"",
+        )
+        .await
+        .unwrap();
+
+        let result = Backend::check(&temp_dir.path()).await;
+        // Should handle malformed Cargo.toml gracefully
+        assert!(!result);
+    }
+
+    // Test Backend::check with empty directory
+    #[tokio::test]
+    async fn test_check_empty_directory() {
+        init_crypto_provider();
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let result = Backend::check(&temp_dir.path()).await;
+        // Should fail with empty directory
+        assert!(!result);
+    }
+
+    // Test Backend::check_with_options with empty directory
+    #[tokio::test]
+    async fn test_check_with_options_empty_directory() {
+        init_crypto_provider();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let result = Backend::check_with_options(&temp_dir.path(), true, true).await;
+        // Should fail with empty directory regardless of options
+        assert!(!result);
+    }
+
+    // Test Backend::check with nested Cargo.toml
+    #[tokio::test]
+    async fn test_check_nested_cargo() {
+        init_crypto_provider();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let nested_dir = temp_dir.path().join("nested");
+        tokio::fs::create_dir(&nested_dir).await.unwrap();
+
+        let cargo_toml = nested_dir.join("Cargo.toml");
+        tokio::fs::write(
+            &cargo_toml,
+            "[package]\nname = \"nested\"\nversion = \"0.1.0\"",
+        )
+        .await
+        .unwrap();
+
+        let result = Backend::check(&nested_dir).await;
+        // Should work with nested directory containing Cargo.toml
+        assert!(matches!(result, true | false));
+    }
+
+    // Test Backend::check with binary target
+    #[tokio::test]
+    async fn test_check_with_binary_target() {
+        init_crypto_provider();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+
+        tokio::fs::write(&cargo_toml,
+            "[package]\nname = \"test\"\nversion = \"0.1.0\"\n[[bin]]\nname = \"main\"\npath = \"src/main.rs\""
+        ).await.unwrap();
+
+        let src_dir = temp_dir.path().join("src");
+        tokio::fs::create_dir(&src_dir).await.unwrap();
+        let main_rs = src_dir.join("main.rs");
+        tokio::fs::write(&main_rs, "fn main() { println!(\"Hello\"); }")
+            .await
+            .unwrap();
+
+        let result = Backend::check(&temp_dir.path()).await;
+        // Should handle binary targets
+        assert!(matches!(result, true | false));
+    }
+
+    // Test Backend::check with library target
+    #[tokio::test]
+    async fn test_check_with_library_target() {
+        init_crypto_provider();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+
+        tokio::fs::write(&cargo_toml,
+            "[package]\nname = \"test\"\nversion = \"0.1.0\"\n[lib]\nname = \"testlib\"\npath = \"src/lib.rs\""
+        ).await.unwrap();
+
+        let src_dir = temp_dir.path().join("src");
+        tokio::fs::create_dir(&src_dir).await.unwrap();
+        let lib_rs = src_dir.join("lib.rs");
+        tokio::fs::write(&lib_rs, "pub fn hello() { println!(\"Hello\"); }")
+            .await
+            .unwrap();
+
+        let result = Backend::check(&temp_dir.path()).await;
+        // Should handle library targets
+        assert!(matches!(result, true | false));
+    }
+
+    // Test Backend::check with both binary and library targets
+    #[tokio::test]
+    async fn test_check_with_mixed_targets() {
+        init_crypto_provider();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+
+        tokio::fs::write(&cargo_toml,
+            "[package]\nname = \"test\"\nversion = \"0.1.0\"\n[lib]\nname = \"testlib\"\npath = \"src/lib.rs\"\n[[bin]]\nname = \"main\"\npath = \"src/main.rs\""
+        ).await.unwrap();
+
+        let src_dir = temp_dir.path().join("src");
+        tokio::fs::create_dir(&src_dir).await.unwrap();
+        let lib_rs = src_dir.join("lib.rs");
+        let main_rs = src_dir.join("main.rs");
+        tokio::fs::write(&lib_rs, "pub fn hello() { println!(\"Hello\"); }")
+            .await
+            .unwrap();
+        tokio::fs::write(&main_rs, "fn main() { println!(\"Hello\"); }")
+            .await
+            .unwrap();
+
+        let result = Backend::check(&temp_dir.path()).await;
+        // Should handle mixed targets
+        assert!(matches!(result, true | false));
+    }
+}

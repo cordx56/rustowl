@@ -367,12 +367,40 @@ mod tests {
     }
 
     #[test]
-    fn test_index_to_line_char() {
-        let source = "hello\nworld\ntest";
+    fn test_index_to_line_char_edge_cases() {
+        let source = "line1\nline2\nline3";
 
-        assert_eq!(index_to_line_char(source, Loc(0)), (0, 0)); // 'h'
-        assert_eq!(index_to_line_char(source, Loc(6)), (1, 0)); // 'w'
-        assert_eq!(index_to_line_char(source, Loc(12)), (2, 0)); // 't'
+        // Test position at line start
+        let (line, col) = index_to_line_char(source, Loc(6)); // Start of "line2"
+        assert_eq!(line, 1);
+        assert_eq!(col, 0);
+
+        // Test position at line end (before newline)
+        let (line, col) = index_to_line_char(source, Loc(11)); // End of "line2" (including newline)
+        assert_eq!(line, 1);
+        assert_eq!(col, 5);
+
+        // Test position at EOF
+        let (line, col) = index_to_line_char(source, Loc(source.len() as u32));
+        assert_eq!(line, 2);
+        assert_eq!(col, 5); // "line3" has 5 characters
+    }
+
+    #[test]
+    fn test_line_char_to_index_roundtrip() {
+        let source = "line1\nline2\nline3";
+
+        // Test round trip conversion
+        let original_index = 8u32; // Position in "line2"
+        let (line, col) = index_to_line_char(source, Loc(original_index));
+        let converted_index = line_char_to_index(source, line, col);
+        assert_eq!(converted_index, original_index);
+
+        // Test line/char at EOF
+        let eof_index = source.len() as u32;
+        let (line, col) = index_to_line_char(source, Loc(eof_index));
+        let converted_index = line_char_to_index(source, line, col);
+        assert_eq!(converted_index as usize, source.len());
     }
 
     #[test]

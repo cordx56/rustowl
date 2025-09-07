@@ -245,3 +245,129 @@ impl MirAnalyzer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test AnalyzeResult structure creation
+    #[test]
+    fn test_analyze_result_creation() {
+        let result = AnalyzeResult {
+            file_name: "test.rs".to_string(),
+            file_hash: "abc123".to_string(),
+            mir_hash: "def456".to_string(),
+            analyzed: Function {
+                fn_id: 1,
+                basic_blocks: SmallVec::new(),
+                decls: DeclVec::new(),
+            },
+        };
+
+        assert_eq!(result.file_name, "test.rs");
+        assert_eq!(result.file_hash, "abc123");
+        assert_eq!(result.mir_hash, "def456");
+        assert_eq!(result.analyzed.fn_id, 1);
+        assert!(result.analyzed.decls.is_empty());
+        assert!(result.analyzed.basic_blocks.is_empty());
+    }
+
+    // Test MirAnalyzerInitResult enum variants
+    #[test]
+    fn test_mir_analyzer_init_result_cached() {
+        let analyze_result = AnalyzeResult {
+            file_name: "test.rs".to_string(),
+            file_hash: "hash".to_string(),
+            mir_hash: "mir_hash".to_string(),
+            analyzed: Function {
+                fn_id: 1,
+                basic_blocks: SmallVec::new(),
+                decls: DeclVec::new(),
+            },
+        };
+
+        let result = MirAnalyzerInitResult::Cached(Box::new(analyze_result.clone()));
+        match result {
+            MirAnalyzerInitResult::Cached(cached) => {
+                assert_eq!(cached.file_name, "test.rs");
+                assert_eq!(cached.file_hash, "hash");
+                assert_eq!(cached.mir_hash, "mir_hash");
+            }
+            _ => panic!("Expected Cached variant"),
+        }
+    }
+
+    // Test AnalyzeResult with populated data
+    #[test]
+    fn test_analyze_result_with_data() {
+        let mut decls = DeclVec::new();
+        decls.push(MirDecl::Other {
+            local: FnLocal { id: 1, fn_id: 50 },
+            ty: "String".into(),
+            lives: SmallVec::new(),
+            shared_borrow: SmallVec::new(),
+            mutable_borrow: SmallVec::new(),
+            drop: true,
+            drop_range: SmallVec::new(),
+            must_live_at: SmallVec::new(),
+        });
+
+        let mut basic_blocks = SmallVec::new();
+        basic_blocks.push(MirBasicBlock {
+            statements: SmallVec::new(),
+            terminator: None,
+        });
+
+        let result = AnalyzeResult {
+            file_name: "complex.rs".to_string(),
+            file_hash: "complex_hash".to_string(),
+            mir_hash: "complex_mir".to_string(),
+            analyzed: Function {
+                fn_id: 42,
+                basic_blocks,
+                decls,
+            },
+        };
+
+        assert_eq!(result.file_name, "complex.rs");
+        assert_eq!(result.analyzed.fn_id, 42);
+        assert_eq!(result.analyzed.decls.len(), 1);
+        assert_eq!(result.analyzed.basic_blocks.len(), 1);
+    }
+
+    // Test AnalyzeResult with user variables (simplified)
+    #[test]
+    fn test_analyze_result_with_user_vars() {
+        let mut decls = DeclVec::new();
+        // Create a simple test without complex Range construction
+        decls.push(MirDecl::Other {
+            local: FnLocal { id: 1, fn_id: 42 },
+            ty: "i32".into(),
+            lives: SmallVec::new(),
+            shared_borrow: SmallVec::new(),
+            mutable_borrow: SmallVec::new(),
+            drop: true,
+            drop_range: SmallVec::new(),
+            must_live_at: SmallVec::new(),
+        });
+
+        let result = AnalyzeResult {
+            file_name: "user_vars.rs".to_string(),
+            file_hash: "user_hash".to_string(),
+            mir_hash: "user_mir".to_string(),
+            analyzed: Function {
+                fn_id: 50,
+                basic_blocks: SmallVec::new(),
+                decls,
+            },
+        };
+
+        assert_eq!(result.analyzed.decls.len(), 1);
+        match &result.analyzed.decls[0] {
+            MirDecl::Other { drop, .. } => {
+                assert!(*drop);
+            }
+            _ => panic!("Expected Other variant"),
+        }
+    }
+}

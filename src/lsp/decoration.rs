@@ -847,4 +847,126 @@ mod tests {
         // Should have at least one decoration (lifetime)
         assert!(!decorations.is_empty());
     }
+
+    #[test]
+    fn test_select_local_new() {
+        let pos = Loc(10);
+        let selector = SelectLocal::new(pos);
+
+        assert_eq!(selector.pos, pos);
+        assert!(selector.candidate_local_decls.is_empty());
+        assert!(selector.selected.is_none());
+    }
+
+    #[test]
+    fn test_select_local_select_var() {
+        let mut selector = SelectLocal::new(Loc(10));
+        let local = FnLocal::new(1, 1);
+        let range = Range::new(Loc(5), Loc(15)).unwrap();
+
+        // Add local to candidates
+        selector.candidate_local_decls.push(local);
+
+        // Select with Var reason
+        selector.select(SelectReason::Var, local, range);
+
+        assert!(selector.selected.is_some());
+        if let Some((reason, selected_local, selected_range)) = selector.selected {
+            assert_eq!(reason, SelectReason::Var);
+            assert_eq!(selected_local, local);
+            assert_eq!(selected_range, range);
+        }
+    }
+
+    #[test]
+    fn test_calc_decos_new() {
+        let locals = vec![FnLocal::new(1, 1), FnLocal::new(2, 1)];
+        let calc = CalcDecos::new(locals.clone());
+
+        assert_eq!(calc.locals.len(), 2);
+        assert!(calc.decorations.is_empty());
+        assert_eq!(calc.current_fn_id, 0);
+    }
+
+    #[test]
+    fn test_calc_decos_get_deco_order() {
+        // Test decoration ordering
+        let lifetime_deco = Deco::Lifetime {
+            local: FnLocal::new(1, 1),
+            range: Range::new(Loc(0), Loc(10)).unwrap(),
+            hover_text: "test".to_string(),
+            overlapped: false,
+        };
+
+        let borrow_deco = Deco::ImmBorrow {
+            local: FnLocal::new(1, 1),
+            range: Range::new(Loc(0), Loc(10)).unwrap(),
+            hover_text: "test".to_string(),
+            overlapped: false,
+        };
+
+        assert_eq!(CalcDecos::get_deco_order(&lifetime_deco), 0);
+        assert_eq!(CalcDecos::get_deco_order(&borrow_deco), 1);
+    }
+
+    #[test]
+    fn test_calc_decos_sort_by_definition() {
+        let mut calc = CalcDecos::new(vec![]);
+
+        // Add decorations in reverse order
+        let call_deco = Deco::Call {
+            local: FnLocal::new(1, 1),
+            range: Range::new(Loc(0), Loc(10)).unwrap(),
+            hover_text: "test".to_string(),
+            overlapped: false,
+        };
+
+        let lifetime_deco = Deco::Lifetime {
+            local: FnLocal::new(1, 1),
+            range: Range::new(Loc(0), Loc(10)).unwrap(),
+            hover_text: "test".to_string(),
+            overlapped: false,
+        };
+
+        calc.decorations.push(call_deco);
+        calc.decorations.push(lifetime_deco);
+
+        calc.sort_by_definition();
+
+        // After sorting, lifetime should come first (order 0)
+        assert!(matches!(calc.decorations[0], Deco::Lifetime { .. }));
+        assert!(matches!(calc.decorations[1], Deco::Call { .. }));
+    }
+
+    #[test]
+    fn test_cursor_request_path() {
+        let document = lsp_types::TextDocumentIdentifier {
+            uri: "file:///test.rs".parse().unwrap(),
+        };
+        let request = CursorRequest {
+            position: lsp_types::Position {
+                line: 1,
+                character: 5,
+            },
+            document,
+        };
+
+        let path = request.path();
+        assert!(path.is_some());
+        assert_eq!(path.unwrap().to_string_lossy(), "/test.rs");
+    }
+
+    #[test]
+    fn test_cursor_request_position() {
+        let position = lsp_types::Position {
+            line: 10,
+            character: 20,
+        };
+        let document = lsp_types::TextDocumentIdentifier {
+            uri: "file:///test.rs".parse().unwrap(),
+        };
+        let request = CursorRequest { position, document };
+
+        assert_eq!(request.position(), position);
+    }
 }
