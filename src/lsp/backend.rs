@@ -549,7 +549,6 @@ mod tests {
     }
 
     // Test Backend::check with empty directory
-    #[cfg(not(miri))]
     #[tokio::test]
     async fn test_check_empty_directory() {
         init_crypto_provider();

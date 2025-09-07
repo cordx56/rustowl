@@ -63,10 +63,6 @@ pub fn initialize_logging(level: LevelFilter) {
         .try_init();
 }
 
-// Miri-specific memory safety tests
-#[cfg(test)]
-mod miri_tests;
-
 #[cfg(test)]
 mod tests {
     use super::*;

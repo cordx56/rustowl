@@ -1,0 +1,91 @@
+name: Coverage Check
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: nightly
+
+    - name: Install cargo-tarpaulin
+      run: cargo install cargo-tarpaulin
+
+    - name: Run tarpaulin on current branch
+      run: cargo +nightly tarpaulin --out Json --output-dir ./current-coverage --engine llvm --verbose --all-features --workspace
+
+    - name: Checkout base branch
+      run: git checkout ${{ github.event.pull_request.base.sha }}
+
+    - name: Cache base coverage
+      uses: actions/cache@v4
+      id: base-cache
+      with:
+        path: ./base-coverage
+        key: coverage-${{ github.event.pull_request.base.sha }}
+
+    - name: Run tarpaulin on base branch
+      if: steps.base-cache.outputs.cache-hit != 'true'
+      run: ./scripts/build/toolchain cargo tarpaulin --out Json --output-dir ./base-coverage
+
+    - name: Compare coverage
+      id: compare
+      continue-on-error: true
+      run: |
+        current=$(jq '.coverage' ./current-coverage/coverage.json)
+        base=$(jq '.coverage' ./base-coverage/coverage.json)
+        diff=$(echo "$current - $base" | bc -l)
+        if (( $(echo "$current < $base" | bc -l) )); then
+          echo "Coverage decreased from $base% to $current%"
+          echo "FAILED" > coverage_status.txt
+        fi
+
+    - name: Post or update PR comment
+      uses: actions/github-script@v8
+      with:
+        script: |
+          const fs = require('fs');
+          const currentData = JSON.parse(fs.readFileSync('./current-coverage/coverage.json', 'utf8'));
+          const baseData = JSON.parse(fs.readFileSync('./base-coverage/coverage.json', 'utf8'));
+          const current = currentData.coverage;
+          const base = baseData.coverage;
+          const diff = (current - base).toFixed(6);
+          const failed = fs.existsSync('./coverage_status.txt');
+          const status = failed ? '❌ Decreased' : current > base ? '✅ Increased' : '➡️ No change';
+          const body = `## Coverage Report\n\n- **Current Coverage:** ${current}%\n- **Base Coverage:** ${base}%\n- **Difference:** ${diff}%\n- **Status:** ${status}\n\n${failed ? '⚠️ Coverage regression detected. Please add tests to maintain or increase coverage.' : ''}`;
+
+          const comments = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const existing = comments.data.find(c => c.body.includes('## Coverage Report'));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body: body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+          }
+
+    - name: Fail if coverage decreased
+      if: steps.compare.outcome == 'failure'
+      run: exit 1

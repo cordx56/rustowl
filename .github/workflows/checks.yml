@@ -55,6 +55,11 @@ jobs:
       - name: Install binary
         run: ./scripts/build/toolchain cargo install --path .
 
+        # Use miri instead of this, this is temporary see https://github.com/rust-lang/miri/issues/602
+        # there is a security workflow for this
+      - name: Run tests
+        run: ./scripts/build/toolchain cargo test
+
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
 
