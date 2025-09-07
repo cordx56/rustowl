@@ -16,6 +16,9 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: nightly
