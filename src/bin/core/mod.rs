@@ -88,11 +88,6 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         let result = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
 
         // join all tasks after all analysis finished
-        //
-        // allow clippy::await_holding_lock because `tokio::sync::Mutex` cannot use
-        // for TASKS because block_on cannot be used in `mir_borrowck`.
-        #[allow(clippy::await_holding_lock)]
-        // Drain all remaining analysis tasks synchronously
         loop {
             // First collect any tasks that have already finished
             while let Some(Ok(result)) = {

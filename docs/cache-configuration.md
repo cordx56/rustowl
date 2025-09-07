@@ -64,8 +64,8 @@ The cache system provides detailed statistics about performance:
 
 - **Hit Rate**: Percentage of cache hits vs misses
 - **Memory Usage**: Current memory consumption
-- **Evictions**: Number of entries removed due to space constraints
-- **Invalidations**: Number of entries removed due to file changes
+- **Evictions**: Number of entries removed due to space or memory constraints
+- **Invalidations**: Number of entries removed proactively due to source file changes (mtime validation)
 
 These statistics are logged during analysis and when the cache is saved.
 

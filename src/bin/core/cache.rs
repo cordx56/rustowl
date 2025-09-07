@@ -111,6 +111,7 @@ pub struct CacheStats {
     pub hits: u64,
     pub misses: u64,
     pub evictions: u64,
+    pub invalidations: u64, // file-change-based removals
     pub total_entries: usize,
     pub total_memory_bytes: usize,
 }
@@ -168,12 +169,34 @@ impl CacheData {
             .map(|duration| duration.as_secs())
     }
 
-    pub fn get_cache(&mut self, file_hash: &str, mir_hash: &str) -> Option<Function> {
+    pub fn get_cache(
+        &mut self,
+        file_hash: &str,
+        mir_hash: &str,
+        file_path: Option<&str>,
+    ) -> Option<Function> {
         let key = Self::make_key(file_hash, mir_hash);
 
         if self.config.use_lru_eviction {
             if let Some(mut entry) = self.entries.shift_remove(&key) {
-                // (Optional) validate mtime here if/when supported
+                // Validate file modification time if file path is provided and validation is enabled
+                if let Some(file_path) = file_path
+                    && self.config.validate_file_mtime
+                    && let Some(cached_mtime) = entry.file_mtime
+                    && let Some(current_mtime) = Self::get_file_mtime(file_path)
+                    && current_mtime > cached_mtime
+                {
+                    // File has been modified since caching, invalidate this entry
+                    tracing::debug!(
+                        "Cache entry invalidated due to file modification: {}",
+                        file_path
+                    );
+                    self.stats.invalidations += 1;
+                    self.update_memory_stats();
+                    self.stats.misses += 1;
+                    return None;
+                }
+
                 entry.mark_accessed();
                 let function = entry.function.clone();
                 self.entries.insert(key, entry);
@@ -185,11 +208,38 @@ impl CacheData {
                 self.stats.hits += 1;
                 return Some(function);
             }
-        } else if let Some(entry) = self.entries.get_mut(&key) {
-            // (Optional) validate mtime here if/when supported
-            entry.mark_accessed();
-            self.stats.hits += 1;
-            return Some(entry.function.clone());
+        } else {
+            // First, determine if the entry should be invalidated without holding a mutable borrow across removal
+            let should_invalidate = if let Some(entry) = self.entries.get(&key) {
+                if let Some(file_path) = file_path
+                    && self.config.validate_file_mtime
+                    && let Some(cached_mtime) = entry.file_mtime
+                    && let Some(current_mtime) = Self::get_file_mtime(file_path)
+                    && current_mtime > cached_mtime
+                {
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if should_invalidate {
+                tracing::debug!("Cache entry invalidated due to file modification: {:?}", file_path);
+                self.entries.swap_remove(&key);
+                self.stats.invalidations += 1;
+                self.update_memory_stats();
+                self.stats.misses += 1;
+                return None;
+            }
+
+            // Normal hit path
+            if let Some(entry) = self.entries.get_mut(&key) {
+                entry.mark_accessed();
+                self.stats.hits += 1;
+                return Some(entry.function.clone());
+            }
         }
         self.stats.misses += 1;
         None
@@ -426,10 +476,12 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
                 } else {
                     let stats = cache.get_stats();
                     tracing::info!(
-                        "Cache saved: {} entries, {} bytes, hit rate: {:.1}% to {}",
+                        "Cache saved: {} entries, {} bytes, hit rate: {:.1}%, evictions: {}, invalidations: {} to {}",
                         stats.total_entries,
                         stats.total_memory_bytes,
                         stats.hit_rate() * 100.0,
+                        stats.evictions,
+                        stats.invalidations,
                         cache_path.display()
                     );
                 }
@@ -461,4 +513,199 @@ fn write_cache_file(path: &Path, data: &str) -> Result<(), std::io::Error> {
     writer.into_inner()?.sync_all()?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustowl::models::Function;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_mtime_validation_enabled_lru_invalidation() {
+        let mut cache = CacheData::with_config(CacheConfig {
+            validate_file_mtime: true,
+            ..Default::default()
+        });
+
+        // Create a test function
+        let test_function = Function::new(1);
+
+        // Manually create a cache entry with a specific old mtime
+        let old_mtime = 1; // Ensure it is older than real file mtime
+        let entry = CacheEntry {
+            function: test_function.clone(),
+            created_at: old_mtime,
+            last_accessed: old_mtime,
+            access_count: 1,
+            file_mtime: Some(old_mtime),
+            data_size: 100,
+        };
+
+        let key = CacheData::make_key("test_file_hash", "test_mir_hash");
+        cache.entries.insert(key, entry);
+
+        // Create a temporary file with newer mtime
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path().to_string_lossy().to_string();
+        writeln!(temp_file, "test content").unwrap();
+        temp_file.flush().unwrap();
+
+        // Verify cache miss due to modified file (cached mtime is older)
+        let result = cache.get_cache("test_file_hash", "test_mir_hash", Some(&file_path));
+        assert!(
+            result.is_none(),
+            "Cache should be invalidated when file mtime is newer than cached mtime"
+        );
+        let stats = cache.get_stats();
+        assert_eq!(stats.invalidations, 1);
+        assert_eq!(stats.evictions, 0, "Invalidation should not count as eviction");
+        assert_eq!(stats.misses, 1);
+    }
+
+    #[test]
+    fn test_mtime_validation_enabled_fifo_invalidation() {
+        let mut cache = CacheData::with_config(CacheConfig {
+            validate_file_mtime: true,
+            use_lru_eviction: false,
+            ..Default::default()
+        });
+
+        // Create a test function
+        let test_function = Function::new(2);
+
+        // Insert entry with old mtime
+        let old_mtime = 1;
+        let entry = CacheEntry {
+            function: test_function,
+            created_at: old_mtime,
+            last_accessed: old_mtime,
+            access_count: 1,
+            file_mtime: Some(old_mtime),
+            data_size: 64,
+        };
+        let key = CacheData::make_key("file_hash_fifo", "mir_hash_fifo");
+        cache.entries.insert(key, entry);
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path().to_string_lossy().to_string();
+        writeln!(temp_file, "fifo content").unwrap();
+        temp_file.flush().unwrap();
+
+        let result = cache.get_cache("file_hash_fifo", "mir_hash_fifo", Some(&file_path));
+        assert!(result.is_none());
+        let stats = cache.get_stats();
+        assert_eq!(stats.invalidations, 1);
+        assert_eq!(stats.evictions, 0);
+        assert_eq!(stats.misses, 1);
+        assert_eq!(stats.total_entries, 0, "Entry should be removed after invalidation");
+    }
+
+    #[test]
+    fn test_mtime_validation_disabled() {
+        let mut cache = CacheData::with_config(CacheConfig {
+            validate_file_mtime: false,
+            ..Default::default()
+        });
+
+        // Create a temporary file
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path().to_string_lossy().to_string();
+        writeln!(temp_file, "test content").unwrap();
+
+        // Create a test function
+        let test_function = Function::new(3);
+
+        // Insert cache entry
+        cache.insert_cache_with_file_path(
+            "test_file_hash".to_string(),
+            "test_mir_hash".to_string(),
+            test_function.clone(),
+            Some(&file_path),
+        );
+
+        // Modify the file
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        writeln!(temp_file, "modified content").unwrap();
+        temp_file.flush().unwrap();
+
+        // Verify cache hit even with modified file (validation disabled)
+        let result = cache.get_cache("test_file_hash", "test_mir_hash", Some(&file_path));
+        assert!(result.is_some());
+        let stats = cache.get_stats();
+        assert_eq!(stats.invalidations, 0);
+        assert_eq!(stats.hits, 1);
+    }
+
+    #[test]
+    fn test_mtime_validation_without_file_path() {
+        let mut cache = CacheData::with_config(CacheConfig {
+            validate_file_mtime: true,
+            ..Default::default()
+        });
+
+        // Create a test function
+        let test_function = Function::new(4);
+
+        // Insert cache entry without file path
+        cache.insert_cache_with_file_path(
+            "test_file_hash".to_string(),
+            "test_mir_hash".to_string(),
+            test_function.clone(),
+            None,
+        );
+
+        // Verify cache hit works without file path (no validation performed)
+        let result = cache.get_cache("test_file_hash", "test_mir_hash", None);
+        assert!(result.is_some());
+        let stats = cache.get_stats();
+        assert_eq!(stats.invalidations, 0);
+        assert_eq!(stats.hits, 1);
+    }
+
+    #[test]
+    fn test_mtime_validation_unchanged_hit() {
+        let mut cache = CacheData::with_config(CacheConfig {
+            validate_file_mtime: true,
+            ..Default::default()
+        });
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path().to_string_lossy().to_string();
+        writeln!(temp_file, "initial content").unwrap();
+        temp_file.flush().unwrap();
+
+        let test_function = Function::new(5);
+        cache.insert_cache_with_file_path(
+            "unchanged_file_hash".to_string(),
+            "unchanged_mir_hash".to_string(),
+            test_function.clone(),
+            Some(&file_path),
+        );
+
+        // No modification to the file -> should be a hit
+        let result = cache.get_cache("unchanged_file_hash", "unchanged_mir_hash", Some(&file_path));
+        assert!(result.is_some(), "Entry should remain valid when file unchanged");
+        let stats = cache.get_stats();
+        assert_eq!(stats.hits, 1);
+        assert_eq!(stats.invalidations, 0);
+        assert_eq!(stats.misses, 0);
+    }
+
+    #[test]
+    fn test_get_file_mtime() {
+        // Test with non-existent file
+        assert!(CacheData::get_file_mtime("/non/existent/file").is_none());
+
+        // Test with actual file
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path().to_string_lossy().to_string();
+        writeln!(temp_file, "test content").unwrap();
+        temp_file.flush().unwrap();
+
+        let mtime = CacheData::get_file_mtime(&file_path);
+        assert!(mtime.is_some());
+        assert!(mtime.unwrap() > 0);
+    }
 }

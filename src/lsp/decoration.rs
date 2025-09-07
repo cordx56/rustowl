@@ -3,8 +3,8 @@ use crate::{lsp::progress, models::*, utils};
 use std::path::PathBuf;
 use tower_lsp_server::{UriExt, lsp_types};
 
-// TODO: Variable name should be checked?
-//const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
+// Variable names that should be filtered out during analysis
+const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
 const ASYNC_RESUME_TY: [&str; 2] = [
     "std::future::ResumeTy",
     "impl std::future::Future<Output = ()>",
@@ -247,7 +247,7 @@ impl CursorRequest {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum SelectReason {
     Var,
     Move,
@@ -288,8 +288,8 @@ impl SelectLocal {
                         }
                     }
                     (SelectReason::Call, SelectReason::Call) => {
-                        // TODO: select narrower when callee is method
-                        if old_range.size() < range.size() {
+                        // Select narrower range for method calls (prefer tighter spans)
+                        if range.size() < old_range.size() {
                             self.selected = Some((reason, local, range));
                         }
                     }
@@ -307,13 +307,25 @@ impl SelectLocal {
 }
 impl utils::MirVisitor for SelectLocal {
     fn visit_decl(&mut self, decl: &MirDecl) {
-        let (local, ty) = match decl {
-            MirDecl::User { local, ty, .. } => (local, ty),
-            MirDecl::Other { local, ty, .. } => (local, ty),
+        let (local, ty, name) = match decl {
+            MirDecl::User {
+                local, ty, name, ..
+            } => (local, ty, Some(name)),
+            MirDecl::Other { local, ty, .. } => (local, ty, None),
         };
+
+        // Filter out async-related types
         if ASYNC_RESUME_TY.contains(&ty.as_str()) {
             return;
         }
+
+        // Filter out async-related variable names
+        if let Some(var_name) = name
+            && ASYNC_MIR_VARS.contains(&var_name.as_str())
+        {
+            return;
+        }
+
         self.candidate_local_decls.push(*local);
         if let MirDecl::User { local, span, .. } = decl {
             self.select(SelectReason::Var, *local, *span);
@@ -710,4 +722,129 @@ impl utils::MirVisitor for CalcDecos {
     }
 }
 
-// TODO: new test
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{FnLocal, Loc, MirDecl, Range};
+    use crate::utils::MirVisitor;
+    use smallvec::SmallVec;
+
+    #[test]
+    fn test_async_variable_filtering() {
+        let mut selector = SelectLocal::new(Loc(10));
+
+        // Test that async variables are filtered out
+        let mut lives_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        lives_vec.push(Range::new(Loc(0), Loc(20)).unwrap());
+
+        let mut drop_range_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        drop_range_vec.push(Range::new(Loc(15), Loc(25)).unwrap());
+
+        let async_var_decl = MirDecl::User {
+            local: FnLocal::new(1, 1),
+            name: "_task_context".into(),
+            ty: "i32".into(),
+            lives: lives_vec,
+            shared_borrow: SmallVec::new(),
+            mutable_borrow: SmallVec::new(),
+            drop_range: drop_range_vec,
+            must_live_at: SmallVec::new(),
+            drop: false,
+            span: Range::new(Loc(5), Loc(15)).unwrap(),
+        };
+
+        selector.visit_decl(&async_var_decl);
+
+        // The async variable should be filtered out, so no candidates should be added
+        assert!(selector.candidate_local_decls.is_empty());
+    }
+
+    #[test]
+    fn test_regular_variable_not_filtered() {
+        let mut selector = SelectLocal::new(Loc(10));
+
+        // Test that regular variables are not filtered out
+        let mut lives_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        lives_vec.push(Range::new(Loc(0), Loc(20)).unwrap());
+
+        let mut drop_range_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        drop_range_vec.push(Range::new(Loc(15), Loc(25)).unwrap());
+
+        let regular_var_decl = MirDecl::User {
+            local: FnLocal::new(1, 1),
+            name: "my_var".into(),
+            ty: "i32".into(),
+            lives: lives_vec,
+            shared_borrow: SmallVec::new(),
+            mutable_borrow: SmallVec::new(),
+            drop_range: drop_range_vec,
+            must_live_at: SmallVec::new(),
+            drop: false,
+            span: Range::new(Loc(5), Loc(15)).unwrap(),
+        };
+
+        selector.visit_decl(&regular_var_decl);
+
+        // The regular variable should not be filtered out
+        assert_eq!(selector.candidate_local_decls.len(), 1);
+        assert_eq!(selector.candidate_local_decls[0], FnLocal::new(1, 1));
+    }
+
+    #[test]
+    fn test_call_selection_prefers_narrower_range() {
+        let mut selector = SelectLocal::new(Loc(10));
+        let local = FnLocal::new(1, 1);
+
+        // Add local to candidates
+        selector.candidate_local_decls.push(local);
+
+        // First call with wider range
+        let wide_range = Range::new(Loc(5), Loc(20)).unwrap();
+        selector.select(SelectReason::Call, local, wide_range);
+
+        // Second call with narrower range
+        let narrow_range = Range::new(Loc(8), Loc(15)).unwrap();
+        selector.select(SelectReason::Call, local, narrow_range);
+
+        // Should select the narrower range (method call preference)
+        let selected = selector.selected();
+        assert_eq!(selected, Some(local));
+
+        // Verify the selected range is the narrower one
+        if let Some((reason, _, range)) = selector.selected {
+            assert_eq!(reason, SelectReason::Call);
+            assert_eq!(range, narrow_range);
+        }
+    }
+
+    #[test]
+    fn test_decoration_creation() {
+        let locals = vec![FnLocal::new(1, 1)];
+        let mut calc = CalcDecos::new(locals);
+
+        let mut lives_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        lives_vec.push(Range::new(Loc(0), Loc(20)).unwrap());
+
+        let mut drop_range_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        drop_range_vec.push(Range::new(Loc(15), Loc(25)).unwrap());
+
+        let decl = MirDecl::User {
+            local: FnLocal::new(1, 1),
+            name: "test_var".into(),
+            ty: "i32".into(),
+            lives: lives_vec,
+            shared_borrow: SmallVec::new(),
+            mutable_borrow: SmallVec::new(),
+            drop_range: drop_range_vec,
+            must_live_at: SmallVec::new(),
+            drop: false,
+            span: Range::new(Loc(5), Loc(15)).unwrap(),
+        };
+
+        calc.visit_decl(&decl);
+
+        let decorations = calc.decorations();
+        // Should have at least one decoration (lifetime)
+        assert!(!decorations.is_empty());
+    }
+}
