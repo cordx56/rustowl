@@ -41,6 +41,7 @@ HAS_VALGRIND=0
 HAS_CARGO_AUDIT=0
 HAS_INSTRUMENTS=0
 HAS_CARGO_MACHETE=0
+HAS_NEXTEST=0
 
 # OS detection with more robust platform detection
 detect_platform() {
@@ -417,6 +418,15 @@ detect_tools() {
 		HAS_CARGO_MACHETE=0
 	fi
 
+	# Check for cargo-nextest
+	if cargo nextest --version >/dev/null 2>&1; then
+		HAS_NEXTEST=1
+		echo -e "${GREEN}[OK] cargo-nextest available${NC}"
+	else
+		echo -e "${YELLOW}! cargo-nextest not found${NC}"
+		HAS_NEXTEST=0
+	fi
+
 	# Platform-specific tool detection
 	case "$OS_TYPE" in
 	"macOS")
@@ -581,7 +591,18 @@ run_miri_tests() {
 	# First run unit tests which are guaranteed to work with Miri
 	echo -e "${BLUE}Running RustOwl unit tests with Miri...${NC}"
 	echo -e "${BLUE}Using Miri flags: -Zmiri-disable-isolation -Zmiri-permissive-provenance${NC}"
-	if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" RUSTFLAGS="--cfg miri" log_command_detailed "miri_unit_tests" "cargo miri test --lib"; then
+
+	# Choose test runner based on availability
+	local test_command
+	if [[ $HAS_NEXTEST -eq 1 ]]; then
+		test_command="cargo miri nextest run --lib"
+		echo -e "${BLUE}Using cargo-nextest for faster test execution${NC}"
+	else
+		test_command="cargo miri test --lib"
+		echo -e "${BLUE}Using standard cargo test${NC}"
+	fi
+
+	if MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" RUSTFLAGS="--cfg miri" log_command_detailed "miri_unit_tests" "$test_command"; then
 		echo -e "${GREEN}[OK] RustOwl unit tests passed with Miri${NC}"
 	else
 		echo -e "${RED}[FAIL] RustOwl unit tests failed with Miri${NC}"

@@ -49,6 +49,7 @@ jobs:
       - name: Run comprehensive security checks
         shell: bash
         run: |
+          cargo install cargo-nextest
           # The security script will auto-detect CI environment and install missing tools
           # Exit with proper code to fail CI if security tests fail
           if ! ./scripts/security.sh; then

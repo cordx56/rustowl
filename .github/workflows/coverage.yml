@@ -17,13 +17,16 @@ jobs:
       with:
         toolchain: nightly
 
-    - name: Install cargo-llvm-cov
-      run: cargo install cargo-llvm-cov
+    - name: Install cargo-llvm-cov and nextest
+      run: |
+        cargo install cargo-llvm-cov cargo-nextest
 
     - name: Run llvm-cov on current branch
       run: |
         mkdir -p ./current-coverage
-        cargo llvm-cov --json --summary-only --output-path ./current-coverage/coverage.json --all-features --workspace
+        cargo llvm-cov --no-report nextest
+        cargo llvm-cov --no-report --doc
+        cargo llvm-cov report --json --summary-only --doctests --output-path ./current-coverage/coverage.json --all-features
 
     - name: Checkout base branch
       run: git checkout ${{ github.event.pull_request.base.sha }}
@@ -39,14 +42,16 @@ jobs:
       if: steps.base-cache.outputs.cache-hit != 'true'
       run: |
         mkdir -p ./base-coverage
-        cargo llvm-cov --json --summary-only --output-path ./base-coverage/coverage.json --all-features --workspace
+        cargo llvm-cov --no-report nextest
+        cargo llvm-cov --no-report --doc
+        cargo llvm-cov report --json --summary-only --doctests --output-path ./base-coverage/coverage.json --all-features
 
     - name: Compare coverage
       id: compare
       continue-on-error: true
       run: |
-        current=$(jq '.totals.lines.percent' ./current-coverage/coverage.json)
-        base=$(jq '.totals.lines.percent' ./base-coverage/coverage.json)
+        current=$(jq '.totals.lines.percent // .data[0].totals.lines.percent // .lines.percent // 0' ./current-coverage/coverage.json)
+        base=$(jq '.totals.lines.percent // .data[0].totals.lines.percent // .lines.percent // 0' ./base-coverage/coverage.json)
         diff=$(echo "$current - $base" | bc -l)
         if (( $(echo "$current < $base" | bc -l) )); then
           echo "Coverage decreased from $base% to $current%"
@@ -60,12 +65,18 @@ jobs:
           const fs = require('fs');
           const currentData = JSON.parse(fs.readFileSync('./current-coverage/coverage.json', 'utf8'));
           const baseData = JSON.parse(fs.readFileSync('./base-coverage/coverage.json', 'utf8'));
-          const current = currentData.totals.lines.percent;
-          const base = baseData.totals.lines.percent;
-          const diff = (current - base).toFixed(6);
+          const currentTotals = currentData.totals || currentData.data?.[0]?.totals || {};
+          const baseTotals = baseData.totals || baseData.data?.[0]?.totals || {};
+          const currentLines = currentTotals.lines?.percent || 0;
+          const baseLines = baseTotals.lines?.percent || 0;
+          const currentFunctions = currentTotals.functions?.percent || 0;
+          const baseFunctions = baseTotals.functions?.percent || 0;
+          const currentRegions = currentTotals.regions?.percent || 0;
+          const baseRegions = baseTotals.regions?.percent || 0;
+          const diff = (currentLines - baseLines).toFixed(6);
           const failed = fs.existsSync('./coverage_status.txt');
-          const status = failed ? '❌ Decreased' : current > base ? '✅ Increased' : '➡️ No change';
-          const body = `## Coverage Report\n\n- **Current Coverage:** ${current}%\n- **Base Coverage:** ${base}%\n- **Difference:** ${diff}%\n- **Status:** ${status}\n\n${failed ? '⚠️ Coverage regression detected. Please add tests to maintain or increase coverage.' : ''}`;
+          const status = failed ? '❌ Decreased' : currentLines > baseLines ? '✅ Increased' : '➡️ No change';
+          const body = `## Coverage Report\n\n### Overall Metrics\n- **Lines:** ${currentLines.toFixed(2)}% (base: ${baseLines.toFixed(2)}%)\n- **Functions:** ${currentFunctions.toFixed(2)}% (base: ${baseFunctions.toFixed(2)}%)\n- **Regions:** ${currentRegions.toFixed(2)}% (base: ${baseRegions.toFixed(2)}%)\n\n### Summary\n- **Difference:** ${diff}%\n- **Status:** ${status}\n\n${failed ? '⚠️ Coverage regression detected. Please add tests to maintain or increase coverage.' : ''}`;
 
           const comments = await github.rest.issues.listComments({
             owner: context.repo.owner,

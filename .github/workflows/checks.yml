@@ -52,7 +52,9 @@ jobs:
         # Use miri instead of this, this is temporary see https://github.com/rust-lang/miri/issues/602
         # there is a security workflow for this
       - name: Run tests
-        run: cargo test
+        run: |
+          cargo install cargo-nextest
+          cargo nextest run && cargo test --doc
 
       - name: Build release
         run: ./scripts/build/toolchain cargo build --release
