@@ -81,27 +81,6 @@ fn main() {
 mod tests {
     use std::process::ExitCode;
 
-    // Test jemalloc function pointers setup
-    #[test]
-    #[cfg(not(target_env = "msvc"))]
-    fn test_jemalloc_function_pointers() {
-        // Test that jemalloc function pointers are properly set up
-        // This is mainly a compile-time check to ensure the extern functions are accessible
-
-        // We can't directly test the function pointers without unsafe code,
-        // but we can verify that the module compiles and the statics are defined
-        // The fact that this test runs means the extern declarations are valid
-    }
-
-    // Test jemalloc macOS zone registration
-    #[test]
-    #[cfg(all(target_os = "macos", not(target_env = "msvc")))]
-    fn test_macos_jemalloc_zone_registration() {
-        // Test that macOS-specific jemalloc zone registration is set up
-        // This is mainly a compile-time check
-        assert!(true);
-    }
-
     // Test Windows rayon thread pool setup
     #[test]
     #[cfg(target_os = "windows")]
@@ -126,21 +105,10 @@ mod tests {
     // Test main function structure (without actually running)
     #[test]
     fn test_main_function_structure() {
-        // Test that the main function components can be set up without panicking
-        // We can't test the actual main function since it calls exit(),
-        // but we can test the individual components
-
-        // Test jemalloc setup (if applicable)
-        #[cfg(not(target_env = "msvc"))]
-        {
-            // Jemalloc function pointers should be accessible
-            // The fact that this code compiles means jemalloc is properly configured
-        }
-
         // Test logging setup
         rustowl::initialize_logging(tracing_subscriber::filter::LevelFilter::INFO);
 
-        // Test Windows rayon setup (if applicable)
+        // Test Windows rayon setup
         #[cfg(target_os = "windows")]
         {
             let result = rayon::ThreadPoolBuilder::new()
@@ -148,35 +116,6 @@ mod tests {
                 .build_global();
             assert!(result.is_ok() || result.is_err());
         }
-
-        // If we get here without panicking, all setup components work
-    }
-
-    // Test extern crate declarations
-    #[test]
-    fn test_extern_crate_declarations() {
-        // Test that all the extern crate declarations are accessible
-        // This is mainly a compile-time check to ensure the crates are properly linked
-
-        // We can't directly test the extern crates without using them,
-        // but we can verify that the module compiles with these declarations
-        // The fact that this test compiles means the extern crates are properly declared
-    }
-
-    // Test rustc_private feature flag
-    #[test]
-    fn test_rustc_private_feature() {
-        // Test that the rustc_private feature is enabled
-        // This is mainly a compile-time check
-        // The fact that this test compiles means the feature is enabled
-    }
-
-    // Test core module accessibility
-    #[test]
-    fn test_core_module_access() {
-        // Test that the core module is accessible
-        // This verifies that the module declaration works
-        // The fact that this test compiles means the core module is accessible
     }
 
     // Test exit code handling
@@ -189,23 +128,6 @@ mod tests {
         // Verify that exit codes are properly defined
         assert_eq!(exit_success, ExitCode::from(0));
         assert_eq!(exit_failure, ExitCode::from(1));
-    }
-
-    // Test process exit function
-    #[test]
-    fn test_process_exit_function() {
-        // Test that the exit function is accessible
-        // We can't actually call exit() in tests, but we can verify it's available
-        let _exit_func: fn(i32) -> ! = std::process::exit;
-        // The fact that this assignment compiles means std::process::exit is accessible
-    }
-
-    // Test conditional compilation attributes
-    #[test]
-    fn test_conditional_compilation() {
-        // Test that conditional compilation works as expected
-        // The fact that this test compiles means all cfg attributes are properly configured
-        // Different code paths are conditionally compiled based on target platform
     }
 
     // Test jemalloc sys crate access
