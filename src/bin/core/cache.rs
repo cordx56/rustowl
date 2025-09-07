@@ -226,7 +226,10 @@ impl CacheData {
             };
 
             if should_invalidate {
-                tracing::debug!("Cache entry invalidated due to file modification: {:?}", file_path);
+                tracing::debug!(
+                    "Cache entry invalidated due to file modification: {:?}",
+                    file_path
+                );
                 self.entries.swap_remove(&key);
                 self.stats.invalidations += 1;
                 self.update_memory_stats();
@@ -560,7 +563,10 @@ mod tests {
         );
         let stats = cache.get_stats();
         assert_eq!(stats.invalidations, 1);
-        assert_eq!(stats.evictions, 0, "Invalidation should not count as eviction");
+        assert_eq!(
+            stats.evictions, 0,
+            "Invalidation should not count as eviction"
+        );
         assert_eq!(stats.misses, 1);
     }
 
@@ -599,7 +605,10 @@ mod tests {
         assert_eq!(stats.invalidations, 1);
         assert_eq!(stats.evictions, 0);
         assert_eq!(stats.misses, 1);
-        assert_eq!(stats.total_entries, 0, "Entry should be removed after invalidation");
+        assert_eq!(
+            stats.total_entries, 0,
+            "Entry should be removed after invalidation"
+        );
     }
 
     #[test]
@@ -685,8 +694,15 @@ mod tests {
         );
 
         // No modification to the file -> should be a hit
-        let result = cache.get_cache("unchanged_file_hash", "unchanged_mir_hash", Some(&file_path));
-        assert!(result.is_some(), "Entry should remain valid when file unchanged");
+        let result = cache.get_cache(
+            "unchanged_file_hash",
+            "unchanged_mir_hash",
+            Some(&file_path),
+        );
+        assert!(
+            result.is_some(),
+            "Entry should remain valid when file unchanged"
+        );
         let stats = cache.get_stats();
         assert_eq!(stats.hits, 1);
         assert_eq!(stats.invalidations, 0);

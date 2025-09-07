@@ -90,8 +90,7 @@ impl MirAnalyzer {
             *cache = cache::get_cache(&tcx.crate_name(LOCAL_CRATE).to_string());
         }
         if let Some(cache) = cache.as_mut()
-            && let Some(analyzed) =
-                cache.get_cache(&file_hash, &mir_hash, Some(&file_name))
+            && let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash, Some(&file_name))
         {
             tracing::info!("MIR cache hit: {fn_id:?}");
             return MirAnalyzerInitResult::Cached(Box::new(AnalyzeResult {
