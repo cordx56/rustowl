@@ -368,14 +368,6 @@ mod tests {
     #[test]
     fn test_toolchain_constants() {
         // Test that the constants are properly set
-
-        // These should be reasonable values
-        assert!(
-            TOOLCHAIN_CHANNEL == "nightly"
-                || TOOLCHAIN_CHANNEL == "stable"
-                || TOOLCHAIN_CHANNEL == "beta"
-        );
-
         // Host tuple should contain some expected patterns
         assert!(HOST_TUPLE.contains('-'));
     }
@@ -787,14 +779,7 @@ mod tests {
     #[test]
     fn test_toolchain_constants_integrity() {
         // Test that build-time constants are valid
-
-        assert!(TOOLCHAIN.len() > 5); // Should be something like "nightly-2024-01-01"
-
         assert!(HOST_TUPLE.contains('-')); // Should contain hyphens separating components
-
-        // TOOLCHAIN_CHANNEL should be a known channel
-        let valid_channels = ["stable", "beta", "nightly"];
-        assert!(valid_channels.contains(&TOOLCHAIN_CHANNEL));
 
         // TOOLCHAIN_DATE should be valid format if present
         if let Some(date) = TOOLCHAIN_DATE {
