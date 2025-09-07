@@ -26,7 +26,7 @@ jobs:
         mkdir -p ./current-coverage
         cargo llvm-cov --no-report nextest
         cargo llvm-cov --no-report --doc
-        cargo llvm-cov report --json --summary-only --doctests --output-path ./current-coverage/coverage.json --all-features
+        cargo llvm-cov report --json --summary-only --doctests --output-path ./current-coverage/coverage.json
 
     - name: Checkout base branch
       run: git checkout ${{ github.event.pull_request.base.sha }}
@@ -44,7 +44,7 @@ jobs:
         mkdir -p ./base-coverage
         cargo llvm-cov --no-report nextest
         cargo llvm-cov --no-report --doc
-        cargo llvm-cov report --json --summary-only --doctests --output-path ./base-coverage/coverage.json --all-features
+        cargo llvm-cov report --json --summary-only --doctests --output-path ./base-coverage/coverage.json
 
     - name: Compare coverage
       id: compare
