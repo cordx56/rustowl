@@ -17,11 +17,13 @@ jobs:
       with:
         toolchain: nightly
 
-    - name: Install cargo-tarpaulin
-      run: cargo install cargo-tarpaulin
+    - name: Install cargo-llvm-cov
+      run: cargo install cargo-llvm-cov
 
-    - name: Run tarpaulin on current branch
-      run: cargo +nightly tarpaulin --out Json --output-dir ./current-coverage --engine llvm --verbose --all-features --workspace
+    - name: Run llvm-cov on current branch
+      run: |
+        mkdir -p ./current-coverage
+        cargo llvm-cov --json --summary-only --output-path ./current-coverage/coverage.json --all-features --workspace
 
     - name: Checkout base branch
       run: git checkout ${{ github.event.pull_request.base.sha }}
@@ -33,16 +35,18 @@ jobs:
         path: ./base-coverage
         key: coverage-${{ github.event.pull_request.base.sha }}
 
-    - name: Run tarpaulin on base branch
+    - name: Run llvm-cov on base branch
       if: steps.base-cache.outputs.cache-hit != 'true'
-      run: ./scripts/build/toolchain cargo tarpaulin --out Json --output-dir ./base-coverage
+      run: |
+        mkdir -p ./base-coverage
+        cargo llvm-cov --json --summary-only --output-path ./base-coverage/coverage.json --all-features --workspace
 
     - name: Compare coverage
       id: compare
       continue-on-error: true
       run: |
-        current=$(jq '.coverage' ./current-coverage/coverage.json)
-        base=$(jq '.coverage' ./base-coverage/coverage.json)
+        current=$(jq '.totals.lines.percent' ./current-coverage/coverage.json)
+        base=$(jq '.totals.lines.percent' ./base-coverage/coverage.json)
         diff=$(echo "$current - $base" | bc -l)
         if (( $(echo "$current < $base" | bc -l) )); then
           echo "Coverage decreased from $base% to $current%"
@@ -56,8 +60,8 @@ jobs:
           const fs = require('fs');
           const currentData = JSON.parse(fs.readFileSync('./current-coverage/coverage.json', 'utf8'));
           const baseData = JSON.parse(fs.readFileSync('./base-coverage/coverage.json', 'utf8'));
-          const current = currentData.coverage;
-          const base = baseData.coverage;
+          const current = currentData.totals.lines.percent;
+          const base = baseData.totals.lines.percent;
           const diff = (current - base).toFixed(6);
           const failed = fs.existsSync('./coverage_status.txt');
           const status = failed ? '❌ Decreased' : current > base ? '✅ Increased' : '➡️ No change';
