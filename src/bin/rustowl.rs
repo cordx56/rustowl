@@ -429,15 +429,6 @@ mod tests {
         assert!(path.exists() || path == std::path::PathBuf::from("."));
     }
 
-    // Test jemalloc global allocator (compile-time test)
-    #[test]
-    #[cfg(all(not(target_env = "msvc"), not(miri)))]
-    fn test_jemalloc_allocator() {
-        // Test that jemalloc is available as global allocator
-        // The fact that this test compiles and runs means jemalloc is properly configured
-        // No runtime assertion needed for compile-time check
-    }
-
     // Test crypto provider installation
     #[test]
     fn test_crypto_provider_installation() {
