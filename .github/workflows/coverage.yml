@@ -1,7 +1,8 @@
 name: Coverage Check
 
 on:
-  pull_request:
+  pull_request_target:
+  push:
     branches: [ main ]
 
 jobs:
