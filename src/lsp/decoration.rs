@@ -1,10 +1,10 @@
+use crate::models::FoldIndexSet as HashSet;
 use crate::{lsp::progress, models::*, utils};
-use std::collections::HashSet;
 use std::path::PathBuf;
-use tower_lsp::lsp_types;
+use tower_lsp_server::{UriExt, lsp_types};
 
-// TODO: Variable name should be checked?
-//const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
+// Variable names that should be filtered out during analysis
+const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
 const ASYNC_RESUME_TY: [&str; 2] = [
     "std::future::ResumeTy",
     "impl std::future::Future<Output = ()>",
@@ -240,14 +240,14 @@ pub struct CursorRequest {
 }
 impl CursorRequest {
     pub fn path(&self) -> Option<PathBuf> {
-        self.document.uri.to_file_path().ok()
+        self.document.uri.to_file_path().map(|p| p.into_owned())
     }
     pub fn position(&self) -> lsp_types::Position {
         self.position
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum SelectReason {
     Var,
     Move,
@@ -288,8 +288,8 @@ impl SelectLocal {
                         }
                     }
                     (SelectReason::Call, SelectReason::Call) => {
-                        // TODO: select narrower when callee is method
-                        if old_range.size() < range.size() {
+                        // Select narrower range for method calls (prefer tighter spans)
+                        if range.size() < old_range.size() {
                             self.selected = Some((reason, local, range));
                         }
                     }
@@ -307,13 +307,25 @@ impl SelectLocal {
 }
 impl utils::MirVisitor for SelectLocal {
     fn visit_decl(&mut self, decl: &MirDecl) {
-        let (local, ty) = match decl {
-            MirDecl::User { local, ty, .. } => (local, ty),
-            MirDecl::Other { local, ty, .. } => (local, ty),
+        let (local, ty, name) = match decl {
+            MirDecl::User {
+                local, ty, name, ..
+            } => (local, ty, Some(name)),
+            MirDecl::Other { local, ty, .. } => (local, ty, None),
         };
+
+        // Filter out async-related types
         if ASYNC_RESUME_TY.contains(&ty.as_str()) {
             return;
         }
+
+        // Filter out async-related variable names
+        if let Some(var_name) = name
+            && ASYNC_MIR_VARS.contains(&var_name.as_str())
+        {
+            return;
+        }
+
         self.candidate_local_decls.push(*local);
         if let MirDecl::User { local, span, .. } = decl {
             self.select(SelectReason::Var, *local, *span);
@@ -591,9 +603,9 @@ impl utils::MirVisitor for CalcDecos {
             };
             // merge Drop object lives
             let drop_copy_live = if *drop {
-                utils::eliminated_ranges(drop_range.clone())
+                utils::eliminated_ranges_small(drop_range.clone())
             } else {
-                utils::eliminated_ranges(lives.clone())
+                utils::eliminated_ranges_small(lives.clone())
             };
             for range in &drop_copy_live {
                 self.decorations.push(Deco::Lifetime {
@@ -603,8 +615,9 @@ impl utils::MirVisitor for CalcDecos {
                     overlapped: false,
                 });
             }
-            let mut borrow_ranges = shared_borrow.clone();
-            borrow_ranges.extend_from_slice(mutable_borrow);
+            let mut borrow_ranges = Vec::with_capacity(shared_borrow.len() + mutable_borrow.len());
+            borrow_ranges.extend(shared_borrow.iter().copied());
+            borrow_ranges.extend(mutable_borrow.iter().copied());
             let shared_mut = utils::common_ranges(&borrow_ranges);
             for range in shared_mut {
                 self.decorations.push(Deco::SharedMut {
@@ -614,7 +627,7 @@ impl utils::MirVisitor for CalcDecos {
                     overlapped: false,
                 });
             }
-            let outlive = utils::exclude_ranges(must_live_at.clone(), drop_copy_live);
+            let outlive = utils::exclude_ranges_small(must_live_at.clone(), drop_copy_live);
             for range in outlive {
                 self.decorations.push(Deco::Outlive {
                     local,
@@ -709,4 +722,251 @@ impl utils::MirVisitor for CalcDecos {
     }
 }
 
-// TODO: new test
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{FnLocal, Loc, MirDecl, Range};
+    use crate::utils::MirVisitor;
+    use smallvec::SmallVec;
+
+    #[test]
+    fn test_async_variable_filtering() {
+        let mut selector = SelectLocal::new(Loc(10));
+
+        // Test that async variables are filtered out
+        let mut lives_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        lives_vec.push(Range::new(Loc(0), Loc(20)).unwrap());
+
+        let mut drop_range_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        drop_range_vec.push(Range::new(Loc(15), Loc(25)).unwrap());
+
+        let async_var_decl = MirDecl::User {
+            local: FnLocal::new(1, 1),
+            name: "_task_context".into(),
+            ty: "i32".into(),
+            lives: lives_vec,
+            shared_borrow: SmallVec::new(),
+            mutable_borrow: SmallVec::new(),
+            drop_range: drop_range_vec,
+            must_live_at: SmallVec::new(),
+            drop: false,
+            span: Range::new(Loc(5), Loc(15)).unwrap(),
+        };
+
+        selector.visit_decl(&async_var_decl);
+
+        // The async variable should be filtered out, so no candidates should be added
+        assert!(selector.candidate_local_decls.is_empty());
+    }
+
+    #[test]
+    fn test_regular_variable_not_filtered() {
+        let mut selector = SelectLocal::new(Loc(10));
+
+        // Test that regular variables are not filtered out
+        let mut lives_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        lives_vec.push(Range::new(Loc(0), Loc(20)).unwrap());
+
+        let mut drop_range_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        drop_range_vec.push(Range::new(Loc(15), Loc(25)).unwrap());
+
+        let regular_var_decl = MirDecl::User {
+            local: FnLocal::new(1, 1),
+            name: "my_var".into(),
+            ty: "i32".into(),
+            lives: lives_vec,
+            shared_borrow: SmallVec::new(),
+            mutable_borrow: SmallVec::new(),
+            drop_range: drop_range_vec,
+            must_live_at: SmallVec::new(),
+            drop: false,
+            span: Range::new(Loc(5), Loc(15)).unwrap(),
+        };
+
+        selector.visit_decl(&regular_var_decl);
+
+        // The regular variable should not be filtered out
+        assert_eq!(selector.candidate_local_decls.len(), 1);
+        assert_eq!(selector.candidate_local_decls[0], FnLocal::new(1, 1));
+    }
+
+    #[test]
+    fn test_call_selection_prefers_narrower_range() {
+        let mut selector = SelectLocal::new(Loc(10));
+        let local = FnLocal::new(1, 1);
+
+        // Add local to candidates
+        selector.candidate_local_decls.push(local);
+
+        // First call with wider range
+        let wide_range = Range::new(Loc(5), Loc(20)).unwrap();
+        selector.select(SelectReason::Call, local, wide_range);
+
+        // Second call with narrower range
+        let narrow_range = Range::new(Loc(8), Loc(15)).unwrap();
+        selector.select(SelectReason::Call, local, narrow_range);
+
+        // Should select the narrower range (method call preference)
+        let selected = selector.selected();
+        assert_eq!(selected, Some(local));
+
+        // Verify the selected range is the narrower one
+        if let Some((reason, _, range)) = selector.selected {
+            assert_eq!(reason, SelectReason::Call);
+            assert_eq!(range, narrow_range);
+        }
+    }
+
+    #[test]
+    fn test_decoration_creation() {
+        let locals = vec![FnLocal::new(1, 1)];
+        let mut calc = CalcDecos::new(locals);
+
+        let mut lives_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        lives_vec.push(Range::new(Loc(0), Loc(20)).unwrap());
+
+        let mut drop_range_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        drop_range_vec.push(Range::new(Loc(15), Loc(25)).unwrap());
+
+        let decl = MirDecl::User {
+            local: FnLocal::new(1, 1),
+            name: "test_var".into(),
+            ty: "i32".into(),
+            lives: lives_vec,
+            shared_borrow: SmallVec::new(),
+            mutable_borrow: SmallVec::new(),
+            drop_range: drop_range_vec,
+            must_live_at: SmallVec::new(),
+            drop: false,
+            span: Range::new(Loc(5), Loc(15)).unwrap(),
+        };
+
+        calc.visit_decl(&decl);
+
+        let decorations = calc.decorations();
+        // Should have at least one decoration (lifetime)
+        assert!(!decorations.is_empty());
+    }
+
+    #[test]
+    fn test_select_local_new() {
+        let pos = Loc(10);
+        let selector = SelectLocal::new(pos);
+
+        assert_eq!(selector.pos, pos);
+        assert!(selector.candidate_local_decls.is_empty());
+        assert!(selector.selected.is_none());
+    }
+
+    #[test]
+    fn test_select_local_select_var() {
+        let mut selector = SelectLocal::new(Loc(10));
+        let local = FnLocal::new(1, 1);
+        let range = Range::new(Loc(5), Loc(15)).unwrap();
+
+        // Add local to candidates
+        selector.candidate_local_decls.push(local);
+
+        // Select with Var reason
+        selector.select(SelectReason::Var, local, range);
+
+        assert!(selector.selected.is_some());
+        if let Some((reason, selected_local, selected_range)) = selector.selected {
+            assert_eq!(reason, SelectReason::Var);
+            assert_eq!(selected_local, local);
+            assert_eq!(selected_range, range);
+        }
+    }
+
+    #[test]
+    fn test_calc_decos_new() {
+        let locals = vec![FnLocal::new(1, 1), FnLocal::new(2, 1)];
+        let calc = CalcDecos::new(locals.clone());
+
+        assert_eq!(calc.locals.len(), 2);
+        assert!(calc.decorations.is_empty());
+        assert_eq!(calc.current_fn_id, 0);
+    }
+
+    #[test]
+    fn test_calc_decos_get_deco_order() {
+        // Test decoration ordering
+        let lifetime_deco = Deco::Lifetime {
+            local: FnLocal::new(1, 1),
+            range: Range::new(Loc(0), Loc(10)).unwrap(),
+            hover_text: "test".to_string(),
+            overlapped: false,
+        };
+
+        let borrow_deco = Deco::ImmBorrow {
+            local: FnLocal::new(1, 1),
+            range: Range::new(Loc(0), Loc(10)).unwrap(),
+            hover_text: "test".to_string(),
+            overlapped: false,
+        };
+
+        assert_eq!(CalcDecos::get_deco_order(&lifetime_deco), 0);
+        assert_eq!(CalcDecos::get_deco_order(&borrow_deco), 1);
+    }
+
+    #[test]
+    fn test_calc_decos_sort_by_definition() {
+        let mut calc = CalcDecos::new(vec![]);
+
+        // Add decorations in reverse order
+        let call_deco = Deco::Call {
+            local: FnLocal::new(1, 1),
+            range: Range::new(Loc(0), Loc(10)).unwrap(),
+            hover_text: "test".to_string(),
+            overlapped: false,
+        };
+
+        let lifetime_deco = Deco::Lifetime {
+            local: FnLocal::new(1, 1),
+            range: Range::new(Loc(0), Loc(10)).unwrap(),
+            hover_text: "test".to_string(),
+            overlapped: false,
+        };
+
+        calc.decorations.push(call_deco);
+        calc.decorations.push(lifetime_deco);
+
+        calc.sort_by_definition();
+
+        // After sorting, lifetime should come first (order 0)
+        assert!(matches!(calc.decorations[0], Deco::Lifetime { .. }));
+        assert!(matches!(calc.decorations[1], Deco::Call { .. }));
+    }
+
+    #[test]
+    fn test_cursor_request_path() {
+        let document = lsp_types::TextDocumentIdentifier {
+            uri: "file:///test.rs".parse().unwrap(),
+        };
+        let request = CursorRequest {
+            position: lsp_types::Position {
+                line: 1,
+                character: 5,
+            },
+            document,
+        };
+
+        let path = request.path();
+        assert!(path.is_some());
+        assert_eq!(path.unwrap().to_string_lossy(), "/test.rs");
+    }
+
+    #[test]
+    fn test_cursor_request_position() {
+        let position = lsp_types::Position {
+            line: 10,
+            character: 20,
+        };
+        let document = lsp_types::TextDocumentIdentifier {
+            uri: "file:///test.rs".parse().unwrap(),
+        };
+        let request = CursorRequest { position, document };
+
+        assert_eq!(request.position(), position);
+    }
+}
