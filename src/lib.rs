@@ -4,6 +4,7 @@
 
 pub mod cache;
 pub mod cli;
+pub mod error;
 pub mod lsp;
 pub mod models;
 pub mod shells;
