@@ -15,8 +15,9 @@ pub struct CargoCheckMessageTarget {
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(tag = "reason", rename_all = "kebab-case")]
 pub enum CargoCheckMessage {
-    #[allow(unused)]
-    CompilerArtifact { target: CargoCheckMessageTarget },
+    CompilerArtifact {
+        target: CargoCheckMessageTarget,
+    },
     #[allow(unused)]
     BuildFinished {},
 }
