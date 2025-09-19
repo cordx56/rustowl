@@ -1,6 +1,6 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use rand::{Rng, SeedableRng};
+use criterion::{Criterion, criterion_group, criterion_main};
 use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use rustowl::models::Loc;
 use rustowl::utils::{index_to_line_char, line_char_to_index};
 use std::hint::black_box;
@@ -17,9 +17,13 @@ fn bench_line_col(c: &mut Criterion) {
             let v: u8 = rng.random::<u8>();
             source.push(char::from(b'a' + (v % 26)));
         }
-        if i % 17 == 0 { source.push('\r'); } // occasional CR
+        if i % 17 == 0 {
+            source.push('\r');
+        } // occasional CR
         source.push('\n');
-        if i % 1111 == 0 { source.push_str("🦀"); } // some unicode
+        if i % 1111 == 0 {
+            source.push_str("🦀");
+        } // some unicode
     }
 
     let chars: Vec<_> = source.chars().collect();
