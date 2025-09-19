@@ -6,8 +6,8 @@ use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
 use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
 use rustc_session::config;
+use rustowl::models::FoldIndexMap as HashMap;
 use rustowl::models::*;
-use std::collections::HashMap;
 use std::env;
 use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
 use tokio::{
@@ -39,7 +39,7 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
 }
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
-    log::info!("start borrowck of {def_id:?}");
+    tracing::info!("start borrowck of {def_id:?}");
 
     let analyzer = MirAnalyzer::init(tcx, def_id);
 
@@ -47,16 +47,16 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
         let mut tasks = TASKS.lock().unwrap();
         match analyzer {
             MirAnalyzerInitResult::Cached(cached) => {
-                handle_analyzed_result(tcx, cached);
+                handle_analyzed_result(tcx, *cached);
             }
             MirAnalyzerInitResult::Analyzer(analyzer) => {
                 tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
             }
         }
 
-        log::info!("there are {} tasks", tasks.len());
+        tracing::info!("there are {} tasks", tasks.len());
         while let Some(Ok(result)) = tasks.try_join_next() {
-            log::info!("one task joined");
+            tracing::info!("one task joined");
             handle_analyzed_result(tcx, result);
         }
     }
@@ -65,9 +65,9 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
         let _ = mir_borrowck(tcx, def_id);
     }
 
-    Ok(tcx
-        .arena
-        .alloc(ConcreteOpaqueTypes(indexmap::IndexMap::default())))
+    Ok(tcx.arena.alloc(ConcreteOpaqueTypes(
+        rustc_data_structures::fx::FxIndexMap::default(),
+    )))
 }
 
 pub struct AnalyzerCallback;
@@ -94,10 +94,19 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         #[allow(clippy::await_holding_lock)]
         RUNTIME.block_on(async move {
             while let Some(Ok(result)) = { TASKS.lock().unwrap().join_next().await } {
-                log::info!("one task joined");
+                tracing::info!("one task joined");
                 handle_analyzed_result(tcx, result);
             }
             if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
+                // Log cache statistics before writing
+                let stats = cache.get_stats();
+                tracing::info!(
+                    "Cache statistics: {} hits, {} misses, {:.1}% hit rate, {} evictions",
+                    stats.hits,
+                    stats.misses,
+                    stats.hit_rate() * 100.0,
+                    stats.evictions
+                );
                 cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
             }
         });
@@ -112,21 +121,28 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
 
 pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
     if let Some(cache) = cache::CACHE.lock().unwrap().as_mut() {
-        cache.insert_cache(
+        // Pass file name for potential file modification time validation
+        cache.insert_cache_with_file_path(
             analyzed.file_hash.clone(),
             analyzed.mir_hash.clone(),
             analyzed.analyzed.clone(),
+            Some(&analyzed.file_name),
         );
     }
-    let krate = Crate(HashMap::from([(
+    let mut map = HashMap::with_capacity_and_hasher(1, foldhash::quality::RandomState::default());
+    map.insert(
         analyzed.file_name.to_owned(),
         File {
-            items: vec![analyzed.analyzed],
+            items: smallvec::smallvec![analyzed.analyzed],
         },
-    )]));
+    );
+    let krate = Crate(map);
     // get currently-compiling crate name
     let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
-    let ws = Workspace(HashMap::from([(crate_name.clone(), krate)]));
+    let mut ws_map =
+        HashMap::with_capacity_and_hasher(1, foldhash::quality::RandomState::default());
+    ws_map.insert(crate_name.clone(), krate);
+    let ws = Workspace(ws_map);
     println!("{}", serde_json::to_string(&ws).unwrap());
 }
 

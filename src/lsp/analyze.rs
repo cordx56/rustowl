@@ -1,4 +1,4 @@
-use crate::{cache::*, models::*, toolchain};
+use crate::{cache::*, error::*, models::*, toolchain};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -15,8 +15,9 @@ pub struct CargoCheckMessageTarget {
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(tag = "reason", rename_all = "kebab-case")]
 pub enum CargoCheckMessage {
-    #[allow(unused)]
-    CompilerArtifact { target: CargoCheckMessageTarget },
+    CompilerArtifact {
+        target: CargoCheckMessageTarget,
+    },
     #[allow(unused)]
     BuildFinished {},
 }
@@ -36,7 +37,7 @@ pub struct Analyzer {
 }
 
 impl Analyzer {
-    pub async fn new(path: impl AsRef<Path>) -> Result<Self, ()> {
+    pub async fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
 
         let mut cargo_cmd = toolchain::setup_cargo_command().await;
@@ -75,8 +76,11 @@ impl Analyzer {
                 metadata: None,
             })
         } else {
-            log::warn!("Invalid analysis target: {}", path.display());
-            Err(())
+            tracing::warn!("Invalid analysis target: {}", path.display());
+            Err(RustOwlError::Analysis(format!(
+                "Invalid analysis target: {}",
+                path.display()
+            )))
         }
     }
     pub fn target_path(&self) -> &Path {
@@ -109,7 +113,7 @@ impl Analyzer {
     ) -> AnalyzeEventIter {
         let package_name = metadata.root_package().as_ref().unwrap().name.to_string();
         let target_dir = metadata.target_directory.as_std_path().join("owl");
-        log::info!("clear cargo cache");
+        tracing::info!("clear cargo cache");
         let mut command = toolchain::setup_cargo_command().await;
         command
             .args(["clean", "--package", &package_name])
@@ -142,17 +146,13 @@ impl Analyzer {
             set_cache_path(&mut command, target_dir);
         }
 
-        if log::max_level()
-            .to_level()
-            .map(|v| v < log::Level::Info)
-            .unwrap_or(true)
-        {
+        if !tracing::enabled!(tracing::Level::INFO) {
             command.stderr(std::process::Stdio::null());
         }
 
         let package_count = metadata.packages.len();
 
-        log::info!("start analyzing package {package_name}");
+        tracing::info!("start analyzing package {package_name}");
         let mut child = command.spawn().unwrap();
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
@@ -166,7 +166,7 @@ impl Analyzer {
                     serde_json::from_str(&line)
                 {
                     let checked = target.name;
-                    log::info!("crate {checked} checked");
+                    tracing::info!("crate {checked} checked");
 
                     let event = AnalyzerEvent::CrateChecked {
                         package: checked,
@@ -179,7 +179,7 @@ impl Analyzer {
                     let _ = sender.send(event).await;
                 }
             }
-            log::info!("stdout closed");
+            tracing::info!("stdout closed");
             notify_c.notify_one();
         });
 
@@ -210,15 +210,11 @@ impl Analyzer {
 
         toolchain::set_rustc_env(&mut command, &sysroot);
 
-        if log::max_level()
-            .to_level()
-            .map(|v| v < log::Level::Info)
-            .unwrap_or(true)
-        {
+        if !tracing::enabled!(tracing::Level::INFO) {
             command.stderr(std::process::Stdio::null());
         }
 
-        log::info!("start analyzing {}", path.display());
+        tracing::info!("start analyzing {}", path.display());
         let mut child = command.spawn().unwrap();
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
@@ -233,7 +229,7 @@ impl Analyzer {
                     let _ = sender.send(event).await;
                 }
             }
-            log::info!("stdout closed");
+            tracing::info!("stdout closed");
             notify_c.notify_one();
         });
 
