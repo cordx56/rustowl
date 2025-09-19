@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::{sync::RwLock, task::JoinSet};
 use tokio_util::sync::CancellationToken;
-use tower_lsp::jsonrpc;
-use tower_lsp::lsp_types;
-use tower_lsp::{Client, LanguageServer, LspService};
+use tower_lsp_server::jsonrpc::Result;
+use tower_lsp_server::lsp_types::{self, *};
+use tower_lsp_server::{Client, LanguageServer, LspService, UriExt};
 
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -17,7 +17,6 @@ pub struct AnalyzeResponse {}
 
 /// RustOwl LSP server backend
 pub struct Backend {
-    #[allow(unused)]
     client: Client,
     analyzers: Arc<RwLock<Vec<Analyzer>>>,
     status: Arc<RwLock<progress::AnalysisStatus>>,
@@ -55,8 +54,8 @@ impl Backend {
         }
     }
 
-    pub async fn analyze(&self, _params: AnalyzeRequest) -> jsonrpc::Result<AnalyzeResponse> {
-        log::info!("rustowl/analyze request received");
+    pub async fn analyze(&self, _params: AnalyzeRequest) -> Result<AnalyzeResponse> {
+        tracing::info!("rustowl/analyze request received");
         self.do_analyze().await;
         Ok(AnalyzeResponse {})
     }
@@ -66,19 +65,19 @@ impl Backend {
     }
 
     async fn analyze_with_options(&self, all_targets: bool, all_features: bool) {
-        log::info!("wait 100ms for rust-analyzer");
+        tracing::info!("wait 100ms for rust-analyzer");
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        log::info!("stop running analysis processes");
+        tracing::info!("stop running analysis processes");
         self.shutdown_subprocesses().await;
 
-        log::info!("start analysis");
+        tracing::info!("start analysis");
         {
             *self.status.write().await = progress::AnalysisStatus::Analyzing;
         }
         let analyzers = { self.analyzers.read().await.clone() };
 
-        log::info!("analyze {} packages...", analyzers.len());
+        tracing::info!("analyze {} packages...", analyzers.len());
         for analyzer in analyzers {
             let analyzed = self.analyzed.clone();
             let client = self.client.clone();
@@ -170,7 +169,7 @@ impl Backend {
         &self,
         filepath: &Path,
         position: Loc,
-    ) -> Result<Vec<decoration::Deco>, progress::AnalysisStatus> {
+    ) -> std::result::Result<Vec<decoration::Deco>, progress::AnalysisStatus> {
         let mut selected = decoration::SelectLocal::new(position);
         let mut error = progress::AnalysisStatus::Error;
         if let Some(analyzed) = &*self.analyzed.read().await {
@@ -208,11 +207,11 @@ impl Backend {
     pub async fn cursor(
         &self,
         params: decoration::CursorRequest,
-    ) -> jsonrpc::Result<decoration::Decorations> {
+    ) -> Result<decoration::Decorations> {
         let is_analyzed = self.analyzed.read().await.is_some();
         let status = *self.status.read().await;
         if let Some(path) = params.path()
-            && let Ok(text) = std::fs::read_to_string(&path)
+            && let Ok(text) = tokio::fs::read_to_string(&path).await
         {
             let position = params.position();
             let pos = Loc(utils::line_char_to_index(
@@ -288,20 +287,14 @@ impl Backend {
     }
 }
 
-#[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(
-        &self,
-        params: lsp_types::InitializeParams,
-    ) -> jsonrpc::Result<lsp_types::InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         let mut workspaces = Vec::new();
-        if let Some(root) = params.root_uri
-            && let Ok(path) = root.to_file_path()
-        {
-            workspaces.push(path);
-        }
         if let Some(wss) = params.workspace_folders {
-            workspaces.extend(wss.iter().filter_map(|v| v.uri.to_file_path().ok()));
+            workspaces.extend(
+                wss.iter()
+                    .filter_map(|v| v.uri.to_file_path().map(|p| p.into_owned())),
+            );
         }
         for path in workspaces {
             self.add_analyze_target(&path).await;
@@ -352,12 +345,9 @@ impl LanguageServer for Backend {
         Ok(init_res)
     }
 
-    async fn did_change_workspace_folders(
-        &self,
-        params: lsp_types::DidChangeWorkspaceFoldersParams,
-    ) -> () {
+    async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
         for added in params.event.added {
-            if let Ok(path) = added.uri.to_file_path()
+            if let Some(path) = added.uri.to_file_path()
                 && self.add_analyze_target(&path).await
             {
                 self.do_analyze().await;
@@ -365,8 +355,8 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
-        if let Ok(path) = params.text_document.uri.to_file_path()
+    async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        if let Some(path) = params.text_document.uri.to_file_path()
             && path.is_file()
             && params.text_document.language_id == "rust"
             && self.add_analyze_target(&path).await
@@ -375,12 +365,12 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn did_change(&self, _params: lsp_types::DidChangeTextDocumentParams) {
+    async fn did_change(&self, _params: DidChangeTextDocumentParams) {
         *self.analyzed.write().await = None;
         self.shutdown_subprocesses().await;
     }
 
-    async fn shutdown(&self) -> jsonrpc::Result<()> {
+    async fn shutdown(&self) -> Result<()> {
         self.shutdown_subprocesses().await;
         Ok(())
     }
