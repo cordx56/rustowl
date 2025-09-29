@@ -30,7 +30,7 @@ harness = false
 name = "rustowl_bench_simple"
 
 [dependencies]
-cargo_metadata = "0.22"
+cargo_metadata = "0.23"
 clap = { version = "4", features = ["cargo", "derive"] }
 clap_complete = "4"
 clap_complete_nushell = "4"
