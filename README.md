@@ -15,6 +15,7 @@
         <a href="https://aur.archlinux.org/packages/rustowl-bin">
             <img alt="AUR Version" src="https://img.shields.io/aur/version/rustowl-bin?style=for-the-badge">
         </a>
+<a href="https://app.fossa.com/projects/git%2Bgithub.com%2Fcordx56%2Frustowl?ref=badge_shield" alt="FOSSA Status"><img src="https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcordx56%2Frustowl.svg?type=shield"/></a>
         <img alt="WinGet Package Version" src="https://img.shields.io/winget/v/Cordx56.Rustowl?style=for-the-badge">
     </h4>
     <h4>
@@ -322,3 +323,7 @@ There is a [build guide](docs/build.md) to build RustOwl or extensions.
 
 In this tool, due to the limitations of VS Code's decoration specifications, characters with descenders, such as g or parentheses, may occasionally not display underlines properly.
 Additionally, we observed that the `println!` macro sometimes produces extra output, though this does not affect usability in any significant way.
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcordx56%2Frustowl.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcordx56%2Frustowl?ref=badge_large)
