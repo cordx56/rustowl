@@ -30,7 +30,7 @@ harness = false
 name = "rustowl_bench_simple"
 
 [dependencies]
-cargo_metadata = "0.22"
+cargo_metadata = "0.23"
 clap = { version = "4", features = ["cargo", "derive"] }
 clap_complete = "4"
 clap_complete_nushell = "4"
@@ -46,7 +46,7 @@ reqwest = { version = "0.12", default-features = false, features = [
   "socks",
   "system-proxy",
 ] }
-rustls = { version = "0.23.31", default-features = false, features = [
+rustls = { version = "0.23.32", default-features = false, features = [
   "aws_lc_rs",
 ] }
 serde = { version = "1", features = ["derive"] }
@@ -85,7 +85,7 @@ tikv-jemalloc-sys = "0.6"
 tikv-jemallocator = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-zip = "4.6.0"
+zip = "5.1.1"
 
 [profile.release]
 opt-level = 3
