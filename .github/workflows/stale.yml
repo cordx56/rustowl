@@ -12,7 +12,7 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/stale@v9
+      - uses: actions/stale@v10
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           stale-issue-message: "🤖 Bot: **Issue** has not seen activity in **30** days and will therefore be marked as stale. It will be closed in 7 days if no further response is found."
