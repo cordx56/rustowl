@@ -1,13 +1,42 @@
 # RustOwl Configuration (Neovim)
 
+## Quick Start
+
+1. Install RustOwl (see docs/installation.md) and the Neovim plugin via your plugin manager.
+2. Add the minimal setup to your lazy.nvim config and open a Rust Cargo workspace.
+3. Hover the cursor over a variable and wait ~500ms to see visualizations.
+
 This document describes all available configuration options for the RustOwl Neovim plugin.
 
 ## Table of Contents
 
-- [Basic Setup](#basic-setup)
-- [Configuration Options](#configuration-options)
-- [Customizing Highlight Colors](#customizing-highlight-colors)
-- [Examples](#examples)
+<!--toc:start-->
+
+- [RustOwl Configuration (Neovim)](#rustowl-configuration-neovim)
+  - [Quick Start](#quick-start)
+  - [Table of Contents](#table-of-contents)
+  - [Basic Setup](#basic-setup)
+  - [Configuration Options](#configuration-options)
+    - [`auto_attach` (boolean)](#autoattach-boolean)
+    - [`auto_enable` (boolean)](#autoenable-boolean)
+    - [`idle_time` (number)](#idletime-number)
+    - [`highlight_style` (string)](#highlightstyle-string)
+    - [`colors` (table)](#colors-table)
+      - [Available Color Options:](#available-color-options)
+    - [`client` (table)](#client-table)
+  - [Customizing Highlight Colors](#customizing-highlight-colors)
+    - [Default Colors](#default-colors)
+    - [Custom Colors](#custom-colors)
+      - [Color Format](#color-format)
+    - [Partial Color Customization](#partial-color-customization)
+  - [Examples](#examples)
+    - [Example 1: Minimal Configuration](#example-1-minimal-configuration)
+    - [Example 2: Auto-enable with Custom Colors](#example-2-auto-enable-with-custom-colors)
+    - [Example 3: Custom Key Binding and Styling](#example-3-custom-key-binding-and-styling)
+    - [Example 4: Dark Theme Optimized Colors](#example-4-dark-theme-optimized-colors)
+    - [Example 5: For init.vim Users](#example-5-for-initvim-users)
+  - [Usage Commands](#usage-commands)
+  <!--toc:end-->
 
 ## Basic Setup
 
