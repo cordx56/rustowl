@@ -34,7 +34,7 @@ harness = false
 name = "line_col_bench"
 
 [dependencies]
-cargo_metadata = "0.22"
+cargo_metadata = "0.23"
 clap = { version = "4", features = ["cargo", "derive"] }
 clap_complete = "4"
 clap_complete_nushell = "4"
@@ -50,7 +50,7 @@ reqwest = { version = "0.12", default-features = false, features = [
   "socks",
   "system-proxy",
 ] }
-rustls = { version = "0.23.31", default-features = false, features = [
+rustls = { version = "0.23.32", default-features = false, features = [
   "aws_lc_rs",
 ] }
 serde = { version = "1", features = ["derive"] }
