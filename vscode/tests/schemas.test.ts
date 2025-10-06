@@ -1,3 +1,7 @@
+import assert from "node:assert";
+
+import { describe, it } from "mocha";
+
 import {
   zLspCursorResponse,
   zLspRange,
@@ -6,8 +10,6 @@ import {
   zAliveMessage,
   zIndex,
 } from "../src/schemas.js";
-import assert from "node:assert";
-import { describe, it } from "mocha";
 
 describe("Schema Tests", () => {
   it("should validate a valid zAliveMessage", () => {
