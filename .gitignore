@@ -16,3 +16,4 @@ man/
 memory-bank/
 security-logs/
 benchmark-summary.*
+.eask/
