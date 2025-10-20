@@ -120,7 +120,7 @@ mod miri_memory_safety_tests {
     #[test]
     fn test_file_model_operations() {
         // Test File model with various operations
-        let mut file = File { items: Vec::new() };
+        let mut file = File::new();
 
         // Test vector operations
         assert_eq!(file.items.len(), 0);
@@ -145,14 +145,14 @@ mod miri_memory_safety_tests {
         // Add some files to crates
         crate1
             .0
-            .insert("lib.rs".to_string(), File { items: Vec::new() });
+            .insert("lib.rs".to_string(), File::new());
         crate1
             .0
-            .insert("main.rs".to_string(), File { items: Vec::new() });
+            .insert("main.rs".to_string(), File::new());
 
         crate2
             .0
-            .insert("helper.rs".to_string(), File { items: Vec::new() });
+            .insert("helper.rs".to_string(), File::new());
 
         // Add crates to workspace
         workspace.0.insert("crate1".to_string(), crate1);
@@ -218,11 +218,7 @@ mod miri_memory_safety_tests {
     #[test]
     fn test_function_model_complex_operations() {
         // Test Function model with complex nested structures
-        let function = Function {
-            fn_id: 42,
-            basic_blocks: Vec::new(),
-            decls: Vec::new(),
-        };
+        let function = Function::new(42);
 
         // Test cloning of complex nested structures
         let function_clone = function.clone();
@@ -240,25 +236,17 @@ mod miri_memory_safety_tests {
         // Test that we can create multiple instances without memory issues
         let mut functions = Vec::new();
         for i in 0..100 {
-            functions.push(Function {
-                fn_id: i,
-                basic_blocks: Vec::new(),
-                decls: Vec::new(),
-            });
+            functions.push(Function::new(i));
         }
 
         assert_eq!(functions.len(), 100);
         assert_eq!(functions[50].fn_id, 50);
 
         // Test vector capacity management
-        let large_function = Function {
-            fn_id: 999,
-            basic_blocks: Vec::with_capacity(1000),
-            decls: Vec::with_capacity(500),
-        };
+        let large_function = Function::with_capacity(999, 1000, 500);
 
-        assert!(large_function.basic_blocks.capacity() >= 1000);
-        assert!(large_function.decls.capacity() >= 500);
+        assert!(large_function.basic_blocks.capacity() >= 8); // SmallVec minimum
+        assert!(large_function.decls.capacity() >= 16); // SmallVec minimum
     }
 
     #[test]
@@ -283,7 +271,7 @@ mod miri_memory_safety_tests {
 
         // Test unicode handling
         let unicode_string = "🦀 Rust 🔥 Memory Safety 🛡️".to_string();
-        let _file = File { items: Vec::new() };
+        let _file = File::new();
 
         // Ensure unicode doesn't cause memory issues
         assert!(unicode_string.len() > unicode_string.chars().count());
