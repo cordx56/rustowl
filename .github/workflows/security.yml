@@ -98,7 +98,7 @@ jobs:
 
       - name: Upload security artifacts (on failure only)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: security-logs-${{ matrix.os }}-${{ github.run_id }}
           path: |
