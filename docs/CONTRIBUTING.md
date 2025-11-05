@@ -9,40 +9,53 @@ In this document we describe how to contribute our project, as follows:
 - How to setup development environment
 - Checklist before submitting PR
 
+## Table of Contents
+
+- [Set up your environment](#set-up-your-environment)
+  - [Prerequisites](#prerequisites)
+    - [Common Requirements](#common-requirements)
+    - [Platform-Specific Tools](#platform-specific-tools)
+  - [Rust code](#rust-code)
+  - [Editor extensions](#editor-extensions)
+- [Before submitting PR](#before-submitting-pr)
+  - [Development Checks](#development-checks)
+  - [Security and Memory Safety Testing](#security-and-memory-safety-testing)
+  - [Performance Testing](#performance-testing)
+  - [Binary Size Monitoring](#binary-size-monitoring)
+  - [Manual Checks](#manual-checks)
+- [Development Workflow](#development-workflow)
+- [Troubleshooting](#troubleshooting)
+
 ## Set up your environment
 
-Here we describe how to set up your development environment.
+### Prerequisites
 
-### Manual Development Setup
-
-Set up your development environment manually by installing the required tools for your platform.
-
-#### Prerequisites
-
-**Common Requirements:**
+#### Common Requirements
 
 - Rust toolchain (automatically managed via `rust-toolchain.toml`)
 - Basic build tools
 
-**Platform-Specific Tools:**
+#### Platform-Specific Tools
 
-**Linux:**
+##### Linux
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y valgrind bc gnuplot build-essential
+sudo apt-get install -y valgrind bc gnuplot build-essential # For Rustowl Itself
+sudo apt-get install -y neovim # Optional: Install Neovim for neovim plugin development
+sudo apt-get install -y emacs # Optional: Install Emacs for emacs plugin development
+# Install Visual Studio Code as in their documentation
 ```
 
-**macOS:**
+##### macOS
 
 ```bash
 brew install gnuplot
 # Optional: brew install valgrind (limited support)
+brew install neovim # Optional: Install Neovim for neovim plugin development
+brew install emacs # Optional: Install Emacs for emacs plugin development
+# Install Visual Studio Code as in their documentation
 ```
-
-**Node.js Development (for VS Code extension):**
-
-- Node.js and pnpm for VS Code extension development
 
 ### Rust code
 
@@ -54,7 +67,6 @@ Our project uses `rust-toolchain.toml` to automatically manage the correct Rust 
 #### Build and test using the nightly environment
 
 For building, testing, or installing, you can do the same as any common Rust project using the `cargo` command.
-Here, `cargo` must be a `rustup`-proxied command, which is usually installed with `rustup`.
 
 #### Build with stable Rust compiler
 
@@ -63,15 +75,25 @@ To distribute release binary, we use stable Rust compiler to ship RustOwl with s
 The executable binary named `rustowlc`, which is one of the components of RustOwl, behaves like a Rust compiler.
 So we would like to compile `rustowlc`, which uses nightly features, with the stable Rust compiler.
 
-Note: Using this method is strongly discouraged officially. See [Unstable Book](doc.rust-lang.org/nightly/unstable-book/compiler-flags/rustc-bootstrap.html).
+> [!NOTE]
+> Using this method is strongly discouraged officially. See [Unstable Book](doc.rust-lang.org/nightly/unstable-book/compiler-flags/rustc-bootstrap.html).
 
 To compile `rustowlc` with stable compiler, you should set environment variable as `RUSTC_BOOTSTRAP=1`.
 
-For example building with stable 1.89.0 Rust compiler:
+Our script automates most of the work, so to build with the toolchain specified in [channel](../scripts/build/channel) file:
 
 ```bash
-RUSTC_BOOTSTRAP=1 rustup run 1.89.0 cargo build --release
+./scripts/build/toolchain cargo build --release
 ```
+
+To do it manually:
+
+```bash
+# 1.89.0 can be any version
+RUSTC_BOOTSTRAP=1 rustup +1.89.0 run cargo build --release
+```
+
+As new Rust versions release, their APIs change. Thus, RustOwl code also changes. You might see errors if the version is newer. We strive to make the code in the main branch compatible with the latest Rust version, which is specified in the [channel](../scripts/build/channel) file.
 
 Note that by using normal `cargo` command RustOwl will be built with nightly compiler since there is a `rust-toolchain.toml` which specifies nightly compiler for development environment.
 
@@ -84,13 +106,25 @@ To get started, you have to install dependencies by running following command in
 pnpm install
 ```
 
+### Neovim Plugin
+
+You need to install [stylua](https://github.com/JohnnyMorganz/StyLua) and [selene](https://github.com/Kampfkarren/selene) for code formatting and linting.
+
+Now write your code, see [lua](../lua), [ftplugin](../ftplugin), [nvim-tests](../nvim-tests).
+
+Please write a test using [mini.test](https://github.com/echasnovski/mini.test) before submitting a pr, you can run tests using [run_nvim_tests.sh](../scripts/run_nvim_tests.sh).
+
+### Emacs Plugin
+
+<!-- TODO Complete this after @MuntasirSZN pr merges. -->
+
 ## Before submitting PR
 
 Before submitting PR, you have to check below:
 
 ### Development Checks
 
-We provide a comprehensive development checks script that validates code quality:
+Use the helper scripts in `./scripts` to run development checks and fixes. Examples:
 
 ```bash
 # Run all development checks
@@ -100,80 +134,19 @@ We provide a comprehensive development checks script that validates code quality
 ./scripts/dev-checks.sh --fix
 ```
 
-This script performs:
-
-- Rust version compatibility check
-- Code formatting validation (`cargo fmt`)
-- Linting with Clippy (`cargo clippy`)
-- Build verification
-- Unit test execution
-- VS Code extension checks (formatting, linting, type checking)
+Refer to individual scripts for details (security, benchmarking, size checks). For CI-consistent runs, prefer the scripts above instead of invoking tools manually.
 
 ### Security and Memory Safety Testing
 
-Run comprehensive security analysis before submitting:
-
-```bash
-# Run all available security tests
-./scripts/security.sh
-
-# Check which security tools are available
-./scripts/security.sh --check
-
-# Run specific test categories
-./scripts/security.sh --no-miri        # Skip Miri tests
-./scripts/security.sh --no-valgrind    # Skip Valgrind tests
-./scripts/security.sh --no-audit       # Skip cargo-audit
-```
-
-The security script includes:
-
-- **Miri**: Undefined behavior detection
-- **Valgrind**: Memory error detection (Linux)
-- **cargo-audit**: Security vulnerability scanning
-- **cargo-machete**: Unused dependency detection (macOS)
-- **Platform-specific tools**: Instruments (macOS)
+Use `./scripts/security.sh` to run the available security and UB detection tools. See the script for options to skip Miri/Valgrind/audit steps.
 
 ### Performance Testing
 
-Validate that your changes don't introduce performance regressions:
-
-```bash
-# Run performance benchmarks
-./scripts/bench.sh
-
-# Create a baseline for comparison
-./scripts/bench.sh --save my-baseline
-
-# Compare against a baseline with custom threshold
-./scripts/bench.sh --load my-baseline --threshold 3%
-
-# Clean build and open HTML report
-./scripts/bench.sh --clean --open
-```
-
-Performance testing features:
-
-- Criterion benchmark integration
-- Baseline creation and comparison
-- Configurable regression thresholds (default: 5%)
-- Automatic test package detection
-- HTML report generation
+Use `./scripts/bench.sh` to run performance benchmarks. Create and compare baselines using the script's flags.
 
 ### Binary Size Monitoring
 
-Check for binary size regressions:
-
-```bash
-# Analyze current binary sizes
-./scripts/size-check.sh
-
-# Compare against a saved baseline
-./scripts/size-check.sh --load previous-baseline
-
-# Save current sizes as baseline
-./scripts/size-check.sh --save new-baseline
-```
+Use `./scripts/size-check.sh` to analyze and compare binary sizes. Save/Load baselines via the script flags.
 
 ### Manual Checks
 
@@ -190,6 +163,12 @@ If the automated scripts are not available, ensure:
 - Correctly formatted by `pnpm fmt`
 - Linting passes with `pnpm lint`
 - Type checking passes with `pnpm check-types`
+
+#### Neovim Plugin Checks
+
+- Correctly formatted by `stylua`
+- Linting passes with `selene`
+- Tests passing with `mini.test`
 
 ## Development Workflow
 
@@ -210,23 +189,24 @@ If the automated scripts are not available, ensure:
    ```
 
 3. **Before committing**:
+
    ```bash
-   # Run comprehensive validation
+   # For Rust Code
    ./scripts/dev-checks.sh
    ./scripts/security.sh
    ./scripts/bench.sh --load before-changes
    ./scripts/size-check.sh
+   # For Neovim
+   ./scripts/run_nvim_tests.sh
+   stylua .
+   selene .
    ```
 
-### Integration with CI
-
-Our scripts are designed to match CI workflows:
-
-- **`security.sh`** ↔ **`.github/workflows/security.yml`**
-- **`bench.sh`** ↔ **`.github/workflows/bench-performance.yml`**
-- **`dev-checks.sh`** ↔ **`.github/workflows/checks.yml`**
-
-This ensures local testing provides the same results as CI.
+   <!-- TODO Add after @MuntasirSZN pr merges -->
+   <!-- # For Emacs
+   eask script run test
+   eask format elisp-autofmt rustowl.el
+   eask lint <linter> -->
 
 ## Troubleshooting
 
@@ -239,22 +219,6 @@ chmod +x scripts/*.sh
 ### Missing Tools
 
 Install the required tools manually using the platform-specific commands in the Prerequisites section above.
-
-### Platform-Specific Issues
-
-#### Linux
-
-```bash
-sudo apt-get update
-sudo apt-get install -y valgrind bc gnuplot build-essential
-```
-
-#### macOS
-
-```bash
-brew install gnuplot
-# Valgrind has limited support on macOS
-```
 
 ### CI Failures
 
