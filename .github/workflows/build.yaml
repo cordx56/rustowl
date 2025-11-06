@@ -115,7 +115,7 @@ jobs:
           cp ./rustowl/rustowl${{ env.exec_ext }} ./rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: rustowl-runtime-${{ env.host_tuple }}
           path: |
@@ -133,7 +133,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: 20
 
@@ -149,7 +149,7 @@ jobs:
         working-directory: ./vscode
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: rustowl-vscode
           path: vscode/**/*.vsix
