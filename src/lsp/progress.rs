@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tower_lsp::{Client, lsp_types};
+use tower_lsp_server::{Client, lsp_types};
 
 #[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
