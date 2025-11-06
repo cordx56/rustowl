@@ -1745,7 +1745,6 @@ dependencies = [
  "flate2",
  "foldhash",
  "indexmap",
- "log",
  "memchr",
  "process_alive",
  "rand",
