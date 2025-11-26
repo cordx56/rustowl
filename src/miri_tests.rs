@@ -50,8 +50,8 @@
 
 #[cfg(test)]
 mod miri_memory_safety_tests {
+    use crate::models::FoldIndexMap as HashMap;
     use crate::models::*;
-    use std::collections::HashMap;
 
     #[test]
     fn test_loc_arithmetic_memory_safety() {
@@ -107,7 +107,7 @@ mod miri_memory_safety_tests {
         assert_ne!(fn_local1, fn_local2);
 
         // Test hashing (via HashMap insertion)
-        let mut map = HashMap::new();
+        let mut map = HashMap::default();
         map.insert(fn_local1, "first");
         map.insert(fn_local2, "second");
         map.insert(fn_local3, "third"); // Should overwrite first
@@ -120,7 +120,7 @@ mod miri_memory_safety_tests {
     #[test]
     fn test_file_model_operations() {
         // Test File model with various operations
-        let mut file = File { items: Vec::new() };
+        let mut file = File::new();
 
         // Test vector operations
         assert_eq!(file.items.len(), 0);
@@ -138,21 +138,15 @@ mod miri_memory_safety_tests {
     #[test]
     fn test_workspace_operations() {
         // Test Workspace and Crate models
-        let mut workspace = Workspace(HashMap::new());
-        let mut crate1 = Crate(HashMap::new());
-        let mut crate2 = Crate(HashMap::new());
+        let mut workspace = Workspace(HashMap::default());
+        let mut crate1 = Crate(HashMap::default());
+        let mut crate2 = Crate(HashMap::default());
 
         // Add some files to crates
-        crate1
-            .0
-            .insert("lib.rs".to_string(), File { items: Vec::new() });
-        crate1
-            .0
-            .insert("main.rs".to_string(), File { items: Vec::new() });
+        crate1.0.insert("lib.rs".to_string(), File::new());
+        crate1.0.insert("main.rs".to_string(), File::new());
 
-        crate2
-            .0
-            .insert("helper.rs".to_string(), File { items: Vec::new() });
+        crate2.0.insert("helper.rs".to_string(), File::new());
 
         // Add crates to workspace
         workspace.0.insert("crate1".to_string(), crate1);
@@ -163,8 +157,8 @@ mod miri_memory_safety_tests {
         assert!(workspace.0.contains_key("crate2"));
 
         // Test workspace merging
-        let mut other_workspace = Workspace(HashMap::new());
-        let crate3 = Crate(HashMap::new());
+        let mut other_workspace = Workspace(HashMap::default());
+        let crate3 = Crate(HashMap::default());
         other_workspace.0.insert("crate3".to_string(), crate3);
 
         workspace.merge(other_workspace);
@@ -218,11 +212,7 @@ mod miri_memory_safety_tests {
     #[test]
     fn test_function_model_complex_operations() {
         // Test Function model with complex nested structures
-        let function = Function {
-            fn_id: 42,
-            basic_blocks: Vec::new(),
-            decls: Vec::new(),
-        };
+        let function = Function::new(42);
 
         // Test cloning of complex nested structures
         let function_clone = function.clone();
@@ -240,22 +230,14 @@ mod miri_memory_safety_tests {
         // Test that we can create multiple instances without memory issues
         let mut functions = Vec::new();
         for i in 0..100 {
-            functions.push(Function {
-                fn_id: i,
-                basic_blocks: Vec::new(),
-                decls: Vec::new(),
-            });
+            functions.push(Function::new(i));
         }
 
         assert_eq!(functions.len(), 100);
         assert_eq!(functions[50].fn_id, 50);
 
         // Test vector capacity management
-        let large_function = Function {
-            fn_id: 999,
-            basic_blocks: Vec::with_capacity(1000),
-            decls: Vec::with_capacity(500),
-        };
+        let large_function = Function::with_capacity(999, 1000, 500);
 
         assert!(large_function.basic_blocks.capacity() >= 1000);
         assert!(large_function.decls.capacity() >= 500);
@@ -283,7 +265,6 @@ mod miri_memory_safety_tests {
 
         // Test unicode handling
         let unicode_string = "🦀 Rust 🔥 Memory Safety 🛡️".to_string();
-        let _file = File { items: Vec::new() };
 
         // Ensure unicode doesn't cause memory issues
         assert!(unicode_string.len() > unicode_string.chars().count());
@@ -292,7 +273,7 @@ mod miri_memory_safety_tests {
     #[test]
     fn test_collections_memory_safety() {
         // Test various collection operations for memory safety
-        let mut map: HashMap<String, Vec<FnLocal>> = HashMap::new();
+        let mut map: HashMap<String, Vec<FnLocal>> = HashMap::default();
 
         // Insert data with complex nesting
         for i in 0..20 {
@@ -328,7 +309,7 @@ mod miri_memory_safety_tests {
         }
 
         for key in keys_to_remove {
-            map.remove(&key);
+            map.swap_remove(&key);
         }
 
         assert_eq!(map.len(), 18); // 20 - 2
