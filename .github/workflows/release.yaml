@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ["meta"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Release crates.io
         if: needs.meta.outputs.pre_release != 'true'
         run: |
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ["meta"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ["meta"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -112,7 +112,7 @@ jobs:
     needs: ["meta"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: AUR Release
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
         if: needs.meta.outputs.pre_release != 'true'
@@ -151,7 +151,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ["meta"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Setup Node.js
@@ -188,7 +188,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
