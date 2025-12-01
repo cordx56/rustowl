@@ -68,7 +68,7 @@ tower-lsp = "0.20"
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
-criterion = { version = "0.7", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 
 [build-dependencies]
 clap = { version = "4", features = ["derive"] }
