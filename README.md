@@ -130,7 +130,7 @@ Minimal setup with [lazy.nvim](https://github.com/folke/lazy.nvim):
 {
   'cordx56/rustowl',
   version = '*', -- Latest stable version
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false, -- This plugin is already lazy
   opts = {},
 }
