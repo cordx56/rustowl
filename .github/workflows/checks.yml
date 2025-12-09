@@ -1,90 +1,82 @@
 name: Basic Checks
-
 on:
   pull_request:
     branches: ["main"]
   workflow_dispatch:
   workflow_call:
-
+permissions:
+  contents: read
 env:
   CARGO_TERM_COLOR: always
   RUSTC_BOOTSTRAP: 1
-
 jobs:
   check:
     name: Format & Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Get Rust version
-        run: |
-          echo RUSTUP_TOOLCHAIN=$(cat ./scripts/build/channel) >> $GITHUB_ENV
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+          persist-credentials: false
+      - name: Get Rust Channel
+        id: get-channel
+        uses: ./.github/actions/get-rust-channel
+      - name: Setup rust
+        uses: moonrepo/setup-rust@ede6de059f8046a5e236c94046823e2af11ca670 # v1.2.2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
+          channel: ${{ steps.get-channel.outputs.channel }}
+          components: clippy, rustfmt
       - name: Check formatting
         run: cargo fmt --check
-
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-
   test:
     name: Build & Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
       - name: Build release
         run: ./scripts/build/toolchain cargo build --release
-
       - name: Install binary
         run: ./scripts/build/toolchain cargo install --path .
-
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
-
   vscode:
     name: VS Code Extension Checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
           node-version: 20
-
       - name: Setup PNPM And Install dependencies
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
         with:
           package_json_file: ./vscode/package.json
           run_install: |
             - cwd: ./vscode
-
       - name: Check formatting
         run: pnpm prettier -c src
         working-directory: ./vscode
-
       - name: Lint and type check
         run: pnpm lint && pnpm check-types
         working-directory: ./vscode
-
       - name: Run tests
         run: xvfb-run -a pnpm run test
         working-directory: ./vscode
+  cargo-deny:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@76cd80eb775d7bbbd2d80292136d74d39e1b4918 # v2.0.14

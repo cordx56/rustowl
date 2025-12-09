@@ -1,20 +1,15 @@
 name: Release RustOwl
-
 on:
   push:
     tags:
       - v*
-
 permissions:
-  actions: read
-  contents: write
-
+  contents: read
 jobs:
   check:
     uses: ./.github/workflows/checks.yml
   build:
     uses: ./.github/workflows/build.yaml
-
   meta:
     name: Check Version
     runs-on: ubuntu-latest
@@ -27,37 +22,47 @@ jobs:
       - name: Check pre-release
         id: pre-release
         run: |
-          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "pre_release=false" >> $GITHUB_OUTPUT
           else
             echo "pre_release=true" >> $GITHUB_OUTPUT
           fi
-
   crates-io-release:
     name: Create Crates.io release
     runs-on: ubuntu-latest
     needs: ["meta"]
+    environment: release
+    permissions:
+      id-token: write # Required for OIDC token exchange
     steps:
-      - uses: actions/checkout@v6
-      - name: Release crates.io
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1.0.3
+        id: auth
+      - name: Publish to Crates.io
+        run: cargo publish
         if: needs.meta.outputs.pre_release != 'true'
-        run: |
-          echo '${{ secrets.CRATES_IO_API_TOKEN }}' | cargo login
-          cargo publish
-
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
   vscode-release:
     name: Create Vscode Release
     runs-on: ubuntu-latest
     needs: ["meta"]
+    environment: release
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
           node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: "vscode/pnpm-lock.yaml"
       - name: Setup PNPM And Install dependencies
         if: needs.meta.outputs.pre_release != 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
         with:
           package_json_file: ./vscode/package.json
           run_install: |
@@ -69,20 +74,24 @@ jobs:
         working-directory: ./vscode
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
   vscodium-release:
     name: Create Vscodium Release
     runs-on: ubuntu-latest
     needs: ["meta"]
+    environment: release
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
           node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: "vscode/pnpm-lock.yaml"
       - name: Setup PNPM And Install dependencies
         if: needs.meta.outputs.pre_release != 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
         with:
           package_json_file: ./vscode/package.json
           run_install: |
@@ -94,27 +103,27 @@ jobs:
         working-directory: ./vscode
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-
   winget-release:
     name: Create Winget Release
     runs-on: windows-latest
     needs: ["meta"]
     steps:
-      - uses: vedantmgoyal9/winget-releaser@main
+      - uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
         if: needs.meta.outputs.pre_release != 'true'
         with:
           identifier: Cordx56.Rustowl
           token: ${{ secrets.WINGET_TOKEN }}
-
   aur-release:
     name: Create AUR Release
     runs-on: ubuntu-latest
     needs: ["meta"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: AUR Release
-        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        uses: KSXGitHub/github-actions-deploy-aur@2ac5a4c1d7035885d46b10e3193393be8460b6f1 # v4.1.1
         if: needs.meta.outputs.pre_release != 'true'
         with:
           pkgname: rustowl
@@ -130,7 +139,7 @@ jobs:
           AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
       - name: AUR Release (Bin)
-        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        uses: KSXGitHub/github-actions-deploy-aur@2ac5a4c1d7035885d46b10e3193393be8460b6f1 # v4.1.1
         if: needs.meta.outputs.pre_release != 'true'
         with:
           pkgname: rustowl-bin
@@ -145,39 +154,42 @@ jobs:
           AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
           AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-
   github-release:
     name: Create A GitHub Release
     runs-on: ubuntu-latest
     needs: ["meta"]
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
           node-version: 20
       - name: Generate Release Notes
         run: |
-          npx changelogithub@latest --contributors --output release.md
+          npx changelogithub@latest --output release.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Download All Artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           path: artifacts
           pattern: rustowl-*
           merge-multiple: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
           files: artifacts/**/*
           draft: true
           body_path: release.md
           prerelease: ${{ needs.meta.outputs.pre_release == 'true' }}
-
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   docker-release:
     name: Release To GitHub Container Registry
     runs-on: ubuntu-latest
@@ -185,26 +197,23 @@ jobs:
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
           push: true

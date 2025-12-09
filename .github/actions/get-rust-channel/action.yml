@@ -1,0 +1,15 @@
+name: 'Get Rust Channel'
+description: 'Reads the Rust channel from scripts/build/channel'
+outputs:
+  channel:
+    description: 'The Rust channel version'
+    value: ${{ steps.read_channel.outputs.channel }}
+runs:
+  using: "composite"
+  steps:
+    - name: Read channel file
+      id: read_channel
+      shell: bash
+      run: |
+        CHANNEL=$(cat scripts/build/channel | tr -d '[:space:]')
+        echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
