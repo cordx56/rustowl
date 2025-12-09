@@ -31,7 +31,7 @@ jobs:
           persist-credentials: false
       - name: Get toolchain from channel file
         run: |
-          echo "channel=$(cat scripts/build/channel)" >> $GITHUB_ENV
+          echo "channel=$(awk -F'"' '/channel/ { print $2 }' rust-toolchain.toml)" >> $GITHUB_ENV
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@0b1efabc08b657293548b77fb76cc02d26091c7e
         with:

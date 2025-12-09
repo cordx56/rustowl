@@ -83,7 +83,7 @@ jobs:
           rm -rf rustowl && mkdir -p rustowl/sysroot/${{ env.toolchain }}/bin
 
           cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./rustowl/
-          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/sysroot/${TOOLCHAIN}/bin
+          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/sysroot/${{ env.toolchain }}/bin
 
           cp README.md ./rustowl
           cp LICENSE ./rustowl
