@@ -124,6 +124,7 @@ export const context: ExtensionContext = {
     get: () => Promise.resolve(undefined),
     store: () => Promise.resolve(),
     delete: () => Promise.resolve(),
+    keys: () => Promise.resolve([]),
     onDidChange: () => {
       throw new Error("Not implemented");
     },
