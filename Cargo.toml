@@ -50,7 +50,7 @@ reqwest = { version = "0.12", default-features = false, features = [
   "socks",
   "system-proxy",
 ] }
-rustls = { version = "0.23.34", default-features = false, features = [
+rustls = { version = "0.23.35", default-features = false, features = [
   "aws_lc_rs",
 ] }
 serde = { version = "1", features = ["derive"] }
@@ -79,7 +79,7 @@ uuid = { version = "1", features = ["v4"] }
 
 
 [dev-dependencies]
-criterion = { version = "0.7", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 rand = { version = "0.9", features = ["small_rng"] }
 
 [build-dependencies]
