@@ -41,7 +41,7 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
       - name: Run tests with nextest
-        run: cargo nextest run --include-ignored
+        run: cargo nextest run
       - name: Run doc tests
         run: cargo test --doc
       - name: Build release
