@@ -95,7 +95,7 @@ jobs:
           rm -rf ${{ env.archive_name }}
 
           if [[ "${{ env.is_windows }}" == "true" ]]; then
-            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath ".\${ARCHIVE_NAME}" -CompressionLevel Optimal'
+            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath ".\${{ env.archive_name }}" -CompressionLevel Optimal'
           else
             cd rustowl
             tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ completions/ man/ rustowl${{ env.exec_ext }}
