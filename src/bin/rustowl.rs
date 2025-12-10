@@ -98,21 +98,52 @@ async fn handle_command(command: Commands) {
 }
 
 /// Handles the case when no command is provided (version display or LSP server mode)
-async fn handle_no_command(args: Cli) {
+async fn handle_no_command(args: Cli, used_short_flag: bool) {
     if args.version {
-        display_version(args.quiet == 0);
+        if used_short_flag {
+            println!("rustowl {}", clap::crate_version!());
+        } else {
+            display_version();
+        }
         return;
     }
 
     start_lsp_server().await;
 }
 
-/// Displays the version information
-fn display_version(show_prefix: bool) {
-    if show_prefix {
-        print!("RustOwl ");
+/// Displays version information including git tag, commit hash, build time, etc.
+fn display_version() {
+    println!("rustowl {}", clap::crate_version!());
+
+    let tag = env!("GIT_TAG");
+    println!("tag:{}", if tag.is_empty() { "not found" } else { tag });
+
+    let commit = env!("GIT_COMMIT_HASH");
+    println!(
+        "commit_hash:{}",
+        if commit.is_empty() {
+            "not found"
+        } else {
+            commit
+        }
+    );
+
+    let build_time = env!("BUILD_TIME");
+    println!(
+        "build_time:{}",
+        if build_time.is_empty() {
+            "not found"
+        } else {
+            build_time
+        }
+    );
+
+    let rustc_version = env!("RUSTC_VERSION");
+    if rustc_version.is_empty() {
+        println!("build_env:not found");
+    } else {
+        println!("build_env:{},{}", rustc_version, env!("RUSTOWL_TOOLCHAIN"));
     }
-    println!("v{}", clap::crate_version!());
 }
 
 /// Starts the LSP server
@@ -140,11 +171,14 @@ async fn main() {
 
     rustowl::initialize_logging(LevelFilter::INFO);
 
+    // Check if -V was used (before parsing consumes args)
+    let used_short_flag = std::env::args().any(|arg| arg == "-V");
+
     let parsed_args = Cli::parse();
 
     match parsed_args.command {
         Some(command) => handle_command(command).await,
-        None => handle_no_command(parsed_args).await,
+        None => handle_no_command(parsed_args, used_short_flag).await,
     }
 }
 
@@ -165,6 +199,11 @@ mod tests {
 
     #[test]
     fn test_cli_parsing_version_flag() {
+        let args = vec!["rustowl", "-V"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert!(cli.command.is_none());
+        assert!(cli.version);
+
         let args = vec!["rustowl", "--version"];
         let cli = Cli::try_parse_from(args).unwrap();
         assert!(cli.command.is_none());
@@ -308,14 +347,14 @@ mod tests {
 
     // Test display_version function
     #[test]
-    fn test_display_version_with_prefix() {
-        // We can't easily capture stdout in unit tests, but we can verify the function doesn't panic
-        display_version(true);
-        display_version(false);
+    fn test_display_version_function() {
+        display_version();
     }
 
-    // Test handle_no_command with version flag
-    #[tokio::test]
+    // Test handle_no_command with version flag (detailed)
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_handle_no_command_version() {
         let cli = Cli {
             command: None,
@@ -324,20 +363,28 @@ mod tests {
             stdio: false,
         };
 
-        // This should not panic and should handle the version display
-        // Note: This will actually exit the process in real execution,
-        // but for testing we can verify it doesn't panic
-        handle_no_command(cli).await;
+        handle_no_command(cli, false).await;
     }
 
-    // Test handle_no_command without version (would start LSP server)
-    // This is harder to test without mocking, so we'll skip the actual LSP server start
+    // Test handle_no_command with short version flag
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
+    async fn test_handle_no_command_short_version() {
+        let cli = Cli {
+            command: None,
+            version: true,
+            quiet: 0,
+            stdio: false,
+        };
 
-    // Test error handling in handle_command for check command
-    // This is also hard to test without mocking the Backend::check_with_options
+        handle_no_command(cli, true).await;
+    }
 
     // Test handle_command for clean command
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_handle_command_clean() {
         let command = Commands::Clean;
         // This should not panic
@@ -345,7 +392,9 @@ mod tests {
     }
 
     // Test handle_command for toolchain uninstall
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_handle_command_toolchain_uninstall() {
         use crate::cli::*;
         let command = Commands::Toolchain(ToolchainArgs {
@@ -356,7 +405,9 @@ mod tests {
     }
 
     // Test handle_command for completions
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_handle_command_completions() {
         use crate::cli::*;
         use crate::shells::Shell;

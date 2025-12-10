@@ -1,7 +1,7 @@
 use crate::models::FoldIndexSet as HashSet;
 use crate::{lsp::progress, models::*, utils};
 use std::path::PathBuf;
-use tower_lsp_server::{UriExt, lsp_types};
+use tower_lsp_server::ls_types as lsp_types;
 
 // Variable names that should be filtered out during analysis
 const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];

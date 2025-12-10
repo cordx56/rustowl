@@ -38,11 +38,11 @@ cargo_metadata = "0.23"
 clap = { version = "4", features = ["cargo", "derive"] }
 clap_complete = "4"
 clap_complete_nushell = "4"
-eros = "0.1.0"
+anyhow = "1"
 flate2 = "1"
 foldhash = "0.2.0"
 indexmap = { version = "2", features = ["rayon", "serde"] }
-process_alive = "0.1"
+process_alive = "0.2"
 rayon = "1"
 reqwest = { version = "0.12", default-features = false, features = [
   "http2",
@@ -72,9 +72,9 @@ tokio = { version = "1", features = [
   "time",
 ] }
 tokio-util = "0.7"
-tower-lsp-server = "0.22"
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = ["env-filter", "smallvec"] }
+tower-lsp-server = "0.23"
+tracing = "0.1.43"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "smallvec"] }
 uuid = { version = "1", features = ["v4"] }
 
 

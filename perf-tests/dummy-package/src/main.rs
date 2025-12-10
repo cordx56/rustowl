@@ -319,7 +319,9 @@ async fn run_feature_tests() -> Result<()> {
 mod tests {
     use super::*;
 
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_data_operations() {
         let result = run_data_operations(10).await;
         // Allow this to fail since some operations are intentionally problematic

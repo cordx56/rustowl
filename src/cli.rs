@@ -1,10 +1,10 @@
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 
 #[derive(Debug, Parser)]
-#[command(author)]
+#[command(author, disable_version_flag = true)]
 pub struct Cli {
-    /// Print version.
-    #[arg(short('V'), long)]
+    /// Print version info (-V short, --version detailed).
+    #[arg(short = 'V', long = "version")]
     pub version: bool,
 
     /// Suppress output.
@@ -105,7 +105,6 @@ mod tests {
 
     #[test]
     fn test_cli_default_parsing() {
-        // Test parsing empty args (should work with defaults)
         let args = vec!["rustowl"];
         let cli = Cli::try_parse_from(args).unwrap();
 
@@ -117,11 +116,11 @@ mod tests {
 
     #[test]
     fn test_cli_version_flag() {
-        let args = vec!["rustowl", "--version"];
+        let args = vec!["rustowl", "-V"];
         let cli = Cli::try_parse_from(args).unwrap();
         assert!(cli.version);
 
-        let args = vec!["rustowl", "-V"];
+        let args = vec!["rustowl", "--version"];
         let cli = Cli::try_parse_from(args).unwrap();
         assert!(cli.version);
     }

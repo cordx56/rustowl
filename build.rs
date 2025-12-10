@@ -4,6 +4,7 @@ use std::env;
 use std::fs;
 use std::io::Error;
 use std::process::Command;
+use std::time::SystemTime;
 
 include!("src/cli.rs");
 include!("src/shells.rs");
@@ -21,6 +22,25 @@ fn main() -> Result<(), Error> {
 
     let host_tuple = get_host_tuple();
     println!("cargo::rustc-env=HOST_TUPLE={host_tuple}");
+
+    // Git information for detailed version output
+    // Always set these env vars (empty string if not found, handled at runtime)
+    println!(
+        "cargo::rustc-env=GIT_TAG={}",
+        get_git_tag().unwrap_or_default()
+    );
+    println!(
+        "cargo::rustc-env=GIT_COMMIT_HASH={}",
+        get_git_commit_hash().unwrap_or_default()
+    );
+    println!(
+        "cargo::rustc-env=BUILD_TIME={}",
+        get_build_time().unwrap_or_default()
+    );
+    println!(
+        "cargo::rustc-env=RUSTC_VERSION={}",
+        get_rustc_version().unwrap_or_default()
+    );
 
     #[cfg(target_os = "macos")]
     {
@@ -86,4 +106,99 @@ fn get_host_tuple() -> String {
         .output()
         .map(|v| String::from_utf8(v.stdout).unwrap().trim().to_string())
         .expect("failed to obtain host-tuple")
+}
+
+fn get_git_tag() -> Option<String> {
+    Command::new("git")
+        .args(["describe", "--tags", "--abbrev=0"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            String::from_utf8(output.stdout)
+                .ok()
+                .map(|s| s.trim().to_string())
+        })
+        .filter(|s| !s.is_empty())
+}
+
+fn get_git_commit_hash() -> Option<String> {
+    Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            String::from_utf8(output.stdout)
+                .ok()
+                .map(|s| s.trim().to_string())
+        })
+        .filter(|s| !s.is_empty())
+}
+
+fn get_build_time() -> Option<String> {
+    // Cross-platform build time using SystemTime
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .ok()
+        .map(|d| {
+            // Convert to a simple timestamp format
+            let secs = d.as_secs();
+            // Calculate date components (simplified UTC)
+            let days = secs / 86400;
+            let time_secs = secs % 86400;
+            let hours = time_secs / 3600;
+            let mins = (time_secs % 3600) / 60;
+            let secs = time_secs % 60;
+
+            // Days since 1970-01-01
+            let mut y = 1970;
+            let mut remaining_days = days;
+
+            loop {
+                let days_in_year = if is_leap_year(y) { 366 } else { 365 };
+                if remaining_days < days_in_year {
+                    break;
+                }
+                remaining_days -= days_in_year;
+                y += 1;
+            }
+
+            let month_days: [u64; 12] = if is_leap_year(y) {
+                [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+            } else {
+                [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+            };
+
+            let mut m = 1;
+            for days_in_month in month_days {
+                if remaining_days < days_in_month {
+                    break;
+                }
+                remaining_days -= days_in_month;
+                m += 1;
+            }
+
+            let d = remaining_days + 1;
+
+            format!("{y:04}-{m:02}-{d:02} {hours:02}:{mins:02}:{secs:02} UTC")
+        })
+}
+
+fn is_leap_year(year: u64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
+fn get_rustc_version() -> Option<String> {
+    Command::new(env::var("RUSTC").unwrap_or("rustc".to_string()))
+        .args(["--version"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            String::from_utf8(output.stdout)
+                .ok()
+                .map(|s| s.trim().to_string())
+        })
+        .filter(|s| !s.is_empty())
 }

@@ -6,8 +6,8 @@ use std::sync::Arc;
 use tokio::{sync::RwLock, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 use tower_lsp_server::jsonrpc::Result;
-use tower_lsp_server::lsp_types::{self, *};
-use tower_lsp_server::{Client, LanguageServer, LspService, UriExt};
+use tower_lsp_server::ls_types::{self as lsp_types, *};
+use tower_lsp_server::{Client, LanguageServer, LspService};
 
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -396,7 +396,9 @@ mod tests {
     }
 
     // Test Backend::check method
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_method() {
         init_crypto_provider();
         let temp_dir = tempfile::tempdir().unwrap();
@@ -414,7 +416,9 @@ mod tests {
     }
 
     // Test Backend::check_with_options method
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_with_options() {
         init_crypto_provider();
 
@@ -433,7 +437,9 @@ mod tests {
     }
 
     // Test Backend::check with invalid path
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_invalid_path() {
         init_crypto_provider();
         // Use a timeout to prevent the test from hanging
@@ -443,7 +449,9 @@ mod tests {
     }
 
     // Test Backend::check_with_options with invalid path
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_with_options_invalid_path() {
         init_crypto_provider();
 
@@ -453,7 +461,9 @@ mod tests {
     }
 
     // Test Backend::check with valid Cargo.toml but no source files
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_valid_cargo_no_src() {
         init_crypto_provider();
 
@@ -472,7 +482,9 @@ mod tests {
     }
 
     // Test Backend::check with different option combinations
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_with_different_options() {
         init_crypto_provider();
 
@@ -499,7 +511,9 @@ mod tests {
     }
 
     // Test Backend::check with workspace (multiple packages)
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_with_workspace() {
         init_crypto_provider();
 
@@ -528,7 +542,9 @@ mod tests {
     }
 
     // Test Backend::check with malformed Cargo.toml
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_malformed_cargo() {
         init_crypto_provider();
 
@@ -549,7 +565,9 @@ mod tests {
     }
 
     // Test Backend::check with empty directory
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_empty_directory() {
         init_crypto_provider();
         let temp_dir = tempfile::tempdir().unwrap();
@@ -560,7 +578,9 @@ mod tests {
     }
 
     // Test Backend::check_with_options with empty directory
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_with_options_empty_directory() {
         init_crypto_provider();
 
@@ -572,7 +592,9 @@ mod tests {
     }
 
     // Test Backend::check with nested Cargo.toml
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_nested_cargo() {
         init_crypto_provider();
 
@@ -594,7 +616,9 @@ mod tests {
     }
 
     // Test Backend::check with binary target
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_with_binary_target() {
         init_crypto_provider();
 
@@ -618,7 +642,9 @@ mod tests {
     }
 
     // Test Backend::check with library target
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_with_library_target() {
         init_crypto_provider();
 
@@ -642,7 +668,9 @@ mod tests {
     }
 
     // Test Backend::check with both binary and library targets
-    #[tokio::test]
+    #[cfg_attr(not(miri), tokio::test)]
+    #[cfg_attr(miri, test)]
+    #[cfg_attr(miri, ignore)]
     async fn test_check_with_mixed_targets() {
         init_crypto_provider();
 

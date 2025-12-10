@@ -1,4 +1,5 @@
 use crate::{cache::*, error::*, models::*, toolchain};
+use anyhow::bail;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -77,10 +78,7 @@ impl Analyzer {
             })
         } else {
             tracing::error!("Invalid analysis target: {}", path.display());
-            Err(RustOwlError::Analysis(format!(
-                "Invalid analysis target: {}",
-                path.display()
-            )))
+            bail!("Invalid analysis target: {}", path.display())
         }
     }
     pub fn target_path(&self) -> &Path {
