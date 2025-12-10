@@ -18,14 +18,20 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - name: Get Rust Channel
-        id: get-channel
-        uses: ./.github/actions/get-rust-channel
-      - name: Setup rust
-        uses: moonrepo/setup-rust@ede6de059f8046a5e236c94046823e2af11ca670 # v1.2.2
+      - name: Get Rust version
+        run: |
+          echo RUSTUP_TOOLCHAIN=$(cat ./scripts/build/channel) >> $GITHUB_ENV
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          channel: ${{ steps.get-channel.outputs.channel }}
-          components: clippy, rustfmt
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Check formatting
         run: cargo fmt --check
       - name: Run clippy
