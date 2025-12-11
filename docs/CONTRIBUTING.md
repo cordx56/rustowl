@@ -128,7 +128,25 @@ fn test_async_operation() {
 
 The macro creates a tokio runtime with `enable_all()` and runs the async block. See the [Miri issue](https://github.com/rust-lang/miri/issues/602#issuecomment-884019764) for background.
 
-For tests that cannot run under Miri at all (e.g., tests requiring complex networking or process spawning), use conditional compilation:
+> [!IMPORTANT]
+> The `miri_async_test!` macro enables tokio's IO driver, which uses platform-specific syscalls (`kqueue` on macOS, `epoll` on Linux) that Miri doesn't support. For tests that require the IO driver (e.g., LSP backend tests, networking, file system operations via `tokio::fs`), exclude the entire test module from Miri:
+
+```rust
+// Tests requiring tokio IO driver - excluded from Miri
+#[cfg(all(test, not(miri)))]
+mod tests {
+    use crate::miri_async_test;
+
+    #[test]
+    fn test_with_io() {
+        miri_async_test!(async {
+            // Test code using tokio::fs, networking, etc.
+        });
+    }
+}
+```
+
+For individual tests that cannot run under Miri but don't need the IO driver, use conditional compilation:
 
 ```rust
 #[cfg_attr(not(miri), tokio::test)]
@@ -232,14 +250,15 @@ If the automated scripts are not available, ensure:
    ./scripts/bench.sh --save before-changes
    ```
 
-2. **During development**:
+1. **During development**:
 
    ```bash
    # Run quick checks frequently
    ./scripts/dev-checks.sh --fix
    ```
 
-3. **Before committing**:
+1. **Before committing**:
+
    ```bash
    # Run comprehensive validation
    ./scripts/dev-checks.sh

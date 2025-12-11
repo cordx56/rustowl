@@ -376,7 +376,10 @@ impl LanguageServer for Backend {
     }
 }
 
-#[cfg(test)]
+// These tests require tokio's IO driver which uses platform-specific syscalls
+// (kqueue on macOS, epoll on Linux) that Miri doesn't support.
+// See: https://github.com/rust-lang/miri/issues/602
+#[cfg(all(test, not(miri)))]
 mod tests {
     use super::*;
     use crate::miri_async_test;
