@@ -1,6 +1,6 @@
 name: "Validate Pull Request Title"
 on:
-  pull_request:
+  pull_request_target:
     types:
       - opened
       - edited
