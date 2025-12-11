@@ -1,4 +1,4 @@
-name: GitHub Actions Security Analysis
+name: Zizmor Analysis
 on:
   push:
     branches: ["main"]
