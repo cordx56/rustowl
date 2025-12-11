@@ -63,6 +63,28 @@ pub fn initialize_logging(level: LevelFilter) {
         .try_init();
 }
 
+/// Test utilities for Miri-compatible async tests.
+///
+/// Miri doesn't support `#[tokio::test]` directly, so we provide a macro
+/// that handles the async runtime setup correctly for both regular tests
+/// and Miri.
+///
+/// See: <https://github.com/rust-lang/miri/issues/602#issuecomment-884019764>
+#[cfg(test)]
+#[macro_export]
+macro_rules! miri_async_test {
+    ($body:expr) => {{
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on($body)
+    }};
+}
+
+// Miri tests that verify memory safety and undefined behavior detection
+mod miri_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;

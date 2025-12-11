@@ -109,6 +109,36 @@ This script performs:
 - Unit test execution
 - VS Code extension checks (formatting, linting, type checking)
 
+### Writing Miri-Compatible Async Tests
+
+Miri doesn't support `#[tokio::test]` directly. RustOwl provides the `miri_async_test!` macro for writing async tests that work with both regular test runs and Miri:
+
+```rust
+use crate::miri_async_test;
+
+#[test]
+fn test_async_operation() {
+    miri_async_test!(async {
+        // Your async test code here
+        let result = some_async_function().await;
+        assert!(result.is_ok());
+    });
+}
+```
+
+The macro creates a tokio runtime with `enable_all()` and runs the async block. See the [Miri issue](https://github.com/rust-lang/miri/issues/602#issuecomment-884019764) for background.
+
+For tests that cannot run under Miri at all (e.g., tests requiring complex networking or process spawning), use conditional compilation:
+
+```rust
+#[cfg_attr(not(miri), tokio::test)]
+#[cfg_attr(miri, test)]
+#[cfg_attr(miri, ignore)]
+async fn test_requiring_external_io() {
+    // Test code
+}
+```
+
 ### Security and Memory Safety Testing
 
 Run comprehensive security analysis before submitting:
