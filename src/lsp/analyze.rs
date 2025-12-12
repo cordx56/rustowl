@@ -201,10 +201,7 @@ impl Analyzer {
         command.arg("-o/dev/null");
         #[cfg(windows)]
         command.arg("-oNUL");
-        command
-            .arg(path)
-            .stdout(Stdio::piped())
-            .kill_on_drop(true);
+        command.arg(path).stdout(Stdio::piped()).kill_on_drop(true);
 
         toolchain::set_rustc_env(&mut command, &sysroot);
 
