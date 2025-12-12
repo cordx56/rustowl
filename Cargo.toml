@@ -79,7 +79,7 @@ uuid = { version = "1", features = ["v4"] }
 
 
 [dev-dependencies]
-criterion = { version = "0.8", features = ["html_reports"] }
+divan = "0.1"
 rand = { version = "0.9", features = ["small_rng"] }
 
 [build-dependencies]

@@ -1,18 +1,19 @@
-use criterion::{Criterion, criterion_group, criterion_main};
-use std::hint::black_box;
+use divan::{AllocProfiler, Bencher, black_box};
 use std::process::Command;
-use std::time::Duration;
 
-fn bench_rustowl_check(c: &mut Criterion) {
-    let dummy_package = "./perf-tests/dummy-package";
+#[cfg(all(not(target_env = "msvc"), not(miri)))]
+use tikv_jemallocator::Jemalloc;
 
-    let mut group = c.benchmark_group("rustowl_check");
-    group
-        .sample_size(20)
-        .measurement_time(Duration::from_secs(300))
-        .warm_up_time(Duration::from_secs(5));
+#[cfg(all(not(target_env = "msvc"), not(miri)))]
+#[global_allocator]
+static ALLOC: AllocProfiler<Jemalloc> = AllocProfiler::new(Jemalloc);
 
-    // Ensure rustowl binary is built
+#[cfg(any(target_env = "msvc", miri))]
+#[global_allocator]
+static ALLOC: AllocProfiler = AllocProfiler::system();
+
+fn main() {
+    // Ensure rustowl binary is built before running benchmarks
     let output = Command::new("cargo")
         .args(["build", "--release", "--bin", "rustowl"])
         .output()
@@ -25,63 +26,62 @@ fn bench_rustowl_check(c: &mut Criterion) {
         );
     }
 
-    let binary_path = "./target/release/rustowl";
+    divan::main();
+}
 
-    group.bench_function("default", |b| {
-        b.iter(|| {
-            let output = Command::new(binary_path)
-                .args(["check", dummy_package])
+const DUMMY_PACKAGE: &str = "./perf-tests/dummy-package";
+const BINARY_PATH: &str = "./target/release/rustowl";
+
+#[divan::bench_group(name = "rustowl_check", sample_count = 20)]
+mod rustowl_check {
+    use super::*;
+
+    #[divan::bench]
+    fn default(bencher: Bencher) {
+        bencher.bench(|| {
+            let output = Command::new(BINARY_PATH)
+                .args(["check", DUMMY_PACKAGE])
                 .output()
                 .expect("Failed to run rustowl check");
             black_box(output.status.success());
-        })
-    });
+        });
+    }
 
-    group.bench_function("all_targets", |b| {
-        b.iter(|| {
-            let output = Command::new(binary_path)
-                .args(["check", dummy_package, "--all-targets"])
+    #[divan::bench]
+    fn all_targets(bencher: Bencher) {
+        bencher.bench(|| {
+            let output = Command::new(BINARY_PATH)
+                .args(["check", DUMMY_PACKAGE, "--all-targets"])
                 .output()
                 .expect("Failed to run rustowl check with all targets");
             black_box(output.status.success());
-        })
-    });
+        });
+    }
 
-    group.bench_function("all_features", |b| {
-        b.iter(|| {
-            let output = Command::new(binary_path)
-                .args(["check", dummy_package, "--all-features"])
+    #[divan::bench]
+    fn all_features(bencher: Bencher) {
+        bencher.bench(|| {
+            let output = Command::new(BINARY_PATH)
+                .args(["check", DUMMY_PACKAGE, "--all-features"])
                 .output()
                 .expect("Failed to run rustowl check with all features");
             black_box(output.status.success());
-        })
-    });
-
-    group.finish();
+        });
+    }
 }
 
-fn bench_rustowl_comprehensive(c: &mut Criterion) {
-    let dummy_package = "./perf-tests/dummy-package";
-    let binary_path = "./target/release/rustowl";
+#[divan::bench_group(name = "rustowl_comprehensive", sample_count = 20)]
+mod rustowl_comprehensive {
+    use super::*;
 
-    let mut group = c.benchmark_group("rustowl_comprehensive");
-    group
-        .sample_size(20)
-        .measurement_time(Duration::from_secs(200))
-        .warm_up_time(Duration::from_secs(5));
-
-    group.bench_function("comprehensive", |b| {
-        b.iter(|| {
-            let output = Command::new(binary_path)
-                .args(["check", dummy_package, "--all-targets", "--all-features"])
+    #[divan::bench]
+    fn comprehensive(bencher: Bencher) {
+        bencher.bench(|| {
+            let output = Command::new(BINARY_PATH)
+                .args(["check", DUMMY_PACKAGE, "--all-targets", "--all-features"])
                 .output()
                 .expect("Failed to run comprehensive rustowl check");
             black_box(output.status.success());
-        })
-    });
-
-    group.finish();
+        });
+    }
 }
-
-criterion_group!(benches, bench_rustowl_check, bench_rustowl_comprehensive);
-criterion_main!(benches);
