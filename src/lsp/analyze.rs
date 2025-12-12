@@ -117,8 +117,8 @@ impl Analyzer {
             .args(["clean", "--package", &package_name])
             .env("CARGO_TARGET_DIR", &target_dir)
             .current_dir(&self.path)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         command.spawn().unwrap().wait().await.ok();
 
         let mut command = toolchain::setup_cargo_command().await;
@@ -137,7 +137,7 @@ impl Analyzer {
             .env("CARGO_TARGET_DIR", &target_dir)
             .env_remove("RUSTC_WRAPPER")
             .current_dir(&self.path)
-            .stdout(std::process::Stdio::piped())
+            .stdout(Stdio::piped())
             .kill_on_drop(true);
 
         if is_cache() {
@@ -145,7 +145,7 @@ impl Analyzer {
         }
 
         if !tracing::enabled!(tracing::Level::INFO) {
-            command.stderr(std::process::Stdio::null());
+            command.stderr(Stdio::null());
         }
 
         let package_count = metadata.packages.len();
@@ -203,13 +203,13 @@ impl Analyzer {
         command.arg("-oNUL");
         command
             .arg(path)
-            .stdout(std::process::Stdio::piped())
+            .stdout(Stdio::piped())
             .kill_on_drop(true);
 
         toolchain::set_rustc_env(&mut command, &sysroot);
 
         if !tracing::enabled!(tracing::Level::INFO) {
-            command.stderr(std::process::Stdio::null());
+            command.stderr(Stdio::null());
         }
 
         tracing::info!("start analyzing {}", path.display());
@@ -249,7 +249,19 @@ impl AnalyzeEventIter {
     pub async fn next_event(&mut self) -> Option<AnalyzerEvent> {
         tokio::select! {
             v = self.receiver.recv() => v,
-            _ = self.notify.notified() => None,
+            _ = self.notify.notified() => {
+                match self.child.wait().await {
+                    Ok(status) => {
+                         if !status.success() {
+                            tracing::error!("Analyzer process exited with status: {}", status);
+                         }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to wait for analyzer process: {}", e);
+                    }
+                }
+                None
+            },
         }
     }
 }

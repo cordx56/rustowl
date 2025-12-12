@@ -4,7 +4,8 @@ mod transform;
 
 use super::cache;
 use rustc_borrowck::consumers::{
-    ConsumerOptions, PoloniusInput, PoloniusOutput, get_bodies_with_borrowck_facts,
+    BodyWithBorrowckFacts, ConsumerOptions, PoloniusInput, PoloniusOutput,
+    get_bodies_with_borrowck_facts,
 };
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_middle::{mir::Local, ty::TyCtxt};
@@ -46,11 +47,22 @@ pub struct MirAnalyzer {
     drop_range: HashMap<Local, Vec<Range>>,
 }
 impl MirAnalyzer {
-    /// initialize analyzer
-    pub fn init(tcx: TyCtxt<'_>, fn_id: LocalDefId) -> MirAnalyzerInitResult {
-        let mut bodies =
+    /// initialize analyzer for the function and all nested bodies (closures, async blocks)
+    pub fn batch_init<'tcx>(tcx: TyCtxt<'tcx>, fn_id: LocalDefId) -> Vec<MirAnalyzerInitResult> {
+        let bodies =
             get_bodies_with_borrowck_facts(tcx, fn_id, ConsumerOptions::PoloniusInputFacts);
-        let mut facts = bodies.remove(&fn_id).expect("body should exist for fn_id");
+
+        bodies
+            .into_iter()
+            .map(|(def_id, facts)| Self::init_one(tcx, def_id, facts))
+            .collect()
+    }
+
+    fn init_one<'tcx>(
+        tcx: TyCtxt<'tcx>,
+        fn_id: LocalDefId,
+        mut facts: BodyWithBorrowckFacts<'tcx>,
+    ) -> MirAnalyzerInitResult {
         let input = *facts.input_facts.take().unwrap();
         let location_table = facts.location_table.take().unwrap();
 

@@ -43,16 +43,18 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     tracing::info!("start borrowck of {def_id:?}");
 
-    let analyzer = MirAnalyzer::init(tcx, def_id);
+    let analyzers = MirAnalyzer::batch_init(tcx, def_id);
 
     {
         let mut tasks = TASKS.lock().unwrap();
-        match analyzer {
-            MirAnalyzerInitResult::Cached(cached) => {
-                handle_analyzed_result(tcx, *cached);
-            }
-            MirAnalyzerInitResult::Analyzer(analyzer) => {
-                tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
+        for analyzer in analyzers {
+            match analyzer {
+                MirAnalyzerInitResult::Cached(cached) => {
+                    handle_analyzed_result(tcx, *cached);
+                }
+                MirAnalyzerInitResult::Analyzer(analyzer) => {
+                    tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
+                }
             }
         }
 
@@ -61,10 +63,6 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
             tracing::info!("one task joined");
             handle_analyzed_result(tcx, result);
         }
-    }
-
-    for def_id in tcx.nested_bodies_within(def_id) {
-        let _ = mir_borrowck(tcx, def_id);
     }
 
     let mut providers = Providers::default();
