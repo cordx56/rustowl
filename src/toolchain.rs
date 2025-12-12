@@ -810,7 +810,7 @@ mod tests {
 
             // Should maintain path structure
             let parent = sysroot.parent();
-            assert!(parent.is_some() || sysroot == PathBuf::from(""));
+            assert!(parent.is_some() || sysroot.as_os_str().is_empty());
         }
     }
 

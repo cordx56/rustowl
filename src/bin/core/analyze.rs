@@ -4,7 +4,7 @@ mod transform;
 
 use super::cache;
 use rustc_borrowck::consumers::{
-    ConsumerOptions, PoloniusInput, PoloniusOutput, get_body_with_borrowck_facts,
+    ConsumerOptions, PoloniusInput, PoloniusOutput, get_bodies_with_borrowck_facts,
 };
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_middle::{mir::Local, ty::TyCtxt};
@@ -48,8 +48,9 @@ pub struct MirAnalyzer {
 impl MirAnalyzer {
     /// initialize analyzer
     pub fn init(tcx: TyCtxt<'_>, fn_id: LocalDefId) -> MirAnalyzerInitResult {
-        let mut facts =
-            get_body_with_borrowck_facts(tcx, fn_id, ConsumerOptions::PoloniusInputFacts);
+        let mut bodies =
+            get_bodies_with_borrowck_facts(tcx, fn_id, ConsumerOptions::PoloniusInputFacts);
+        let mut facts = bodies.remove(&fn_id).expect("body should exist for fn_id");
         let input = *facts.input_facts.take().unwrap();
         let location_table = facts.location_table.take().unwrap();
 

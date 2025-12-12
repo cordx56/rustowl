@@ -477,7 +477,7 @@ mod tests {
     fn test_current_dir_fallback() {
         // Test that we can get current directory or fallback
         let path = env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        assert!(path.exists() || path == std::path::PathBuf::from("."));
+        assert!(path.exists() || path.as_os_str() == ".");
     }
 
     // Test crypto provider installation

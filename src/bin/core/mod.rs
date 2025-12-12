@@ -4,7 +4,7 @@ mod cache;
 use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
-use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
+use rustc_middle::{query::queries, ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::FoldIndexMap as HashMap;
 use rustowl::models::*;
@@ -21,6 +21,7 @@ impl rustc_driver::Callbacks for RustcCallback {}
 static ATOMIC_TRUE: AtomicBool = AtomicBool::new(true);
 static TASKS: LazyLock<Mutex<JoinSet<AnalyzeResult>>> =
     LazyLock::new(|| Mutex::new(JoinSet::new()));
+
 // make tokio runtime
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
     let worker_threads = std::thread::available_parallelism()
@@ -38,6 +39,7 @@ static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
 }
+
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     tracing::info!("start borrowck of {def_id:?}");
 
@@ -65,9 +67,10 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
         let _ = mir_borrowck(tcx, def_id);
     }
 
-    Ok(tcx.arena.alloc(ConcreteOpaqueTypes(
-        rustc_data_structures::fx::FxIndexMap::default(),
-    )))
+    let mut providers = Providers::default();
+    rustc_borrowck::provide(&mut providers);
+    let original_mir_borrowck = providers.mir_borrowck;
+    original_mir_borrowck(tcx, def_id)
 }
 
 pub struct AnalyzerCallback;
@@ -234,20 +237,6 @@ mod tests {
         let _handle = runtime.handle();
         let _enter = runtime.enter();
         assert!(tokio::runtime::Handle::try_current().is_ok());
-    }
-
-    #[test]
-    fn test_rustc_callback_implementation() {
-        // Test that RustcCallback implements the required trait
-        let _callback = RustcCallback;
-        // This verifies that the type can be instantiated and implements Callbacks
-    }
-
-    #[test]
-    fn test_analyzer_callback_implementation() {
-        // Test that AnalyzerCallback implements the required trait
-        let _callback = AnalyzerCallback;
-        // This verifies that the type can be instantiated and implements Callbacks
     }
 
     #[test]
