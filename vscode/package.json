@@ -120,14 +120,14 @@
     "@types/proxyquire": "^1.3.31",
     "@types/sinon": "^21.0.0",
     "@types/vscode": "^1.101.0",
-    "@typescript-eslint/eslint-plugin": "^8.48.1",
-    "@typescript-eslint/parser": "^8.48.1",
+    "@typescript-eslint/eslint-plugin": "^8.49.0",
+    "@typescript-eslint/parser": "^8.49.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.7.1",
     "c8": "^10.1.3",
     "esbuild": "^0.27.1",
-    "eslint": "^9.39.1",
+    "eslint": "^9.39.2",
     "glob": "^13.0.0",
     "mocha": "^11.7.5",
     "npm-run-all2": "^8.0.4",
@@ -140,7 +140,7 @@
   "dependencies": {
     "semver-parser": "^4.1.8",
     "vscode-languageclient": "^9.0.1",
-    "zod": "^4.1.13"
+    "zod": "^4.2.0"
   },
   "packageManager": "pnpm@10.14.0+sha512.ad27a79641b49c3e481a16a805baa71817a04bbe06a38d17e60e2eaee83f6a146c6a688125f5792e48dd5ba30e7da52a5cda4c3992b9ccf333f9ce223af84748"
 }
