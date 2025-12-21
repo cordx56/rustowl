@@ -19,7 +19,7 @@ jobs:
           docker run -v "$PWD":/workdir quay.io/git-chglog/git-chglog --tag-filter-pattern '^v\d+\.\d+\.\d+$' -o CHANGELOG.md
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           add-paths: |
             CHANGELOG.md
