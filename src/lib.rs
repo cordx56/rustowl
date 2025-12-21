@@ -81,7 +81,7 @@ impl Write for IndicatifOrStderr {
         with_active_progress_bar(|pb| {
             if let Some(pb) = pb {
                 for line in msg.lines() {
-                    pb.println(line.to_string());
+                    pb.println(line);
                 }
                 Ok(buf.len())
             } else {

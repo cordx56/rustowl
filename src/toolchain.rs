@@ -101,7 +101,6 @@ async fn download(url: &str) -> Result<Vec<u8>, ()> {
     }
 
     let mut data = Vec::with_capacity(content_length);
-    let mut received = 0;
     while let Some(chunk) = match resp.chunk().await {
         Ok(v) => v,
         Err(e) => {
@@ -114,12 +113,6 @@ async fn download(url: &str) -> Result<Vec<u8>, ()> {
 
         if let Some(progress) = &progress {
             progress.set_position(data.len() as u64);
-        }
-
-        let current = data.len() * 100 / content_length;
-        if received != current {
-            received = current;
-            tracing::trace!("{received:>3}% received");
         }
     }
 
