@@ -1,4 +1,4 @@
-use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
+use clap::{Args, Parser, Subcommand, ValueHint};
 
 #[derive(Debug, Parser)]
 #[command(author, disable_version_flag = true)]
@@ -7,9 +7,9 @@ pub struct Cli {
     #[arg(short = 'V', long = "version")]
     pub version: bool,
 
-    /// Suppress output.
-    #[arg(short, long, action(ArgAction::Count))]
-    pub quiet: u8,
+    /// Logging verbosity (-v/-vv/-vvv) or quiet (-q/-qq).
+    #[command(flatten)]
+    pub verbosity: clap_verbosity_flag::Verbosity<clap_verbosity_flag::WarnLevel>,
 
     /// Use stdio to communicate with the LSP server.
     #[arg(long)]
@@ -109,7 +109,10 @@ mod tests {
         let cli = Cli::try_parse_from(args).unwrap();
 
         assert!(!cli.version);
-        assert_eq!(cli.quiet, 0);
+        assert_eq!(
+            cli.verbosity,
+            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 0)
+        );
         assert!(!cli.stdio);
         assert!(cli.command.is_none());
     }
@@ -130,22 +133,34 @@ mod tests {
         // Single quiet flag
         let args = vec!["rustowl", "-q"];
         let cli = Cli::try_parse_from(args).unwrap();
-        assert_eq!(cli.quiet, 1);
+        assert_eq!(
+            cli.verbosity,
+            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 1)
+        );
 
         // Multiple quiet flags
         let args = vec!["rustowl", "-qq"];
         let cli = Cli::try_parse_from(args).unwrap();
-        assert_eq!(cli.quiet, 2);
+        assert_eq!(
+            cli.verbosity,
+            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 2)
+        );
 
         // Long form
         let args = vec!["rustowl", "--quiet"];
         let cli = Cli::try_parse_from(args).unwrap();
-        assert_eq!(cli.quiet, 1);
+        assert_eq!(
+            cli.verbosity,
+            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 1)
+        );
 
         // Multiple long form
         let args = vec!["rustowl", "--quiet", "--quiet", "--quiet"];
         let cli = Cli::try_parse_from(args).unwrap();
-        assert_eq!(cli.quiet, 3);
+        assert_eq!(
+            cli.verbosity,
+            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 3)
+        );
     }
 
     #[test]
@@ -161,8 +176,26 @@ mod tests {
         let cli = Cli::try_parse_from(args).unwrap();
 
         assert!(cli.version);
-        assert_eq!(cli.quiet, 1);
+        assert_eq!(
+            cli.verbosity,
+            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 1)
+        );
         assert!(cli.stdio);
+    }
+
+    #[test]
+    fn test_cli_verbosity_flags() {
+        let cli = Cli::try_parse_from(["rustowl", "-v"]).unwrap();
+        assert_eq!(
+            cli.verbosity,
+            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(1, 0)
+        );
+
+        let cli = Cli::try_parse_from(["rustowl", "-vv"]).unwrap();
+        assert_eq!(
+            cli.verbosity,
+            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(2, 0)
+        );
     }
 
     #[test]
@@ -407,14 +440,14 @@ mod tests {
     fn test_cli_debug_impl() {
         let cli = Cli {
             version: true,
-            quiet: 2,
+            verbosity: clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 2),
             stdio: true,
             command: Some(Commands::Clean),
         };
 
         let debug_str = format!("{cli:?}");
         assert!(debug_str.contains("version: true"));
-        assert!(debug_str.contains("quiet: 2"));
+        assert!(debug_str.contains("verbosity"));
         assert!(debug_str.contains("stdio: true"));
         assert!(debug_str.contains("Clean"));
     }
@@ -435,24 +468,45 @@ mod tests {
 
     #[test]
     fn test_complex_cli_scenarios() {
-        // Test multiple flags with command
+        // `-q` conflicts with `-v` (by design).
+        let args = vec!["rustowl", "-v", "-qqq", "check"];
+        assert!(Cli::try_parse_from(args).is_err());
+
+        // Multiple flags with command (verbosity only)
         let args = vec![
             "rustowl",
-            "-qqq",
+            "-v",
             "--stdio",
             "check",
             "./src",
             "--all-targets",
         ];
         let cli = Cli::try_parse_from(args).unwrap();
-
-        assert_eq!(cli.quiet, 3);
         assert!(cli.stdio);
+        assert_eq!(
+            cli.verbosity,
+            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(1, 0)
+        );
         match cli.command {
             Some(Commands::Check(check)) => {
                 assert_eq!(check.path, Some(PathBuf::from("./src")));
                 assert!(check.all_targets);
                 assert!(!check.all_features);
+            }
+            _ => panic!("Expected Check command"),
+        }
+
+        // Multiple flags with command (quiet only)
+        let args = vec!["rustowl", "-qq", "check", "./src", "--all-targets"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert_eq!(
+            cli.verbosity,
+            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 2)
+        );
+        match cli.command {
+            Some(Commands::Check(check)) => {
+                assert_eq!(check.path, Some(PathBuf::from("./src")));
+                assert!(check.all_targets);
             }
             _ => panic!("Expected Check command"),
         }

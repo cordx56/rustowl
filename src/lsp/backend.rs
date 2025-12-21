@@ -55,7 +55,7 @@ impl Backend {
     }
 
     pub async fn analyze(&self, _params: AnalyzeRequest) -> Result<AnalyzeResponse> {
-        tracing::info!("rustowl/analyze request received");
+        tracing::debug!("rustowl/analyze request received");
         self.do_analyze().await;
         Ok(AnalyzeResponse {})
     }
@@ -65,19 +65,19 @@ impl Backend {
     }
 
     async fn analyze_with_options(&self, all_targets: bool, all_features: bool) {
-        tracing::info!("wait 100ms for rust-analyzer");
+        tracing::trace!("wait 100ms for rust-analyzer");
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        tracing::info!("stop running analysis processes");
+        tracing::debug!("stop running analysis processes");
         self.shutdown_subprocesses().await;
 
-        tracing::info!("start analysis");
+        tracing::debug!("start analysis");
         {
             *self.status.write().await = progress::AnalysisStatus::Analyzing;
         }
         let analyzers = { self.analyzers.read().await.clone() };
 
-        tracing::info!("analyze {} packages...", analyzers.len());
+        tracing::debug!("analyze {} packages...", analyzers.len());
         for analyzer in analyzers {
             let analyzed = self.analyzed.clone();
             let client = self.client.clone();
@@ -105,7 +105,6 @@ impl Backend {
                 };
 
                 let mut iter = analyzer.analyze(all_targets, all_features).await;
-                let mut analyzed_package_count = 0;
                 while let Some(event) = tokio::select! {
                     _ = cancellation_token.cancelled() => None,
                     event = iter.next_event() => event,
@@ -113,12 +112,11 @@ impl Backend {
                     match event {
                         AnalyzerEvent::CrateChecked {
                             package,
+                            package_index,
                             package_count,
                         } => {
-                            analyzed_package_count += 1;
                             if let Some(token) = &progress_token {
-                                let percentage =
-                                    (analyzed_package_count * 100 / package_count).min(100);
+                                let percentage = (package_index * 100 / package_count).min(100);
                                 token
                                     .report(
                                         Some(format!("{package} analyzed")),
@@ -255,25 +253,81 @@ impl Backend {
         all_targets: bool,
         all_features: bool,
     ) -> bool {
+        use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+        use std::io::IsTerminal;
+
         let path = path.as_ref();
         let (service, _) = LspService::build(Backend::new).finish();
         let backend = service.inner();
 
-        if backend.add_analyze_target(path).await {
-            backend
-                .analyze_with_options(all_targets, all_features)
-                .await;
-            while backend.processes.write().await.join_next().await.is_some() {}
-            backend
-                .analyzed
-                .read()
-                .await
-                .as_ref()
-                .map(|v| !v.0.is_empty())
-                .unwrap_or(false)
-        } else {
-            false
+        if !backend.add_analyze_target(path).await {
+            return false;
         }
+
+        let progress_bar = if std::io::stderr().is_terminal() {
+            let progress_bar = ProgressBar::new(0);
+            progress_bar.set_draw_target(ProgressDrawTarget::stderr());
+            progress_bar.set_style(
+                ProgressStyle::with_template(
+                    "{spinner:.green} {wide_msg} [{bar:40.cyan/blue}] {pos}/{len}",
+                )
+                .unwrap(),
+            );
+            progress_bar.set_message("Analyzing...");
+            Some(progress_bar)
+        } else {
+            None
+        };
+
+        let _progress_guard = progress_bar
+            .as_ref()
+            .cloned()
+            .map(crate::ActiveProgressBarGuard::set);
+
+        // Re-analyze, but consume the iterator and use it to power a CLI progress bar.
+        backend.shutdown_subprocesses().await;
+        let analyzers = { backend.analyzers.read().await.clone() };
+
+        for analyzer in analyzers {
+            let mut iter = analyzer.analyze(all_targets, all_features).await;
+            while let Some(event) = iter.next_event().await {
+                match event {
+                    AnalyzerEvent::CrateChecked {
+                        package,
+                        package_index,
+                        package_count,
+                    } => {
+                        if let Some(pb) = &progress_bar {
+                            pb.set_length(package_count as u64);
+                            pb.set_position(package_index as u64);
+                            pb.set_message(format!("Checking {package}"));
+                        }
+                    }
+                    AnalyzerEvent::Analyzed(ws) => {
+                        let write = &mut *backend.analyzed.write().await;
+                        for krate in ws.0.into_values() {
+                            if let Some(write) = write {
+                                write.merge(krate);
+                            } else {
+                                *write = Some(krate);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(pb) = progress_bar {
+            pb.finish_and_clear();
+        }
+
+        backend
+            .analyzed
+            .read()
+            .await
+            .as_ref()
+            .map(|v| !v.0.is_empty())
+            .unwrap_or(false)
     }
 
     pub async fn shutdown_subprocesses(&self) {

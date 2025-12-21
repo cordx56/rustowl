@@ -34,14 +34,19 @@ harness = false
 name = "line_col_bench"
 
 [dependencies]
+anyhow = "1"
 cargo_metadata = "0.23"
 clap = { version = "4", features = ["cargo", "derive"] }
 clap_complete = "4"
 clap_complete_nushell = "4"
-anyhow = "1"
+clap-verbosity-flag = { version = "3", default-features = false, features = [
+  "tracing"
+] }
 flate2 = "1"
 foldhash = "0.2.0"
 indexmap = { version = "2", features = ["rayon", "serde"] }
+indicatif = "0.17"
+memchr = "2"
 process_alive = "0.2"
 rayon = "1"
 reqwest = { version = "0.12", default-features = false, features = [
@@ -57,7 +62,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 smallvec = { version = "1.15", features = ["serde", "union"] }
 smol_str = { version = "0.3", features = ["serde"] }
-memchr = "2"
 tar = "0.4.44"
 tempfile = "3"
 tokio = { version = "1", features = [
@@ -77,7 +81,6 @@ tracing = "0.1.43"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "smallvec"] }
 uuid = { version = "1", features = ["v4"] }
 
-
 [dev-dependencies]
 divan = "0.1"
 rand = { version = "0.9", features = ["small_rng"] }
@@ -87,6 +90,9 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 clap_complete_nushell = "4"
 clap_mangen = "0.2"
+clap-verbosity-flag = { version = "3", default-features = false, features = [
+  "tracing"
+] }
 regex = "1"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
@@ -103,8 +109,8 @@ lto = "fat"
 codegen-units = 1
 
 [profile.release.package."*"]
-strip = "symbols"
 opt-level = 3
+strip = "symbols"
 
 [profile.arm-windows-release]
 inherits = "release"

@@ -26,6 +26,7 @@ pub enum CargoCheckMessage {
 pub enum AnalyzerEvent {
     CrateChecked {
         package: String,
+        package_index: usize,
         package_count: usize,
     },
     Analyzed(Workspace),
@@ -111,7 +112,7 @@ impl Analyzer {
     ) -> AnalyzeEventIter {
         let package_name = metadata.root_package().as_ref().unwrap().name.to_string();
         let target_dir = metadata.target_directory.as_std_path().join("owl");
-        tracing::info!("clear cargo cache");
+        tracing::debug!("clear cargo cache");
         let mut command = toolchain::setup_cargo_command().await;
         command
             .args(["clean", "--package", &package_name])
@@ -150,7 +151,7 @@ impl Analyzer {
 
         let package_count = metadata.packages.len();
 
-        tracing::info!("start analyzing package {package_name}");
+        tracing::debug!("start analyzing package {package_name}");
         let mut child = command.spawn().unwrap();
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
@@ -159,15 +160,18 @@ impl Analyzer {
         let notify_c = notify.clone();
         let _handle = tokio::spawn(async move {
             // prevent command from dropped
+            let mut checked_count = 0usize;
             while let Ok(Some(line)) = stdout.next_line().await {
                 if let Ok(CargoCheckMessage::CompilerArtifact { target }) =
                     serde_json::from_str(&line)
                 {
                     let checked = target.name;
-                    tracing::info!("crate {checked} checked");
+                    tracing::trace!("crate {checked} checked");
 
+                    checked_count = checked_count.saturating_add(1);
                     let event = AnalyzerEvent::CrateChecked {
                         package: checked,
+                        package_index: checked_count,
                         package_count,
                     };
                     let _ = sender.send(event).await;
@@ -177,7 +181,7 @@ impl Analyzer {
                     let _ = sender.send(event).await;
                 }
             }
-            tracing::info!("stdout closed");
+            tracing::debug!("stdout closed");
             notify_c.notify_one();
         });
 
@@ -209,7 +213,7 @@ impl Analyzer {
             command.stderr(Stdio::null());
         }
 
-        tracing::info!("start analyzing {}", path.display());
+        tracing::debug!("start analyzing {}", path.display());
         let mut child = command.spawn().unwrap();
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
@@ -224,7 +228,7 @@ impl Analyzer {
                     let _ = sender.send(event).await;
                 }
             }
-            tracing::info!("stdout closed");
+            tracing::debug!("stdout closed");
             notify_c.notify_one();
         });
 
