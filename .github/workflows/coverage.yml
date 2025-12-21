@@ -1,114 +1,101 @@
 name: Coverage Check
-
 on:
   pull_request_target:
   push:
-    branches: [ main ]
-
+    branches: [main]
 jobs:
   coverage:
     runs-on: ubuntu-latest
     permissions:
       issues: write
       pull-requests: write
-
     steps:
-    - uses: actions/checkout@v5
-      with:
-        ref: ${{ github.event.pull_request.head.sha }}
-        fetch-depth: 0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
+        with:
+          toolchain: nightly
+      - name: Install cargo-llvm-cov and nextest
+        run: |
+          cargo install cargo-llvm-cov cargo-nextest
+      - name: Run llvm-cov on current branch
+        run: |
+          mkdir -p ./current-coverage
+          cargo llvm-cov --no-report nextest
+          cargo llvm-cov --no-report --doc
+          cargo llvm-cov report --json --summary-only --doctests --output-path ./current-coverage/coverage.json
+      - name: Checkout base branch
+        run: git checkout ${{ github.event.pull_request.base.sha }}
+      - name: Cache base coverage
+        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        id: base-cache
+        with:
+          path: ./base-coverage
+          key: coverage-${{ github.event.pull_request.base.sha }}
+      - name: Run llvm-cov on base branch
+        if: steps.base-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ./base-coverage
+          cargo llvm-cov --no-report nextest
+          cargo llvm-cov --no-report --doc
+          cargo llvm-cov report --json --summary-only --doctests --output-path ./base-coverage/coverage.json
+      - name: Compare coverage
+        id: compare
+        continue-on-error: true
+        run: |
+          current=$(jq '.totals.lines.percent // .data[0].totals.lines.percent // .lines.percent // 0' ./current-coverage/coverage.json)
+          base=$(jq '.totals.lines.percent // .data[0].totals.lines.percent // .lines.percent // 0' ./base-coverage/coverage.json)
+          diff=$(echo "$current - $base" | bc -l)
+          if (( $(echo "$current < $base" | bc -l) )); then
+            echo "Coverage decreased from $base% to $current%"
+            echo "FAILED" > coverage_status.txt
+          fi
+      - name: Post or update PR comment
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const fs = require('fs');
+            const currentData = JSON.parse(fs.readFileSync('./current-coverage/coverage.json', 'utf8'));
+            const baseData = JSON.parse(fs.readFileSync('./base-coverage/coverage.json', 'utf8'));
+            const currentTotals = currentData.totals || currentData.data?.[0]?.totals || {};
+            const baseTotals = baseData.totals || baseData.data?.[0]?.totals || {};
+            const currentLines = currentTotals.lines?.percent || 0;
+            const baseLines = baseTotals.lines?.percent || 0;
+            const currentFunctions = currentTotals.functions?.percent || 0;
+            const baseFunctions = baseTotals.functions?.percent || 0;
+            const currentRegions = currentTotals.regions?.percent || 0;
+            const baseRegions = baseTotals.regions?.percent || 0;
+            const diff = (currentLines - baseLines).toFixed(6);
+            const failed = fs.existsSync('./coverage_status.txt');
+            const status = failed ? '❌ Decreased' : currentLines > baseLines ? '✅ Increased' : '➡️ No change';
+            const body = `## Coverage Report\n\n### Overall Metrics\n- **Lines:** ${currentLines.toFixed(2)}% (base: ${baseLines.toFixed(2)}%)\n- **Functions:** ${currentFunctions.toFixed(2)}% (base: ${baseFunctions.toFixed(2)}%)\n- **Regions:** ${currentRegions.toFixed(2)}% (base: ${baseRegions.toFixed(2)}%)\n\n### Summary\n- **Difference:** ${diff}%\n- **Status:** ${status}\n\n${failed ? '⚠️ Coverage regression detected. Please add tests to maintain or increase coverage.' : ''}`;
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: nightly
-
-    - name: Install cargo-llvm-cov and nextest
-      run: |
-        cargo install cargo-llvm-cov cargo-nextest
-
-    - name: Run llvm-cov on current branch
-      run: |
-        mkdir -p ./current-coverage
-        cargo llvm-cov --no-report nextest
-        cargo llvm-cov --no-report --doc
-        cargo llvm-cov report --json --summary-only --doctests --output-path ./current-coverage/coverage.json
-
-    - name: Checkout base branch
-      run: git checkout ${{ github.event.pull_request.base.sha }}
-
-    - name: Cache base coverage
-      uses: actions/cache@v4
-      id: base-cache
-      with:
-        path: ./base-coverage
-        key: coverage-${{ github.event.pull_request.base.sha }}
-
-    - name: Run llvm-cov on base branch
-      if: steps.base-cache.outputs.cache-hit != 'true'
-      run: |
-        mkdir -p ./base-coverage
-        cargo llvm-cov --no-report nextest
-        cargo llvm-cov --no-report --doc
-        cargo llvm-cov report --json --summary-only --doctests --output-path ./base-coverage/coverage.json
-
-    - name: Compare coverage
-      id: compare
-      continue-on-error: true
-      run: |
-        current=$(jq '.totals.lines.percent // .data[0].totals.lines.percent // .lines.percent // 0' ./current-coverage/coverage.json)
-        base=$(jq '.totals.lines.percent // .data[0].totals.lines.percent // .lines.percent // 0' ./base-coverage/coverage.json)
-        diff=$(echo "$current - $base" | bc -l)
-        if (( $(echo "$current < $base" | bc -l) )); then
-          echo "Coverage decreased from $base% to $current%"
-          echo "FAILED" > coverage_status.txt
-        fi
-
-    - name: Post or update PR comment
-      uses: actions/github-script@v8
-      with:
-        script: |
-          const fs = require('fs');
-          const currentData = JSON.parse(fs.readFileSync('./current-coverage/coverage.json', 'utf8'));
-          const baseData = JSON.parse(fs.readFileSync('./base-coverage/coverage.json', 'utf8'));
-          const currentTotals = currentData.totals || currentData.data?.[0]?.totals || {};
-          const baseTotals = baseData.totals || baseData.data?.[0]?.totals || {};
-          const currentLines = currentTotals.lines?.percent || 0;
-          const baseLines = baseTotals.lines?.percent || 0;
-          const currentFunctions = currentTotals.functions?.percent || 0;
-          const baseFunctions = baseTotals.functions?.percent || 0;
-          const currentRegions = currentTotals.regions?.percent || 0;
-          const baseRegions = baseTotals.regions?.percent || 0;
-          const diff = (currentLines - baseLines).toFixed(6);
-          const failed = fs.existsSync('./coverage_status.txt');
-          const status = failed ? '❌ Decreased' : currentLines > baseLines ? '✅ Increased' : '➡️ No change';
-          const body = `## Coverage Report\n\n### Overall Metrics\n- **Lines:** ${currentLines.toFixed(2)}% (base: ${baseLines.toFixed(2)}%)\n- **Functions:** ${currentFunctions.toFixed(2)}% (base: ${baseFunctions.toFixed(2)}%)\n- **Regions:** ${currentRegions.toFixed(2)}% (base: ${baseRegions.toFixed(2)}%)\n\n### Summary\n- **Difference:** ${diff}%\n- **Status:** ${status}\n\n${failed ? '⚠️ Coverage regression detected. Please add tests to maintain or increase coverage.' : ''}`;
-
-          const comments = await github.rest.issues.listComments({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: context.issue.number,
-          });
-
-          const existing = comments.data.find(c => c.body.includes('## Coverage Report'));
-          if (existing) {
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: existing.id,
-              body: body
-            });
-          } else {
-            await github.rest.issues.createComment({
+            const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: body
             });
-          }
 
-    - name: Fail if coverage decreased
-      if: steps.compare.outcome == 'failure'
-      run: exit 1
+            const existing = comments.data.find(c => c.body.includes('## Coverage Report'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+      - name: Fail if coverage decreased
+        if: steps.compare.outcome == 'failure'
+        run: exit 1
