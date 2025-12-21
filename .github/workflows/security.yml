@@ -1,16 +1,15 @@
 name: Security & Memory Safety
-
 on:
   pull_request:
     branches: ["main"]
   push:
     branches: ["main"]
   workflow_dispatch:
-
+permissions:
+  contents: read
 env:
   CARGO_TERM_COLOR: always
   RUSTC_BOOTSTRAP: 1
-
 jobs:
   security-checks:
     name: Security & Memory Safety Analysis
@@ -27,25 +26,25 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - name: Get toolchain from channel file
+        run: |
+          echo "channel=$(awk -F'"' '/channel/ { print $2 }' rust-toolchain.toml)" >> $GITHUB_ENV
       - name: Install Rust toolchain (from rust-toolchain.toml)
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@0b1efabc08b657293548b77fb76cc02d26091c7e
         with:
           components: miri,rust-src,llvm-tools-preview,rustc-dev
-          # Automatically reads from rust-toolchain.toml
-          cache: false
-
+          toolchain: ${{ env.channel }}
       - name: Install system dependencies (Linux)
         if: matrix.runner_os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y valgrind
-
       - name: Make scripts executable (Unix)
         if: runner.os != 'Windows'
         run: chmod +x scripts/*.sh
-
       - name: Run comprehensive security checks
         shell: bash
         run: |
@@ -56,7 +55,6 @@ jobs:
             echo "::error::Security tests failed"
             exit 1
           fi
-
       - name: Create security summary and cleanup
         if: failure()
         shell: bash
@@ -85,7 +83,6 @@ jobs:
             ls -la security-logs/
             echo "Total log directory size: $(du -sh security-logs 2>/dev/null | cut -f1 || echo 'N/A')"
           fi
-
       - name: Cleanup build artifacts (on success)
         if: success()
         shell: bash
@@ -96,10 +93,9 @@ jobs:
             echo "Removing security logs (tests passed)"
             rm -rf security-logs/
           fi
-
       - name: Upload security artifacts (on failure only)
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: security-logs-${{ matrix.os }}-${{ github.run_id }}
           path: |

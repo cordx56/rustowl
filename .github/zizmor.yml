@@ -1,0 +1,7 @@
+rules:
+  cache-poisoning:
+    ignore:
+      - release.yml
+  use-trusted-publishing:
+    ignore:
+      - release.yml

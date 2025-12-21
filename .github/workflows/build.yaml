@@ -1,5 +1,4 @@
 name: Build RustOwl
-
 on:
   push:
     branches: ["main"]
@@ -11,7 +10,6 @@ on:
       run_id:
         description: Run ID of this workflow
         value: ${{ github.run_id }}
-
 jobs:
   rustowl:
     if: github.event.action != 'labeled' || github.event.label.name == 'do-build-check'
@@ -21,21 +19,20 @@ jobs:
           - ubuntu-24.04
           - ubuntu-24.04-arm
           - macos-15
-          - macos-13
+          - macos-15-intel
           - windows-2022
           - windows-11-arm
-
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     defaults:
       run:
         shell: bash
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       # Using fat LTO causes failure to link on Windows ARM
       - name: Set build profile
         run: |
@@ -44,12 +41,10 @@ jobs:
           else
             echo "build_profile=release" >> $GITHUB_ENV
           fi
-
       # uname on Windows on ARM returns "x86_64"
       - name: Set ARCH flag for Windows on ARM
         if: matrix.os == 'windows-11-arm'
         run: echo "TOOLCHAIN_ARCH=aarch64" >> $GITHUB_ENV
-
       - name: setup env
         run: |
           host_tuple="$(./scripts/build/toolchain eval 'echo $HOST_TUPLE')"
@@ -60,13 +55,11 @@ jobs:
           ([[ "$host_tuple" == *msvc* ]] && echo "exec_ext=.exe" || echo "exec_ext=") >> $GITHUB_ENV
           ([[ "$host_tuple" == *windows* ]] && echo "is_windows=true" || echo "is_windows=false") >> $GITHUB_ENV
           ([[ "$host_tuple" == *linux* ]] && echo "is_linux=true" || echo "is_linux=false") >> $GITHUB_ENV
-
       - name: Install zig
         if: ${{ env.is_linux == 'true' }}
-        uses: mlugg/setup-zig@v2
+        uses: mlugg/setup-zig@fa65c4058643678a4e4a9a60513944a7d8d35440 # v2.1.0
         with:
           version: 0.13.0
-
       - name: Build
         run: |
           if [[ "${{ env.is_linux }}" == "true" ]]; then
@@ -75,11 +68,9 @@ jobs:
           else
             ./scripts/build/toolchain cargo build --target ${{ env.host_tuple }} --profile=${{ env.build_profile }}
           fi
-
       - name: Check the functionality
         run: |
           ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
-
       - name: Set archive name
         run: |
           if [[ "${{ env.is_windows }}" == "true" ]]; then
@@ -87,7 +78,6 @@ jobs:
           else
             echo "archive_name=rustowl-${{ env.host_tuple }}.tar.gz" >> $GITHUB_ENV
           fi
-
       - name: Setup archive artifacts
         run: |
           rm -rf rustowl && mkdir -p rustowl/sysroot/${{ env.toolchain }}/bin
@@ -113,43 +103,38 @@ jobs:
           fi
 
           cp ./rustowl/rustowl${{ env.exec_ext }} ./rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
-
       - name: Upload
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: rustowl-runtime-${{ env.host_tuple }}
           path: |
             rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
             ${{ env.archive_name }}
-
   vscode:
     if: github.event.action != 'labeled' || github.event.label.name == 'do-build-check'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
           node-version: 20
-
       - name: Setup PNPM And Install dependencies
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
         with:
           package_json_file: ./vscode/package.json
           run_install: |
             - cwd: ./vscode
-
       - name: Create VSIX
         run: pnpm build
         working-directory: ./vscode
-
       - name: Upload
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: rustowl-vscode
           path: vscode/**/*.vsix

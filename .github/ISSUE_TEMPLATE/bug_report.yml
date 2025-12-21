@@ -10,7 +10,6 @@ body:
         Before submitting, please search existing issues to avoid duplicates. If a similar issue exists, comment there instead of opening a new one.
 
         To help us resolve the issue efficiently, please provide the necessary details below.
-
   - type: textarea
     id: bug-description
     attributes:
@@ -19,7 +18,6 @@ body:
       placeholder: Provide a clear and concise description of the problem, including what you expected to happen and what actually occurred.
     validations:
       required: true
-
   - type: textarea
     id: environment
     attributes:
