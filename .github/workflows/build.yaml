@@ -62,28 +62,28 @@ jobs:
           version: 0.13.0
       - name: Build
         run: |
-          if [[ "${{ env.is_linux }}" == "true" ]]; then
+          if [[ "${IS_LINUX}" == "true" ]]; then
             ./scripts/build/toolchain cargo install --locked cargo-zigbuild
-            ./scripts/build/toolchain cargo zigbuild --target ${{ env.host_tuple }}.2.17 --profile=${{ env.build_profile }}
+            ./scripts/build/toolchain cargo zigbuild --target ${HOST_TUPLE}.2.17 --profile=${BUILD_PROFILE}
           else
-            ./scripts/build/toolchain cargo build --target ${{ env.host_tuple }} --profile=${{ env.build_profile }}
+            ./scripts/build/toolchain cargo build --target ${HOST_TUPLE} --profile=${BUILD_PROFILE}
           fi
       - name: Check the functionality
         run: |
-          ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
+          ./target/${HOST_TUPLE}/${BUILD_PROFILE}/rustowl${EXEC_EXT} check ./perf-tests/dummy-package
       - name: Set archive name
         run: |
-          if [[ "${{ env.is_windows }}" == "true" ]]; then
-            echo "archive_name=rustowl-${{ env.host_tuple }}.zip" >> $GITHUB_ENV
+          if [[ "${IS_WINDOWS}" == "true" ]]; then
+            echo "archive_name=rustowl-${HOST_TUPLE}.zip" >> $GITHUB_ENV
           else
-            echo "archive_name=rustowl-${{ env.host_tuple }}.tar.gz" >> $GITHUB_ENV
+            echo "archive_name=rustowl-${HOST_TUPLE}.tar.gz" >> $GITHUB_ENV
           fi
       - name: Setup archive artifacts
         run: |
-          rm -rf rustowl && mkdir -p rustowl/sysroot/${{ env.toolchain }}/bin
+          rm -rf rustowl && mkdir -p rustowl/sysroot/${TOOLCHAIN}/bin
 
-          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./rustowl/
-          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/sysroot/${{ env.toolchain }}/bin
+          cp target/${HOST_TUPLE}/${BUILD_PROFILE}/rustowl${EXEC_EXT} ./rustowl/
+          cp target/${HOST_TUPLE}/${BUILD_PROFILE}/rustowlc${EXEC_EXT} ./rustowl/sysroot/${TOOLCHAIN}/bin
 
           cp README.md ./rustowl
           cp LICENSE ./rustowl
@@ -92,17 +92,17 @@ jobs:
           cp -r rustowl-build-time-out/completions ./rustowl
           cp -r rustowl-build-time-out/man ./rustowl
 
-          rm -rf ${{ env.archive_name }}
+          rm -rf ${ARCHIVE_NAME}
 
-          if [[ "${{ env.is_windows }}" == "true" ]]; then
-            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath ".\${{ env.archive_name }}" -CompressionLevel Optimal'
+          if [[ "${IS_WINDOWS}" == "true" ]]; then
+            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath ".\${ARCHIVE_NAME}" -CompressionLevel Optimal'
           else
             cd rustowl
-            tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ completions/ man/ rustowl${{ env.exec_ext }}
+            tar -czvf ../${ARCHIVE_NAME} README.md LICENSE sysroot/ completions/ man/ rustowl${EXEC_EXT}
             cd ..
           fi
 
-          cp ./rustowl/rustowl${{ env.exec_ext }} ./rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
+          cp ./rustowl/rustowl${EXEC_EXT} ./rustowl-${HOST_TUPLE}${EXEC_EXT}
       - name: Upload
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:

@@ -5,3 +5,7 @@ rules:
   use-trusted-publishing:
     ignore:
       - release.yml
+  dangerous-triggers:
+    ignore:
+      - validate-pr-title.yml
+      - coverage.yml
