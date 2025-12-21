@@ -45,7 +45,7 @@ clap-verbosity-flag = { version = "3", default-features = false, features = [
 flate2 = "1"
 foldhash = "0.2.0"
 indexmap = { version = "2", features = ["rayon", "serde"] }
-indicatif = "0.17"
+indicatif = "0.18"
 memchr = "2"
 process_alive = "0.2"
 rayon = "1"
@@ -77,7 +77,7 @@ tokio = { version = "1", features = [
 ] }
 tokio-util = "0.7"
 tower-lsp-server = "0.23"
-tracing = "0.1.43"
+tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "smallvec"] }
 uuid = { version = "1", features = ["v4"] }
 
@@ -100,7 +100,7 @@ tikv-jemalloc-sys = "0.6"
 tikv-jemallocator = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-zip = "6.0.0"
+zip = "7.0.0"
 
 [profile.release]
 opt-level = 3
