@@ -2,3 +2,4 @@ onlyBuiltDependencies:
   - "@vscode/vsce-sign"
   - esbuild
   - keytar
+  - unrs-resolver

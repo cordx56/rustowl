@@ -107,7 +107,12 @@
     "compile-tests": "tsc",
     "watch-tests": "tsc -w --outDir out",
     "check-types": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "run-s lint:oxlint lint:eslint",
+    "lint:fix": "run-s lint:oxlint:fix lint:eslint:fix",
+    "lint:eslint": "eslint .",
+    "lint:eslint:fix": "pnpm run lint:eslint --fix",
+    "lint:oxlint": "oxlint . --type-aware",
+    "lint:oxlint:fix": "pnpm run lint:oxlint --fix",
     "test": "run-s compile compile-tests run-test",
     "run-test": "node out/tests/runTest.js",
     "coverage": "c8 --include=\"out/src/**/*.js\" --all --reporter=text pnpm run test",
@@ -115,10 +120,12 @@
     "build": "vsce package --no-dependencies"
   },
   "devDependencies": {
+    "@eslint/compat": "^1.4.1",
+    "@eslint/js": "^9.39.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.0.3",
     "@types/proxyquire": "^1.3.31",
-    "@types/sinon": "^21.0.0",
+    "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.107.0",
     "@typescript-eslint/eslint-plugin": "^8.50.0",
     "@typescript-eslint/parser": "^8.50.0",
@@ -128,19 +135,32 @@
     "c8": "^10.1.3",
     "esbuild": "^0.27.2",
     "eslint": "^9.39.2",
-    "glob": "^13.0.0",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import-x": "^4.16.1",
+    "eslint-plugin-jsdoc": "^54.7.0",
+    "eslint-plugin-n": "^17.23.1",
+    "eslint-plugin-oxlint": "^1.26.0",
+    "eslint-plugin-promise": "^7.2.1",
+    "eslint-plugin-security": "^3.0.1",
+    "eslint-plugin-unicorn": "^60.0.0",
+    "glob": "^11.0.3",
+    "globals": "^16.5.0",
     "mocha": "^11.7.5",
     "npm-run-all2": "^8.0.4",
     "ovsx": "^0.10.7",
+    "oxlint": "^1.26.0",
+    "oxlint-tsgolint": "^0.0.4",
     "prettier": "^3.7.4",
     "proxyquire": "^2.1.3",
     "sinon": "^21.0.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.50.0"
   },
   "dependencies": {
+    "@types/vscode": "^1.105.0",
     "semver-parser": "^4.1.8",
     "vscode-languageclient": "^9.0.1",
     "zod": "^4.2.1"
   },
-  "packageManager": "pnpm@10.26.1+sha512.664074abc367d2c9324fdc18037097ce0a8f126034160f709928e9e9f95d98714347044e5c3164d65bd5da6c59c6be362b107546292a8eecb7999196e5ce58fa"
+  "packageManager": "pnpm@10.26.1"
 }

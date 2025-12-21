@@ -1,12 +1,15 @@
-import * as bootstrap from "../src/bootstrap.js";
-import sinon from "sinon";
-import { describe, it, beforeEach, afterEach } from "mocha";
-import * as vscode from "vscode";
-import * as extension from "../src/extension.js";
-import { context } from "./mocks.js";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+
+import { describe, it, beforeEach, afterEach } from "mocha";
+import sinon from "sinon";
+import * as vscode from "vscode";
 import { LanguageClient } from "vscode-languageclient/node";
+
+import * as bootstrap from "../src/bootstrap.js";
+import * as extension from "../src/extension.js";
+
+import { context } from "./mocks.js";
 
 describe("Extension Test Suite", () => {
   let sandbox: sinon.SinonSandbox;
@@ -76,7 +79,12 @@ describe("Extension Test Suite", () => {
     assert.equal(clientStartStub.callCount, 1);
   });
 
-  it("deactivates cleanly", () => {
+  it("deactivates cleanly", async () => {
+    // Set up client first
+    sandbox.stub(bootstrap, "bootstrapRustowl").resolves("rustowl");
+    await extension.activate(context);
+
+    // Now deactivate
     extension.deactivate();
     assert.equal(clientStopStub.callCount, 1);
   });

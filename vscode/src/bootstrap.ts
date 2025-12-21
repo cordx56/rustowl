@@ -1,7 +1,9 @@
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+
 import * as vscode from "vscode";
+
 import packageJson from "../package.json";
 
 const version: string = packageJson.version;
@@ -21,61 +23,58 @@ export const hostTuple = (): string | null => {
   } else if (process.platform === "win32") {
     platform = "pc-windows-msvc";
   }
-  if (arch && platform) {
-    return `${arch}-${platform}`;
-  } else {
-    return null;
-  }
+  return arch !== null && platform !== null ? `${arch}-${platform}` : null;
 };
 
-const exeExt = hostTuple()?.includes("windows") ? ".exe" : "";
+const exeExt = hostTuple()?.includes("windows") === true ? ".exe" : "";
 
 export const downloadRustowl = async (basePath: string) => {
   const baseUrl = `https://github.com/cordx56/rustowl/releases/download/v${version}`;
   const host = hostTuple();
-  if (host) {
+  if (host !== null) {
     const owl = await fetch(`${baseUrl}/rustowl-${host}${exeExt}`);
     if (owl.status !== 200) {
-      throw Error("RustOwl download error");
+      throw new Error("RustOwl download error");
     }
-    await fs.writeFile(
-      `${basePath}/rustowl${exeExt}`,
-      Buffer.from(await owl.arrayBuffer()),
-      { flag: "w" },
-    );
-    await fs.chmod(`${basePath}/rustowl${exeExt}`, "755");
+    const filePath = `${basePath}/rustowl${exeExt}`;
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await fs.writeFile(filePath, Buffer.from(await owl.arrayBuffer()), {
+      flag: "w",
+    });
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await fs.chmod(filePath, "755");
   } else {
-    throw Error("unsupported architecture or platform");
+    throw new Error("unsupported architecture or platform");
   }
 };
 
 const exists = async (path: string) => {
-  return fs
-    .access(path)
-    .then(() => true)
-    .catch(() => false);
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
 };
 export const needUpdated = async (currentVersion: string) => {
   if (!currentVersion) {
     return true;
   }
+  // eslint-disable-next-line no-console
   console.log(`current RustOwl version: ${currentVersion.trim()}`);
+  // eslint-disable-next-line no-console
   console.log(`extension version: v${version}`);
   try {
     const semverParser = await import("semver-parser");
     const current = semverParser.parseSemVer(currentVersion.trim(), false);
     const self = semverParser.parseSemVer(version, false);
-    if (
-      current.major === self.major &&
+    return current.major === self.major &&
       current.minor === self.minor &&
       current.patch === self.patch &&
       JSON.stringify(current.pre) === JSON.stringify(self.pre)
-    ) {
-      return false;
-    } else {
-      return true;
-    }
-  } catch (_e) {
+      ? false
+      : true;
+  } catch {
     return true;
   }
 };
@@ -96,11 +95,12 @@ const getRustowlCommand = async (dirPath: string) => {
 export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
   let rustowlCommand = await getRustowlCommand(dirPath);
   if (
-    !rustowlCommand ||
+    rustowlCommand === null ||
     (await needUpdated(
       spawnSync(rustowlCommand, ["--version", "--quiet"]).stdout?.toString(),
     ))
   ) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await fs.mkdir(dirPath, { recursive: true });
     // download rustowl binary
     await vscode.window.withProgress(
@@ -114,8 +114,10 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
           progress.report({ message: "binary downloading" });
           await downloadRustowl(dirPath);
           progress.report({ message: "binary downloaded" });
-        } catch (e) {
-          vscode.window.showErrorMessage(`${e}`);
+        } catch (error) {
+          vscode.window.showErrorMessage(
+            `${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       },
     );
@@ -129,11 +131,12 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
         try {
           rustowlCommand = await getRustowlCommand(dirPath);
 
-          if (!rustowlCommand) {
-            throw Error("failed to install RustOwl");
+          if (rustowlCommand === null) {
+            throw new Error("failed to install RustOwl");
           }
 
-          const installer = spawn(rustowlCommand, ["toolchain", "install"], {
+          const installedCommand = rustowlCommand;
+          const installer = spawn(installedCommand, ["toolchain", "install"], {
             stdio: ["ignore", "ignore", "pipe"],
           });
 
@@ -151,29 +154,35 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
             }
           });
 
-          return new Promise(async (resolve, reject) => {
-            installer.addListener("exit", async (code) => {
-              if (code === 0) {
-                resolve(rustowlCommand);
-              } else {
+          return await new Promise<string>((resolve, reject) => {
+            installer.addListener("error", (error) => reject(error));
+            installer.addListener("exit", (code) => {
+              (async () => {
+                if (code === 0) {
+                  resolve(installedCommand);
+                  return;
+                }
+
                 const errorMessage =
                   stderrOutput.trim() || `Process exited with code ${code}`;
                 const logPath = await writeErrorLog(dirPath, errorMessage);
                 await showDetailedError(errorMessage, logPath);
-                reject(`toolchain setup failed (exit code ${code})`);
-              }
+                reject(new Error(`toolchain setup failed (exit code ${code})`));
+              })().catch((error) => reject(error));
             });
           });
-        } catch (e) {
-          vscode.window.showErrorMessage(`${e}`);
+        } catch (error) {
+          vscode.window.showErrorMessage(
+            `${error instanceof Error ? error.message : String(error)}`,
+          );
         }
         return null;
       },
     );
   }
 
-  if (!rustowlCommand) {
-    throw Error("failed to install RustOwl");
+  if (rustowlCommand === null) {
+    throw new Error("failed to install RustOwl");
   }
 
   return rustowlCommand;
@@ -188,10 +197,10 @@ const writeErrorLog = async (
   const logContent = `[${timestamp}] RustOwl Toolchain Setup Error:\n${error}\n\n`;
 
   try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await fs.appendFile(logPath, logContent);
     return logPath;
-  } catch (e) {
-    console.error("Failed to write error log:", e);
+  } catch {
     return "";
   }
 };
@@ -204,7 +213,7 @@ const showDetailedError = async (errorOutput: string, logPath: string) => {
 
   // Look for actual error messages (lines starting with "error:")
   const errorLine = errorLines.find((line) => line.trim().startsWith("error:"));
-  if (errorLine) {
+  if (errorLine !== undefined) {
     summary = errorLine.trim();
   } else {
     // Look for other failure indicators
@@ -215,7 +224,7 @@ const showDetailedError = async (errorOutput: string, logPath: string) => {
         line.toLowerCase().includes("unable to") ||
         line.toLowerCase().includes("permission denied"),
     );
-    if (failureLine) {
+    if (failureLine !== undefined) {
       summary = failureLine.trim();
     }
   }
@@ -230,24 +239,24 @@ const showDetailedError = async (errorOutput: string, logPath: string) => {
     }
   }
 
-  if (logPath) {
+  if (logPath !== "") {
     detailedMessage += `\n\nFull error details have been saved to:\n${logPath}`;
   }
 
   const selection = await vscode.window.showErrorMessage(
     detailedMessage,
     { modal: true },
-    ...(logPath ? ["Open Log File", "Copy Log Path"] : []),
+    ...(logPath !== "" ? ["Open Log File", "Copy Log Path"] : []),
   );
 
-  if (selection === "Open Log File" && logPath) {
+  if (selection === "Open Log File" && logPath !== "") {
     try {
       const logUri = vscode.Uri.file(logPath);
       await vscode.window.showTextDocument(logUri);
-    } catch (e) {
-      vscode.window.showErrorMessage(`Failed to open log file: ${e}`);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to open log file: ${error}`);
     }
-  } else if (selection === "Copy Log Path" && logPath) {
+  } else if (selection === "Copy Log Path" && logPath !== "") {
     await vscode.env.clipboard.writeText(logPath);
     vscode.window.showInformationMessage("Log path copied to clipboard");
   }

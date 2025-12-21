@@ -1,25 +1,28 @@
-import type { ExtensionContext, Memento } from "vscode";
-import * as path from "path";
-import * as os from "os";
 import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+
+import type { ExtensionContext, Memento } from "vscode";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "rustowl-vscode-test-"));
 
 class MockMemento implements Memento {
-  private _storage: { [key: string]: any } = {};
+  private _storage: Record<string, unknown> = {};
   get<T>(key: string): T | undefined;
   get<T>(key: string, defaultValue: T): T;
-  get(key: any, defaultValue?: any) {
-    return this._storage[key] || defaultValue;
+  get(key: string, defaultValue?: unknown): unknown {
+    // eslint-disable-next-line security/detect-object-injection
+    return key in this._storage ? this._storage[key] : defaultValue;
   }
-  update(key: string, value: any): Thenable<void> {
+  update(key: string, value: unknown): Promise<void> {
+    // eslint-disable-next-line security/detect-object-injection
     this._storage[key] = value;
     return Promise.resolve();
   }
   keys(): readonly string[] {
     return Object.keys(this._storage);
   }
-  setKeysForSync(keys: string[]): void {
+  setKeysForSync(_keys: string[]): void {
     //
   }
 }
@@ -155,5 +158,6 @@ export const context: ExtensionContext = {
       throw new Error("Not implemented");
     },
   },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   languageModelAccessInformation: undefined as any,
 };

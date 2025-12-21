@@ -18,11 +18,17 @@ async function main() {
       extensionTestsPath,
       launchArgs: ["--disable-extensions"],
     });
-  } catch (err) {
-    console.error(err);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(error);
+    // eslint-disable-next-line no-console
     console.error("Failed to run tests");
-    process.exit(1);
+    throw new Error("Test execution failed");
   }
 }
 
-main();
+// eslint-disable-next-line promise/prefer-await-to-callbacks
+main().catch((error) => {
+  // eslint-disable-next-line no-console
+  console.error(error);
+});
