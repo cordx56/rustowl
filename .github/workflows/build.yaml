@@ -106,10 +106,10 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: rustowl-runtime-${{ env.{ env.host_tuple  }}}
+          name: rustowl-runtime-${{ env.host_tuple }}
           path: |
-            rustowl-${{ env.{ env.host_tuple  }}}${{ env.{ env.exec_ext  }}}
-            ${{ env.{ env.archive_name  }}}
+            rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
+            ${{ env.archive_name }}
   vscode:
     if: github.event.action != 'labeled' || github.event.label.name == 'do-build-check'
     runs-on: ubuntu-latest
