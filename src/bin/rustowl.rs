@@ -43,7 +43,7 @@ fn set_log_level(default: log::LevelFilter) {
 /// This function may exit the process with appropriate exit codes:
 /// - Exit code 0 on successful analysis
 /// - Exit code 1 on analysis failure or toolchain setup errors
-async fn handle_command(command: Commands) {
+async fn handle_command(command: Commands, rustc_threads: usize) {
     match command {
         Commands::Check(command_options) => {
             let path = command_options.path.unwrap_or(env::current_dir().unwrap());
@@ -52,6 +52,7 @@ async fn handle_command(command: Commands) {
                 &path,
                 command_options.all_targets,
                 command_options.all_features,
+                rustc_threads,
             )
             .await
             {
@@ -106,13 +107,13 @@ fn initialize_logging() {
 }
 
 /// Handles the case when no command is provided (version display or LSP server mode)
-async fn handle_no_command(args: Cli) {
+async fn handle_no_command(args: Cli, rustc_threads: usize) {
     if args.version {
         display_version(args.quiet == 0);
         return;
     }
 
-    start_lsp_server().await;
+    start_lsp_server(rustc_threads).await;
 }
 
 /// Displays the version information
@@ -124,7 +125,7 @@ fn display_version(show_prefix: bool) {
 }
 
 /// Starts the LSP server
-async fn start_lsp_server() {
+async fn start_lsp_server(rustc_threads: usize) {
     set_log_level("warn".parse().unwrap());
     eprintln!("RustOwl v{}", clap::crate_version!());
     eprintln!("This is an LSP server. You can use --help flag to show help.");
@@ -132,7 +133,7 @@ async fn start_lsp_server() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::build(Backend::new)
+    let (service, socket) = LspService::build(Backend::new(rustc_threads))
         .custom_method("rustowl/cursor", Backend::cursor)
         .custom_method("rustowl/analyze", Backend::analyze)
         .finish();
@@ -149,9 +150,12 @@ async fn main() {
     initialize_logging();
 
     let parsed_args = Cli::parse();
+    let rustc_threads = parsed_args
+        .rustc_threads
+        .unwrap_or(utils::get_default_parallel_count());
 
     match parsed_args.command {
-        Some(command) => handle_command(command).await,
-        None => handle_no_command(parsed_args).await,
+        Some(command) => handle_command(command, rustc_threads).await,
+        None => handle_no_command(parsed_args, rustc_threads).await,
     }
 }
