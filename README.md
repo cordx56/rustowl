@@ -6,12 +6,10 @@
       </picture>
     </h1>
     <p>
-        Visualize ownership and lifetimes in Rust for debugging and optimization
+      Visualize ownership and lifetimes in Rust for debugging and optimization
     </p>
     <p>
-      <font size="2">
-        You can try out RustOwl on <a href="https://play.rustowl.rs/">play.rustowl.rs</a>
-      </font>
+      You can try out RustOwl on <a href="https://play.rustowl.rs/">play.rustowl.rs</a>
     </p>
     <p>
       <font size="4">
