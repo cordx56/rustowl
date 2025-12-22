@@ -25,11 +25,12 @@ pub struct Backend {
     processes: Arc<RwLock<JoinSet<()>>>,
     process_tokens: Arc<RwLock<BTreeMap<usize, CancellationToken>>>,
     work_done_progress: Arc<RwLock<bool>>,
+    rustc_thread: usize,
 }
 
 impl Backend {
-    pub fn new(client: Client) -> Self {
-        Self {
+    pub fn new(rustc_thread: usize) -> impl Fn(Client) -> Self {
+        move |client: Client| Self {
             client,
             analyzers: Arc::new(RwLock::new(Vec::new())),
             analyzed: Arc::new(RwLock::new(None)),
@@ -37,11 +38,12 @@ impl Backend {
             processes: Arc::new(RwLock::new(JoinSet::new())),
             process_tokens: Arc::new(RwLock::new(BTreeMap::new())),
             work_done_progress: Arc::new(RwLock::new(false)),
+            rustc_thread,
         }
     }
 
     async fn add_analyze_target(&self, path: &Path) -> bool {
-        if let Ok(new_analyzer) = Analyzer::new(&path).await {
+        if let Ok(new_analyzer) = Analyzer::new(&path, self.rustc_thread).await {
             let mut analyzers = self.analyzers.write().await;
             for analyzer in &*analyzers {
                 if analyzer.target_path() == new_analyzer.target_path() {
@@ -247,17 +249,18 @@ impl Backend {
         })
     }
 
-    pub async fn check(path: impl AsRef<Path>) -> bool {
-        Self::check_with_options(path, false, false).await
+    pub async fn check(path: impl AsRef<Path>, rustc_thread: usize) -> bool {
+        Self::check_with_options(path, false, false, rustc_thread).await
     }
 
     pub async fn check_with_options(
         path: impl AsRef<Path>,
         all_targets: bool,
         all_features: bool,
+        rustc_thread: usize,
     ) -> bool {
         let path = path.as_ref();
-        let (service, _) = LspService::build(Backend::new).finish();
+        let (service, _) = LspService::build(Backend::new(rustc_thread)).finish();
         let backend = service.inner();
 
         if backend.add_analyze_target(path).await {
