@@ -38,7 +38,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 /// This function may exit the process with appropriate exit codes:
 /// - Exit code 0 on successful analysis
 /// - Exit code 1 on analysis failure or toolchain setup errors
-async fn handle_command(command: Commands) {
+async fn handle_command(command: Commands, rustc_threads: usize) {
     match command {
         Commands::Check(command_options) => {
             let path = command_options.path.unwrap_or_else(|| {
@@ -52,6 +52,7 @@ async fn handle_command(command: Commands) {
                 &path,
                 command_options.all_targets,
                 command_options.all_features,
+                rustc_threads,
             )
             .await;
 
@@ -112,7 +113,7 @@ async fn handle_command(command: Commands) {
 }
 
 /// Handles the case when no command is provided (version display or LSP server mode)
-async fn handle_no_command(args: Cli, used_short_flag: bool) {
+async fn handle_no_command(args: Cli, used_short_flag: bool, rustc_threads: usize) {
     if args.version {
         if used_short_flag {
             println!("rustowl {}", clap::crate_version!());
@@ -122,7 +123,7 @@ async fn handle_no_command(args: Cli, used_short_flag: bool) {
         return;
     }
 
-    start_lsp_server().await;
+    start_lsp_server(rustc_threads).await;
 }
 
 /// Displays version information including git tag, commit hash, build time, etc.
@@ -161,14 +162,14 @@ fn display_version() {
 }
 
 /// Starts the LSP server
-async fn start_lsp_server() {
+async fn start_lsp_server(rustc_threads: usize) {
     eprintln!("RustOwl v{}", clap::crate_version!());
     eprintln!("This is an LSP server. You can use --help flag to show help.");
 
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::build(Backend::new)
+    let (service, socket) = LspService::build(Backend::new(rustc_threads))
         .custom_method("rustowl/cursor", Backend::cursor)
         .custom_method("rustowl/analyze", Backend::analyze)
         .finish();
@@ -186,12 +187,15 @@ async fn main() {
     let used_short_flag = std::env::args().any(|arg| arg == "-V");
 
     let parsed_args = Cli::parse();
+    let rustc_threads = parsed_args
+        .rustc_threads
+        .unwrap_or(utils::get_default_parallel_count());
 
     rustowl::initialize_logging(log_level_from_args(&parsed_args));
 
     match parsed_args.command {
-        Some(command) => handle_command(command).await,
-        None => handle_no_command(parsed_args, used_short_flag).await,
+        Some(command) => handle_command(command, rustc_threads).await,
+        None => handle_no_command(parsed_args, used_short_flag, rustc_threads).await,
     }
 }
 
@@ -397,9 +401,10 @@ mod tests {
             version: true,
             verbosity: clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 0),
             stdio: false,
+            rustc_threads: None,
         };
 
-        handle_no_command(cli, false).await;
+        handle_no_command(cli, false, 1).await;
     }
 
     // Test handle_no_command with short version flag
@@ -412,9 +417,10 @@ mod tests {
             version: true,
             verbosity: clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 0),
             stdio: false,
+            rustc_threads: None,
         };
 
-        handle_no_command(cli, true).await;
+        handle_no_command(cli, true, 1).await;
     }
 
     // Test handle_command for clean command
@@ -424,7 +430,7 @@ mod tests {
     async fn test_handle_command_clean() {
         let command = Commands::Clean;
         // This should not panic
-        handle_command(command).await;
+        handle_command(command, 1).await;
     }
 
     // Test handle_command for toolchain uninstall
@@ -437,7 +443,7 @@ mod tests {
             command: Some(ToolchainCommands::Uninstall),
         });
         // This should not panic
-        handle_command(command).await;
+        handle_command(command, 1).await;
     }
 
     // Test handle_command for completions
@@ -449,7 +455,7 @@ mod tests {
         use crate::shells::Shell;
         let command = Commands::Completions(Completions { shell: Shell::Bash });
         // This should not panic
-        handle_command(command).await;
+        handle_command(command, 1).await;
     }
 
     // Test invalid CLI arguments

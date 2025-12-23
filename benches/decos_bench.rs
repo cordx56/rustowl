@@ -57,7 +57,7 @@ fn cursor_decos_hot_path(bencher: Bencher) {
         .build()
         .expect("failed to build tokio runtime");
 
-    let (service, _) = tower_lsp_server::LspService::build(Backend::new).finish();
+    let (service, _) = tower_lsp_server::LspService::build(Backend::new(1)).finish();
     let backend = service.inner();
 
     let ok = rt.block_on(async {
@@ -138,7 +138,7 @@ fn cursor_decos_disk_fallback(bencher: Bencher) {
         .build()
         .expect("failed to build tokio runtime");
 
-    let (service, _) = tower_lsp_server::LspService::build(Backend::new).finish();
+    let (service, _) = tower_lsp_server::LspService::build(Backend::new(1)).finish();
     let backend = service.inner();
 
     let ok = rt.block_on(async {

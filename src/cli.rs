@@ -15,6 +15,14 @@ pub struct Cli {
     #[arg(long)]
     pub stdio: bool,
 
+    /// nightly `rustc` supports parallel compilation
+    #[arg(
+        long,
+        value_name("rustc-threads"),
+        help = "Specify the rustc thread count during check"
+    )]
+    pub rustc_threads: Option<usize>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -442,6 +450,7 @@ mod tests {
             version: true,
             verbosity: clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 2),
             stdio: true,
+            rustc_threads: None,
             command: Some(Commands::Clean),
         };
 

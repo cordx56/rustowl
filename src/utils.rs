@@ -426,6 +426,10 @@ pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
     consumed
 }
 
+pub fn get_default_parallel_count() -> usize {
+    num_cpus::get_physical()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

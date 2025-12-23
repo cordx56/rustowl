@@ -54,7 +54,9 @@ flate2 = "1"
 foldhash = "0.2.0"
 indexmap = { version = "2", features = ["rayon", "serde"] }
 indicatif = "0.18"
+log = "0.4"
 memchr = "2"
+num_cpus = "1"
 process_alive = "0.2"
 rayon = "1"
 reqwest = { version = "0.12", default-features = false, features = [

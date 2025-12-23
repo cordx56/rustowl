@@ -422,14 +422,38 @@ pub async fn get_executable_path(name: &str) -> String {
     exec_name.to_owned()
 }
 
-pub async fn setup_cargo_command() -> tokio::process::Command {
+pub async fn setup_cargo_command(rustc_threads: usize) -> tokio::process::Command {
     let cargo = get_executable_path("cargo").await;
     let mut command = tokio::process::Command::new(&cargo);
     let rustowlc = get_executable_path("rustowlc").await;
+
+    // check user set flags
+    let delimiter = 0x1f as char;
+    let rustflags = env::var("RUSTFLAGS")
+        .unwrap_or("".to_string())
+        .split_whitespace()
+        .fold("".to_string(), |acc, x| format!("{acc}{delimiter}{x}"));
+    let mut encoded_flags = env::var("CARGO_ENCODED_RUSTFLAGS")
+        .map(|v| format!("{v}{delimiter}"))
+        .unwrap_or("".to_string());
+    if 1 < rustc_threads {
+        encoded_flags = format!("-Z{delimiter}threads={rustc_threads}{delimiter}{encoded_flags}");
+    }
+
+    let sysroot = get_sysroot().await;
     command
         .env("RUSTC", &rustowlc)
-        .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc);
-    set_rustc_env(&mut command, &get_sysroot().await);
+        .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc)
+        .env(
+            "CARGO_ENCODED_RUSTFLAGS",
+            format!(
+                "{}--sysroot={}{}",
+                encoded_flags,
+                sysroot.display(),
+                rustflags
+            ),
+        );
+    set_rustc_env(&mut command, &sysroot);
     command
 }
 
@@ -457,12 +481,7 @@ pub async fn setup_cargo_command() -> tokio::process::Command {
 /// // cmd is now configured to invoke cargo/rustc with the given sysroot.
 /// ```
 pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
-    command
-        .env("RUSTC_BOOTSTRAP", "1") // Support nightly projects
-        .env(
-            "CARGO_ENCODED_RUSTFLAGS",
-            format!("--sysroot={}", sysroot.display()),
-        );
+    command.env("RUSTC_BOOTSTRAP", "1"); // Support nightly projects
 
     #[cfg(target_os = "linux")]
     {
