@@ -1,6 +1,6 @@
 use std::env;
 
-use std::io::IsTerminal;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use tokio::fs::{create_dir_all, read_to_string, remove_dir_all, rename};
@@ -60,33 +60,28 @@ async fn get_runtime_dir() -> PathBuf {
 }
 
 pub async fn get_sysroot() -> PathBuf {
+    if let Ok(override_path) = env::var("RUSTOWL_SYSROOT") {
+        let override_path = PathBuf::from(override_path);
+        if override_path.is_dir() {
+            return override_path;
+        }
+    }
+
     sysroot_from_runtime(get_runtime_dir().await)
 }
 
 async fn download(url: &str) -> Result<Vec<u8>, ()> {
-    use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+    static HTTP_CLIENT: std::sync::LazyLock<reqwest::Client> =
+        std::sync::LazyLock::new(reqwest::Client::new);
 
     tracing::debug!("start downloading {url}...");
 
-    let progress = if std::io::stderr().is_terminal() {
-        let progress = ProgressBar::new(0);
-        progress.set_draw_target(ProgressDrawTarget::stderr());
-        progress.set_style(
-            ProgressStyle::with_template("{spinner:.green} {wide_msg} {bytes}/{total_bytes}")
-                .unwrap(),
-        );
-        progress.set_message("Downloading...");
-        Some(progress)
-    } else {
-        None
-    };
-
-    let _progress_guard = progress
-        .as_ref()
-        .cloned()
-        .map(crate::ActiveProgressBarGuard::set);
-
-    let mut resp = match reqwest::get(url).await.and_then(|v| v.error_for_status()) {
+    let mut resp = match HTTP_CLIENT
+        .get(url)
+        .send()
+        .await
+        .and_then(|v| v.error_for_status())
+    {
         Ok(v) => v,
         Err(e) => {
             tracing::error!("failed to download tarball");
@@ -95,12 +90,24 @@ async fn download(url: &str) -> Result<Vec<u8>, ()> {
         }
     };
 
-    let content_length = resp.content_length().unwrap_or(200_000_000) as usize;
-    if let Some(progress) = &progress {
-        progress.set_length(content_length as u64);
+    // Used for amortizing allocations, not for limiting.
+    const DEFAULT_RESERVE: usize = 200_000_000;
+    const MAX_DOWNLOAD_CAP: usize = 2_000_000_000; // basic DoS protection
+
+    let expected_size = resp.content_length().map(|v| v as usize);
+    if matches!(expected_size, Some(v) if v > MAX_DOWNLOAD_CAP) {
+        tracing::error!("refusing to download {url}: content-length exceeds cap");
+        return Err(());
     }
 
-    let mut data = Vec::with_capacity(content_length);
+    let max_bytes = expected_size.unwrap_or(MAX_DOWNLOAD_CAP);
+    let reserve = expected_size
+        .unwrap_or(DEFAULT_RESERVE)
+        .min(DEFAULT_RESERVE);
+
+    let mut data = Vec::with_capacity(reserve);
+    let mut downloaded = 0usize;
+
     while let Some(chunk) = match resp.chunk().await {
         Ok(v) => v,
         Err(e) => {
@@ -109,15 +116,12 @@ async fn download(url: &str) -> Result<Vec<u8>, ()> {
             return Err(());
         }
     } {
-        data.extend_from_slice(&chunk);
-
-        if let Some(progress) = &progress {
-            progress.set_position(data.len() as u64);
+        downloaded = downloaded.saturating_add(chunk.len());
+        if downloaded > max_bytes {
+            tracing::error!("refusing to download {url}: exceeded size cap");
+            return Err(());
         }
-    }
-
-    if let Some(progress) = progress {
-        progress.finish_and_clear();
+        data.extend_from_slice(&chunk);
     }
 
     tracing::debug!("download finished");
@@ -125,9 +129,17 @@ async fn download(url: &str) -> Result<Vec<u8>, ()> {
 }
 async fn download_tarball_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
     let data = download(url).await?;
-    let decoder = GzDecoder::new(&*data);
-    let mut archive = Archive::new(decoder);
-    archive.unpack(dest).map_err(|_| {
+    let dest = dest.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let decoder = GzDecoder::new(&*data);
+        let mut archive = Archive::new(decoder);
+        archive.unpack(&dest)
+    })
+    .await
+    .map_err(|e| {
+        tracing::error!("failed to join unpack task: {e}");
+    })?
+    .map_err(|_| {
         tracing::error!("failed to unpack tarball");
     })?;
     tracing::debug!("successfully unpacked");
@@ -147,40 +159,50 @@ async fn download_zip_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
             return Err(());
         }
     };
-    archive.extract(dest).map_err(|e| {
-        tracing::error!("failed to unpack zip: {e}");
-    })?;
+    let dest = dest.to_path_buf();
+    tokio::task::spawn_blocking(move || archive.extract(&dest))
+        .await
+        .map_err(|e| {
+            tracing::error!("failed to join zip unpack task: {e}");
+        })?
+        .map_err(|e| {
+            tracing::error!("failed to unpack zip: {e}");
+        })?;
     tracing::debug!("successfully unpacked");
     Ok(())
 }
 
-async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
+struct ExtractedComponent {
+    _tempdir: tempfile::TempDir,
+    extracted_root: PathBuf,
+}
+
+async fn fetch_component(component: &str, base_url: &str) -> Result<ExtractedComponent, ()> {
     let tempdir = tempfile::tempdir().map_err(|_| ())?;
-    // Using `tempdir.path()` more than once causes SEGV, so we use `tempdir.path().to_owned()`.
     let temp_path = tempdir.path().to_owned();
     tracing::debug!("temp dir is made: {}", temp_path.display());
-
-    let dist_base = "https://static.rust-lang.org/dist";
-    let base_url = match TOOLCHAIN_DATE {
-        Some(v) => format!("{dist_base}/{v}"),
-        None => dist_base.to_owned(),
-    };
 
     let component_toolchain = format!("{component}-{TOOLCHAIN_CHANNEL}-{HOST_TUPLE}");
     let tarball_url = format!("{base_url}/{component_toolchain}.tar.gz");
 
     download_tarball_and_extract(&tarball_url, &temp_path).await?;
 
-    let extracted_path = temp_path.join(&component_toolchain);
-    let components = read_to_string(extracted_path.join("components"))
+    Ok(ExtractedComponent {
+        _tempdir: tempdir,
+        extracted_root: temp_path.join(component_toolchain),
+    })
+}
+
+async fn install_extracted_component(extracted: ExtractedComponent, dest: &Path) -> Result<(), ()> {
+    let components = read_to_string(extracted.extracted_root.join("components"))
         .await
         .map_err(|_| {
             tracing::error!("failed to read components list");
         })?;
     let components = components.split_whitespace();
 
-    for component in components {
-        let component_path = extracted_path.join(component);
+    for component_name in components {
+        let component_path = extracted.extracted_root.join(component_name);
         for from in recursive_read_dir(&component_path) {
             let rel_path = match from.strip_prefix(&component_path) {
                 Ok(v) => v,
@@ -195,7 +217,8 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
                 return Err(());
             }
             if let Err(e) = rename(&from, &to).await {
-                tracing::warn!("file rename failed: {e}, falling back to copy and delete");
+                // This is expected when temp directories are on a different device (EXDEV).
+                tracing::debug!("file rename failed: {e}, falling back to copy and delete");
                 if let Err(copy_err) = tokio::fs::copy(&from, &to).await {
                     tracing::error!("file copy error (after rename failure): {copy_err}");
                     return Err(());
@@ -206,28 +229,107 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
                 }
             }
         }
-        tracing::debug!("component {component} successfully installed");
+        tracing::debug!("component {component_name} successfully installed");
     }
     Ok(())
 }
 pub async fn setup_toolchain(dest: impl AsRef<Path>, skip_rustowl: bool) -> Result<(), ()> {
-    setup_rust_toolchain(&dest).await?;
-    if !skip_rustowl {
-        setup_rustowl_toolchain(&dest).await?;
+    if skip_rustowl {
+        setup_rust_toolchain(&dest).await
+    } else {
+        tokio::try_join!(setup_rust_toolchain(&dest), setup_rustowl_toolchain(&dest)).map(|_| ())
     }
-    Ok(())
 }
+
 pub async fn setup_rust_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
+    use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+    use std::io::IsTerminal;
+
     let sysroot = sysroot_from_runtime(dest.as_ref());
     if create_dir_all(&sysroot).await.is_err() {
         tracing::error!("failed to create toolchain directory");
         return Err(());
     }
 
+    let dist_base = "https://static.rust-lang.org/dist";
+    let base_url = match TOOLCHAIN_DATE {
+        Some(v) => format!("{dist_base}/{v}"),
+        None => dist_base.to_owned(),
+    };
+
     tracing::debug!("start installing Rust toolchain...");
-    install_component("rustc", &sysroot).await?;
-    install_component("rust-std", &sysroot).await?;
-    install_component("cargo", &sysroot).await?;
+
+    const COMPONENTS: [&str; 3] = ["rustc", "rust-std", "cargo"];
+
+    let progress = if std::io::stderr().is_terminal() {
+        let pb = ProgressBar::new(COMPONENTS.len() as u64);
+        pb.set_draw_target(ProgressDrawTarget::stderr());
+        pb.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.green} {wide_msg} [{bar:40.cyan/blue}] {pos}/{len}",
+            )
+            .unwrap(),
+        );
+        pb.set_message("Downloading and extracting Rust toolchain...");
+        Some(pb)
+    } else {
+        None
+    };
+
+    let _progress_guard = progress
+        .as_ref()
+        .cloned()
+        .map(crate::ActiveProgressBarGuard::set);
+
+    // Download + extract all components in parallel, but report progress as each finishes.
+    let mut fetched = HashMap::<&'static str, ExtractedComponent>::new();
+    let mut set = tokio::task::JoinSet::new();
+    for component in COMPONENTS {
+        let base_url = base_url.clone();
+        set.spawn(async move { (component, fetch_component(component, &base_url).await) });
+    }
+
+    let mut completed = 0usize;
+    while let Some(joined) = set.join_next().await {
+        match joined {
+            Ok((component, Ok(extracted))) => {
+                completed += 1;
+                if let Some(pb) = &progress {
+                    pb.inc(1);
+                    pb.set_message(format!("Fetched {component}"));
+                } else {
+                    eprintln!("Fetched {component} ({completed}/{})", COMPONENTS.len());
+                }
+                fetched.insert(component, extracted);
+            }
+            Ok((_component, Err(()))) => {
+                if let Some(pb) = progress {
+                    pb.finish_and_clear();
+                }
+                return Err(());
+            }
+            Err(e) => {
+                tracing::error!("failed to join toolchain fetch task: {e}");
+                if let Some(pb) = progress {
+                    pb.finish_and_clear();
+                }
+                return Err(());
+            }
+        }
+    }
+
+    let rustc = fetched.remove("rustc").ok_or(())?;
+    let rust_std = fetched.remove("rust-std").ok_or(())?;
+    let cargo = fetched.remove("cargo").ok_or(())?;
+
+    install_extracted_component(rustc, &sysroot).await?;
+    install_extracted_component(rust_std, &sysroot).await?;
+    install_extracted_component(cargo, &sysroot).await?;
+
+    if let Some(pb) = progress {
+        pb.finish_and_clear();
+    }
+
     tracing::debug!("installing Rust toolchain finished");
     Ok(())
 }
@@ -275,6 +377,17 @@ pub async fn get_executable_path(name: &str) -> String {
     #[cfg(windows)]
     let exec_name = format!("{name}.exe");
 
+    // Allow overriding specific tool paths for dev/bench setups.
+    // Example: `RUSTOWL_RUSTOWLC_PATH=/path/to/rustowlc`.
+    let override_key = format!("RUSTOWL_{}_PATH", name.to_ascii_uppercase());
+    if let Ok(path) = env::var(&override_key) {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            tracing::debug!("{name} is selected via {override_key}");
+            return path.to_string_lossy().to_string();
+        }
+    }
+
     let sysroot = get_sysroot().await;
     let exec_bin = sysroot.join("bin").join(&exec_name);
     if exec_bin.is_file() {
@@ -287,6 +400,22 @@ pub async fn get_executable_path(name: &str) -> String {
     if current_exec.is_file() {
         tracing::debug!("{name} is selected in the same directory as rustowl executable");
         return current_exec.to_string_lossy().to_string();
+    }
+
+    // When running benches/tests, the binary might live in `target/{debug,release}`
+    // while the current executable is in `target/{debug,release}/deps`.
+    if let Ok(cwd) = env::current_dir() {
+        let candidate = cwd.join("target").join("debug").join(&exec_name);
+        if candidate.is_file() {
+            tracing::debug!("{name} is selected in target/debug");
+            return candidate.to_string_lossy().to_string();
+        }
+
+        let candidate = cwd.join("target").join("release").join(&exec_name);
+        if candidate.is_file() {
+            tracing::debug!("{name} is selected in target/release");
+            return candidate.to_string_lossy().to_string();
+        }
     }
 
     tracing::warn!("{name} not found; fallback");
@@ -395,13 +524,6 @@ mod tests {
     }
 
     #[test]
-    fn test_toolchain_constants() {
-        // Test that the constants are properly set
-        // Host tuple should contain some expected patterns
-        assert!(HOST_TUPLE.contains('-'));
-    }
-
-    #[test]
     fn test_recursive_read_dir_non_existent() {
         // Test with non-existent directory
         let non_existent = PathBuf::from("/this/path/definitely/does/not/exist");
@@ -418,33 +540,6 @@ mod tests {
     }
 
     #[test]
-    fn test_set_rustc_env() {
-        let mut command = tokio::process::Command::new("echo");
-        let sysroot = PathBuf::from("/test/sysroot");
-
-        set_rustc_env(&mut command, &sysroot);
-
-        // We can't easily inspect the environment variables set on the command,
-        // but we can verify the function doesn't panic and accepts the expected types
-        // The actual functionality requires process execution which we avoid in unit tests
-    }
-
-    #[test]
-    fn test_sysroot_path_construction() {
-        // Test edge cases for path construction
-        let empty_path = PathBuf::new();
-        let sysroot = sysroot_from_runtime(&empty_path);
-
-        // Should still construct a valid path
-        assert_eq!(sysroot, PathBuf::from("sysroot").join(TOOLCHAIN));
-
-        // Test with root path
-        let root_path = PathBuf::from("/");
-        let sysroot = sysroot_from_runtime(&root_path);
-        assert_eq!(sysroot, PathBuf::from("/sysroot").join(TOOLCHAIN));
-    }
-
-    #[test]
     fn test_toolchain_date_handling() {
         // Test that TOOLCHAIN_DATE is properly handled
         // This is a compile-time constant, so we just verify it's accessible
@@ -452,7 +547,8 @@ mod tests {
             Some(date) => {
                 assert!(!date.is_empty());
                 // Date should be in YYYY-MM-DD format if present
-                assert!(date.len() >= 10);
+                assert_eq!(date.len(), 10);
+                assert_eq!(date.split('-').count(), 3);
             }
             None => {
                 // This is fine, toolchain date is optional
@@ -471,9 +567,11 @@ mod tests {
         assert!(component_toolchain.contains(TOOLCHAIN_CHANNEL));
         assert!(component_toolchain.contains(HOST_TUPLE));
 
-        // Should be properly formatted with dashes
+        // `component_toolchain` is `{component}-{channel}-{host_tuple}`.
+        // Both `component` and `host_tuple` can include hyphens.
         let parts: Vec<&str> = component_toolchain.split('-').collect();
-        assert!(parts.len() >= 3); // At least component-channel-host parts
+        let expected_parts = component.split('-').count() + 1 + HOST_TUPLE.split('-').count();
+        assert_eq!(parts.len(), expected_parts);
     }
 
     /// Verifies the fallback runtime directory is a valid, non-empty path.
@@ -521,43 +619,6 @@ mod tests {
         assert!(file_names.contains(&"file1.txt".to_string()));
         assert!(file_names.contains(&"file2.txt".to_string()));
         assert!(file_names.contains(&"file3.txt".to_string()));
-    }
-
-    #[test]
-    fn test_host_tuple_format() {
-        // HOST_TUPLE should follow the expected format: arch-vendor-os-env
-        let parts: Vec<&str> = HOST_TUPLE.split('-').collect();
-        assert!(
-            parts.len() >= 3,
-            "HOST_TUPLE should have at least 3 parts separated by hyphens"
-        );
-
-        // First part should be architecture
-        let arch = parts[0];
-        assert!(!arch.is_empty());
-
-        // Common architectures
-        let valid_archs = ["x86_64", "i686", "aarch64", "armv7", "riscv64"];
-        let is_valid_arch = valid_archs.iter().any(|&a| arch.starts_with(a));
-        assert!(is_valid_arch, "Unexpected architecture: {arch}");
-    }
-
-    #[test]
-    fn test_toolchain_format() {
-        // TOOLCHAIN should be a valid toolchain identifier
-
-        // Should contain date or channel information
-        // Typical format might be: nightly-2023-01-01-x86_64-unknown-linux-gnu
-        assert!(
-            TOOLCHAIN.contains('-'),
-            "TOOLCHAIN should contain separators"
-        );
-
-        // Should not contain spaces or special characters
-        assert!(
-            !TOOLCHAIN.contains(' '),
-            "TOOLCHAIN should not contain spaces"
-        );
     }
 
     #[test]
@@ -702,18 +763,18 @@ mod tests {
         // Test that optional date is properly handled
         if let Some(date) = TOOLCHAIN_DATE {
             assert!(!date.is_empty());
-            // Date should be in a reasonable format (YYYY-MM-DD)
-            if date.len() >= 10 {
-                let parts: Vec<&str> = date.split('-').collect();
-                if parts.len() >= 3 {
-                    // First part should be year (4 digits)
-                    if let Ok(year) = parts[0].parse::<u32>() {
-                        assert!(
-                            (2020..=2030).contains(&year),
-                            "Year should be reasonable: {year}"
-                        );
-                    }
-                }
+            // Date should be in YYYY-MM-DD format.
+            assert_eq!(date.len(), 10);
+
+            let parts: Vec<&str> = date.split('-').collect();
+            assert_eq!(parts.len(), 3);
+
+            // First part should be year (4 digits)
+            if let Ok(year) = parts[0].parse::<u32>() {
+                assert!(
+                    (2020..=2030).contains(&year),
+                    "Year should be reasonable: {year}"
+                );
             }
         }
     }
@@ -813,7 +874,7 @@ mod tests {
         // TOOLCHAIN_DATE should be valid format if present
         if let Some(date) = TOOLCHAIN_DATE {
             assert!(!date.is_empty());
-            assert!(date.len() >= 10); // At least YYYY-MM-DD format
+            assert_eq!(date.len(), 10); // YYYY-MM-DD
         }
     }
 

@@ -4,7 +4,7 @@ use rand::{Rng, SeedableRng};
 use rustowl::models::Loc;
 use rustowl::utils::{index_to_line_char, line_char_to_index};
 use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[cfg(all(not(target_env = "msvc"), not(miri)))]
 use tikv_jemallocator::Jemalloc;
@@ -22,12 +22,13 @@ fn main() {
 }
 
 thread_local! {
-    static SOURCE: RefCell<Option<String>> = const { RefCell::new(None) };
+    static SOURCE: RefCell<Option<(Arc<str>, u32)>> = const { RefCell::new(None) };
+    static RNG: RefCell<SmallRng> = RefCell::new(SmallRng::seed_from_u64(42));
 }
 
-fn get_or_init_source() -> String {
-    SOURCE.with(|s| {
-        let mut borrowed = s.borrow_mut();
+fn get_or_init_source() -> (Arc<str>, u32) {
+    SOURCE.with(|cell| {
+        let mut borrowed = cell.borrow_mut();
         if borrowed.is_none() {
             let mut rng = SmallRng::seed_from_u64(42);
             let mut source = String::new();
@@ -45,7 +46,8 @@ fn get_or_init_source() -> String {
                     source.push('🦀');
                 }
             }
-            *borrowed = Some(source);
+            let total = source.chars().filter(|&c| c != '\r').count() as u32;
+            *borrowed = Some((Arc::<str>::from(source), total));
         }
         borrowed.as_ref().unwrap().clone()
     })
@@ -58,15 +60,9 @@ mod line_col_conversion {
     #[divan::bench]
     fn index_to_line_char_bench(bencher: Bencher) {
         bencher
-            .with_inputs(|| {
-                let source = get_or_init_source();
-                let chars: Vec<_> = source.chars().collect();
-                let total = chars.len() as u32;
-                let rng = SmallRng::seed_from_u64(42);
-                (source, total, Arc::new(Mutex::new(rng)))
-            })
-            .bench_values(|(source, total, rng)| {
-                let idx = Loc(rng.lock().unwrap().random_range(0..total));
+            .with_inputs(get_or_init_source)
+            .bench_values(|(source, total)| {
+                let idx = RNG.with(|rng| Loc(rng.borrow_mut().random_range(0..total)));
                 let (l, c) = index_to_line_char(&source, idx);
                 black_box((l, c));
             });
@@ -75,13 +71,9 @@ mod line_col_conversion {
     #[divan::bench]
     fn line_char_to_index_bench(bencher: Bencher) {
         bencher
-            .with_inputs(|| {
-                let source = get_or_init_source();
-                let rng = SmallRng::seed_from_u64(42);
-                (source, Arc::new(Mutex::new(rng)))
-            })
-            .bench_values(|(source, rng)| {
-                let line = rng.lock().unwrap().random_range(0..10_000u32);
+            .with_inputs(|| get_or_init_source().0)
+            .bench_values(|source| {
+                let line = RNG.with(|rng| rng.borrow_mut().random_range(0..10_000u32));
                 let idx = line_char_to_index(&source, line, 0);
                 black_box(idx);
             });

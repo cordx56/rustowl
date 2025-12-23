@@ -48,14 +48,25 @@ async fn handle_command(command: Commands) {
                 })
             });
 
-            if Backend::check_with_options(
+            let report = Backend::check_report_with_options(
                 &path,
                 command_options.all_targets,
                 command_options.all_features,
             )
-            .await
-            {
-                tracing::debug!("Successfully analyzed");
+            .await;
+
+            if report.ok {
+                match report.total_targets {
+                    Some(total) => {
+                        eprintln!(
+                            "rustowl check: success ({}/{}) in {:.2?}",
+                            report.checked_targets, total, report.duration
+                        );
+                    }
+                    None => {
+                        eprintln!("rustowl check: success in {:.2?}", report.duration);
+                    }
+                }
                 std::process::exit(0);
             }
             tracing::error!("Analyze failed");

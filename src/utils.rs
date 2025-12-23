@@ -161,13 +161,169 @@ pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
     }
 }
 
+/// Precomputed line/column mapping for a source string.
+///
+/// `Loc` is a *logical character index* where `\r` is ignored. Building this
+/// index once and reusing it avoids repeatedly scanning the whole file when
+/// converting many ranges (e.g. LSP decorations).
+#[derive(Debug, Clone)]
+pub struct LineCharIndex {
+    // For each line i, the logical char-index at the start of that line.
+    // Always non-empty (line 0 starts at index 0).
+    line_starts: Vec<u32>,
+    eof: u32,
+}
+
+impl LineCharIndex {
+    pub fn new(source: &str) -> Self {
+        // Common fast-path: ASCII without CR means logical char-index == byte index.
+        // We still store logical char-indexes, which match bytes in this case.
+        if source.is_ascii() && !source.as_bytes().contains(&b'\r') {
+            let mut line_starts = Vec::with_capacity(128);
+            line_starts.push(0);
+            for (i, b) in source.as_bytes().iter().enumerate() {
+                if *b == b'\n' {
+                    // newline is a logical character (included), next line starts after it
+                    let next = (i + 1) as u32;
+                    line_starts.push(next);
+                }
+            }
+            return Self {
+                line_starts,
+                eof: source.len() as u32,
+            };
+        }
+
+        // Fallback: scan chars once, skipping CR.
+        let mut line_starts = Vec::with_capacity(128);
+        line_starts.push(0);
+
+        let mut logical_idx = 0u32;
+        for ch in source.chars() {
+            if ch == '\r' {
+                continue;
+            }
+            logical_idx = logical_idx.saturating_add(1);
+            // newline is a logical character; next line starts after it
+            if ch == '\n' {
+                line_starts.push(logical_idx);
+            }
+        }
+
+        Self {
+            line_starts,
+            eof: logical_idx,
+        }
+    }
+
+    pub fn index_to_line_char(&self, idx: Loc) -> (u32, u32) {
+        let target = idx.0;
+        // Find the last line start <= target.
+        let line = match self.line_starts.binary_search(&target) {
+            Ok(i) => i,
+            Err(0) => 0,
+            Err(i) => i - 1,
+        };
+
+        let line_start = self.line_starts[line];
+        let col = target.saturating_sub(line_start);
+        (line as u32, col)
+    }
+
+    pub fn line_char_to_index(&self, line: u32, character: u32) -> u32 {
+        let Some(&line_start) = self.line_starts.get(line as usize) else {
+            // Best-effort: out-of-range line maps to EOF.
+            return self.eof;
+        };
+
+        let target = line_start.saturating_add(character);
+
+        // If the requested column goes past the end of the line, keep legacy
+        // "best effort" behaviour and return EOF.
+        let next_line_start = self
+            .line_starts
+            .get(line as usize + 1)
+            .copied()
+            .unwrap_or(self.eof);
+        if target >= next_line_start {
+            return self.eof;
+        }
+
+        target
+    }
+
+    pub fn eof(&self) -> u32 {
+        self.eof
+    }
+}
+
+/// Returns the byte offsets at the start of each line.
+///
+/// The returned vector always starts with `0` for line 0.
+pub fn line_start_bytes(source: &str) -> Vec<u32> {
+    use memchr::memchr_iter;
+
+    let mut starts = Vec::with_capacity(128);
+    starts.push(0);
+    for nl in memchr_iter(b'\n', source.as_bytes()) {
+        let next = (nl + 1).min(u32::MAX as usize) as u32;
+        starts.push(next);
+    }
+    starts
+}
+
+fn utf16_col_to_byte_offset(line: &str, character: u32) -> usize {
+    if character == 0 {
+        return 0;
+    }
+
+    let mut units = 0u32;
+    for (byte_idx, ch) in line.char_indices() {
+        if units >= character {
+            return byte_idx;
+        }
+        units = units.saturating_add(ch.len_utf16() as u32);
+    }
+    line.len()
+}
+
+/// Convert an LSP (line, UTF-16 column) position to a byte offset.
+///
+/// This is best-effort: if the position is out of range it clamps to EOF.
+pub fn line_utf16_to_byte_offset(
+    source: &str,
+    line_start_bytes: &[u32],
+    line: u32,
+    character: u32,
+) -> usize {
+    let Some(&start) = line_start_bytes.get(line as usize) else {
+        return source.len();
+    };
+    let start = start as usize;
+
+    let end = line_start_bytes
+        .get(line as usize + 1)
+        .map(|v| *v as usize)
+        .unwrap_or(source.len());
+
+    let end = end.min(source.len());
+    let start = start.min(end);
+
+    let within_line = utf16_col_to_byte_offset(&source[start..end], character);
+    start + within_line
+}
+
 /// Converts a character index to line and column numbers.
 ///
 /// Given a source string and character index, returns the corresponding
 /// line and column position. Handles CR characters consistently with
 /// the Rust compiler by ignoring them.
+///
+/// For repeated conversions on the same `source` (e.g. mapping many
+/// decorations), prefer building a `LineCharIndex` once.
 pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
     use memchr::memchr_iter;
+
     let target = idx.0;
     let mut line = 0u32;
     let mut col = 0u32;
@@ -196,6 +352,7 @@ pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
             break;
         }
     }
+
     if logical_idx <= target {
         for ch in s[seg_start..].chars() {
             if ch == '\r' {
@@ -213,6 +370,7 @@ pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
             logical_idx += 1;
         }
     }
+
     (line, col)
 }
 
@@ -221,8 +379,12 @@ pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
 /// Given a source string, line number, and column number, returns the
 /// corresponding character index. Handles CR characters consistently
 /// with the Rust compiler by ignoring them.
+///
+/// For repeated conversions on the same `source` (e.g. mapping many
+/// cursor positions), prefer building a `LineCharIndex` once.
 pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
     use memchr::memchr_iter;
+
     let mut consumed = 0u32; // logical chars excluding CR
     let mut seg_start = 0usize;
 

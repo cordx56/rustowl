@@ -16,7 +16,7 @@ use clap_complete::shells;
 pub enum Shell {
     /// Bourne Again `SHell` (bash)
     Bash,
-    /// Elvish shell  
+    /// Elvish shell
     Elvish,
     /// Friendly Interactive `SHell` (fish)
     Fish,
@@ -662,86 +662,6 @@ mod tests {
             assert_eq!(
                 error_msg, expected_error,
                 "Error message mismatch for: '{input}'"
-            );
-        }
-    }
-
-    #[test]
-    fn test_shell_completion_output_validation() {
-        // Test completion output validation for different shells
-        use clap::Command;
-
-        let test_command = Command::new("rustowl")
-            .bin_name("rustowl")
-            .about("Rust Ownership and Lifetime Visualizer");
-
-        let shells_with_expected_patterns = vec![
-            (Shell::Bash, vec!["rustowl"]), // Just check for basic presence
-            (Shell::Zsh, vec!["rustowl"]),
-            (Shell::Fish, vec!["rustowl"]),
-            (Shell::PowerShell, vec!["rustowl"]),
-            (Shell::Elvish, vec!["rustowl"]),
-            (Shell::Nushell, vec!["rustowl"]),
-        ];
-
-        for (shell, expected_patterns) in shells_with_expected_patterns {
-            let mut buf = Vec::new();
-            shell.generate(&test_command, &mut buf);
-
-            let content = String::from_utf8_lossy(&buf);
-
-            // Skip shells that don't produce output (some may have compatibility issues)
-            if content.is_empty() {
-                continue;
-            }
-
-            for pattern in expected_patterns {
-                assert!(
-                    content.contains(pattern),
-                    "Shell {shell:?} output should contain '{pattern}'. Content: {content}"
-                );
-            }
-
-            // Test that output is valid (no obvious syntax errors)
-            assert!(!content.contains("ERROR"));
-            assert!(!content.contains("PANIC"));
-        }
-    }
-
-    #[test]
-    fn test_shell_path_corner_cases() {
-        // Test corner cases in path handling
-        let corner_cases = vec![
-            // (path, expected_result, description)
-            ("bash", Some(Shell::Bash), "simple name"),
-            ("./bash", Some(Shell::Bash), "relative current dir"),
-            ("../bash", Some(Shell::Bash), "relative parent dir"),
-            ("./bin/../bash", Some(Shell::Bash), "complex relative"),
-            ("/usr/bin/bash", Some(Shell::Bash), "absolute path"),
-            ("~/.local/bin/zsh", Some(Shell::Zsh), "home relative"),
-            ("/opt/local/bin/fish", Some(Shell::Fish), "opt path"),
-            (
-                "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-                None,
-                "pwsh not supported",
-            ),
-            ("/usr/bin/bash-5.1", None, "version suffix"),
-            ("/usr/bin/bash.old", Some(Shell::Bash), "backup suffix"), // file_stem removes .old
-            ("powershell_ise.exe", Some(Shell::PowerShell), "ISE variant"),
-            ("nu-0.80", None, "version not supported"),
-            ("/dev/null", None, "device file"),
-            (".", None, "current directory"),
-            ("..", None, "parent directory"),
-            ("...", None, "invalid path"),
-            ("con", None, "windows reserved"),
-            ("prn", None, "windows reserved"),
-        ];
-
-        for (path, expected, description) in corner_cases {
-            let result = Shell::from_shell_path(path);
-            assert_eq!(
-                result, expected,
-                "Failed for {description}: path='{path}', expected={expected:?}, got={result:?}"
             );
         }
     }

@@ -1,5 +1,7 @@
 use crate::{cache::*, error::*, models::*, toolchain};
 use anyhow::bail;
+use memchr::memmem;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -149,11 +151,40 @@ impl Analyzer {
             command.stderr(Stdio::null());
         }
 
-        let package_count = metadata.packages.len();
+        // Cargo emits `compiler-artifact` per compilation unit. `metadata.packages[*].targets`
+        // includes lots of targets Cargo won't build for `cargo check` (tests/benches/examples,
+        // and dependency binaries), which can wildly overcount.
+        //
+        // We estimate the total units Cargo will actually build:
+        // - Workspace members: lib/bin/proc-macro/custom-build; plus test/bench/example with --all-targets
+        // - Dependencies: lib/proc-macro/custom-build only
+        let workspace_members: HashSet<_> = metadata.workspace_members.iter().cloned().collect();
+
+        let package_count = metadata
+            .packages
+            .iter()
+            .map(|p| {
+                let is_workspace_member = workspace_members.contains(&p.id);
+                p.targets
+                    .iter()
+                    .filter(|t| {
+                        let always = t.is_lib()
+                            || t.is_proc_macro()
+                            || t.is_custom_build()
+                            || (is_workspace_member && t.is_bin());
+                        let extra = all_targets
+                            && is_workspace_member
+                            && (t.is_test() || t.is_bench() || t.is_example());
+                        always || extra
+                    })
+                    .count()
+            })
+            .sum::<usize>()
+            .max(1);
 
         tracing::debug!("start analyzing package {package_name}");
         let mut child = command.spawn().unwrap();
-        let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
 
         let (sender, receiver) = mpsc::channel(1024);
         let notify = Arc::new(Notify::new());
@@ -161,26 +192,62 @@ impl Analyzer {
         let _handle = tokio::spawn(async move {
             // prevent command from dropped
             let mut checked_count = 0usize;
-            while let Ok(Some(line)) = stdout.next_line().await {
-                if let Ok(CargoCheckMessage::CompilerArtifact { target }) =
-                    serde_json::from_str(&line)
-                {
-                    let checked = target.name;
-                    tracing::trace!("crate {checked} checked");
 
-                    checked_count = checked_count.saturating_add(1);
-                    let event = AnalyzerEvent::CrateChecked {
-                        package: checked,
-                        package_index: checked_count,
-                        package_count,
-                    };
-                    let _ = sender.send(event).await;
+            // Heuristic byte markers to avoid parsing unrelated cargo messages.
+            // - `compiler-artifact` comes from `cargo --message-format=json`
+            // - Workspace output is emitted by `rustowlc` via `println!(serde_json::to_string(&ws))`
+            //   and is a top-level JSON object (no `reason` key).
+            let artifact_marker = b"\"reason\":\"compiler-artifact\"";
+            let reason_string_marker = b"\"reason\":\"";
+
+            let mut buf = Vec::with_capacity(16 * 1024);
+            loop {
+                buf.clear();
+                match stdout.read_until(b'\n', &mut buf).await {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(_) => break,
                 }
-                if let Ok(ws) = serde_json::from_str::<Workspace>(&line) {
+
+                // Trim trailing newline(s) to keep serde_json happy.
+                while matches!(buf.last(), Some(b'\n' | b'\r')) {
+                    buf.pop();
+                }
+                if buf.is_empty() {
+                    continue;
+                }
+
+                // Fast path: crate-checked progress messages.
+                if memmem::find(&buf, artifact_marker).is_some() {
+                    if let Ok(CargoCheckMessage::CompilerArtifact { target }) =
+                        serde_json::from_slice::<CargoCheckMessage>(&buf)
+                    {
+                        let checked = target.name;
+                        tracing::trace!("crate {checked} checked");
+
+                        checked_count = checked_count.saturating_add(1);
+                        let event = AnalyzerEvent::CrateChecked {
+                            package: checked,
+                            package_index: checked_count,
+                            package_count,
+                        };
+                        let _ = sender.send(event).await;
+                    }
+                    continue;
+                }
+
+                // Workspace output does not have Cargo's `reason: "..."` tag; avoid parsing cargo JSON messages.
+                // (Workspace *can* contain a top-level key named `reason`, e.g. crate named "reason".)
+                if memmem::find(&buf, reason_string_marker).is_some() {
+                    continue;
+                }
+
+                if let Ok(ws) = serde_json::from_slice::<Workspace>(&buf) {
                     let event = AnalyzerEvent::Analyzed(ws);
                     let _ = sender.send(event).await;
                 }
             }
+
             tracing::debug!("stdout closed");
             notify_c.notify_one();
         });
@@ -215,19 +282,42 @@ impl Analyzer {
 
         tracing::debug!("start analyzing {}", path.display());
         let mut child = command.spawn().unwrap();
-        let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
 
         let (sender, receiver) = mpsc::channel(1024);
         let notify = Arc::new(Notify::new());
         let notify_c = notify.clone();
         let _handle = tokio::spawn(async move {
             // prevent command from dropped
-            while let Ok(Some(line)) = stdout.next_line().await {
-                if let Ok(ws) = serde_json::from_str::<Workspace>(&line) {
+            let reason_string_marker = b"\"reason\":\"";
+
+            let mut buf = Vec::with_capacity(16 * 1024);
+            loop {
+                buf.clear();
+                match stdout.read_until(b'\n', &mut buf).await {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+
+                while matches!(buf.last(), Some(b'\n' | b'\r')) {
+                    buf.pop();
+                }
+                if buf.is_empty() {
+                    continue;
+                }
+
+                // Ignore cargo JSON messages (they have `reason: "..."`).
+                if memmem::find(&buf, reason_string_marker).is_some() {
+                    continue;
+                }
+
+                if let Ok(ws) = serde_json::from_slice::<Workspace>(&buf) {
                     let event = AnalyzerEvent::Analyzed(ws);
                     let _ = sender.send(event).await;
                 }
             }
+
             tracing::debug!("stdout closed");
             notify_c.notify_one();
         });

@@ -4,7 +4,6 @@ use std::env;
 use std::fs;
 use std::io::Error;
 use std::process::Command;
-use std::time::SystemTime;
 
 include!("src/cli.rs");
 include!("src/shells.rs");
@@ -137,56 +136,10 @@ fn get_git_commit_hash() -> Option<String> {
 }
 
 fn get_build_time() -> Option<String> {
-    // Cross-platform build time using SystemTime
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .ok()
-        .map(|d| {
-            // Convert to a simple timestamp format
-            let secs = d.as_secs();
-            // Calculate date components (simplified UTC)
-            let days = secs / 86400;
-            let time_secs = secs % 86400;
-            let hours = time_secs / 3600;
-            let mins = (time_secs % 3600) / 60;
-            let secs = time_secs % 60;
+    use jiff::{Unit, Zoned};
 
-            // Days since 1970-01-01
-            let mut y = 1970;
-            let mut remaining_days = days;
-
-            loop {
-                let days_in_year = if is_leap_year(y) { 366 } else { 365 };
-                if remaining_days < days_in_year {
-                    break;
-                }
-                remaining_days -= days_in_year;
-                y += 1;
-            }
-
-            let month_days: [u64; 12] = if is_leap_year(y) {
-                [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-            } else {
-                [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-            };
-
-            let mut m = 1;
-            for days_in_month in month_days {
-                if remaining_days < days_in_month {
-                    break;
-                }
-                remaining_days -= days_in_month;
-                m += 1;
-            }
-
-            let d = remaining_days + 1;
-
-            format!("{y:04}-{m:02}-{d:02} {hours:02}:{mins:02}:{secs:02} UTC")
-        })
-}
-
-fn is_leap_year(year: u64) -> bool {
-    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
+    let now = Zoned::now().in_tz("UTC").ok()?.round(Unit::Second).ok()?;
+    Some(now.strftime("%Y-%m-%d %H:%M:%S UTC").to_string())
 }
 
 fn get_rustc_version() -> Option<String> {

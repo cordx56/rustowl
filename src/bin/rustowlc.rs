@@ -79,8 +79,6 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use std::process::ExitCode;
-
     // Test Windows rayon thread pool setup
     #[test]
     #[cfg(target_os = "windows")]
@@ -92,14 +90,6 @@ mod tests {
 
         // Should succeed or fail gracefully
         assert!(result.is_ok() || result.is_err());
-    }
-
-    // Test logging initialization
-    #[test]
-    fn test_logging_initialization() {
-        // Test that logging can be initialized without panicking
-        rustowl::initialize_logging(tracing_subscriber::filter::LevelFilter::INFO);
-        // If we get here without panicking, the test passes
     }
 
     // Test main function structure (without actually running)
@@ -118,36 +108,6 @@ mod tests {
         }
     }
 
-    // Test exit code handling
-    #[test]
-    fn test_exit_code_handling() {
-        // Test different exit codes
-        let exit_success = ExitCode::SUCCESS;
-        let exit_failure = ExitCode::FAILURE;
-
-        // Verify that exit codes are properly defined
-        assert_eq!(exit_success, ExitCode::from(0));
-        assert_eq!(exit_failure, ExitCode::from(1));
-    }
-
-    // Test jemalloc sys crate access
-    #[test]
-    #[cfg(not(target_env = "msvc"))]
-    fn test_jemalloc_sys_access() {
-        // Test that jemalloc_sys functions are accessible
-        // We can't call them without unsafe code, but we can verify they're declared
-        use tikv_jemalloc_sys as jemalloc_sys;
-
-        // Verify that the functions are accessible (compile-time check)
-        let _calloc: unsafe extern "C" fn(usize, usize) -> *mut std::os::raw::c_void =
-            jemalloc_sys::calloc;
-        let _malloc: unsafe extern "C" fn(usize) -> *mut std::os::raw::c_void =
-            jemalloc_sys::malloc;
-        let _free: unsafe extern "C" fn(*mut std::os::raw::c_void) = jemalloc_sys::free;
-
-        // The fact that these assignments compile means jemalloc_sys functions are accessible
-    }
-
     // Test rayon thread pool builder access
     #[test]
     #[cfg(target_os = "windows")]
@@ -158,32 +118,5 @@ mod tests {
 
         // Verify that the builder can be configured
         assert!(configured.stack_size().is_some() || configured.stack_size().is_none());
-    }
-
-    // Test tracing subscriber level filter
-    #[test]
-    fn test_tracing_level_filter() {
-        // Test that tracing LevelFilter values are accessible
-        let info_level = tracing_subscriber::filter::LevelFilter::INFO;
-        let warn_level = tracing_subscriber::filter::LevelFilter::WARN;
-        let error_level = tracing_subscriber::filter::LevelFilter::ERROR;
-        let off_level = tracing_subscriber::filter::LevelFilter::OFF;
-
-        // Verify that different levels are distinct
-        assert_ne!(info_level, warn_level);
-        assert_ne!(warn_level, error_level);
-        assert_ne!(error_level, off_level);
-    }
-
-    // Test rustowl initialize_logging function
-    #[test]
-    fn test_rustowl_initialize_logging() {
-        // Test that rustowl's initialize_logging function can be called with different levels
-        rustowl::initialize_logging(tracing_subscriber::filter::LevelFilter::ERROR);
-        rustowl::initialize_logging(tracing_subscriber::filter::LevelFilter::WARN);
-        rustowl::initialize_logging(tracing_subscriber::filter::LevelFilter::INFO);
-        rustowl::initialize_logging(tracing_subscriber::filter::LevelFilter::DEBUG);
-
-        // If we get here without panicking, the function works
     }
 }

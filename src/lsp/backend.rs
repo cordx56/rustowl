@@ -1,7 +1,7 @@
 use super::analyze::*;
 use crate::{lsp::*, models::*, utils};
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::{sync::RwLock, task::JoinSet};
 use tokio_util::sync::CancellationToken;
@@ -15,15 +15,32 @@ pub struct AnalyzeRequest {}
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct AnalyzeResponse {}
 
+#[derive(Clone, Copy, Debug)]
+pub struct CheckReport {
+    pub ok: bool,
+    pub checked_targets: usize,
+    pub total_targets: Option<usize>,
+    pub duration: std::time::Duration,
+}
+
 /// RustOwl LSP server backend
 pub struct Backend {
     client: Client,
     analyzers: Arc<RwLock<Vec<Analyzer>>>,
     status: Arc<RwLock<progress::AnalysisStatus>>,
     analyzed: Arc<RwLock<Option<Crate>>>,
+    /// Open documents cache to avoid re-reading and re-indexing on each cursor request.
+    open_docs: Arc<RwLock<HashMap<PathBuf, OpenDoc>>>,
     processes: Arc<RwLock<JoinSet<()>>>,
     process_tokens: Arc<RwLock<BTreeMap<usize, CancellationToken>>>,
     work_done_progress: Arc<RwLock<bool>>,
+}
+
+#[derive(Clone, Debug)]
+struct OpenDoc {
+    text: Arc<String>,
+    index: Arc<utils::LineCharIndex>,
+    line_start_bytes: Arc<Vec<u32>>,
 }
 
 impl Backend {
@@ -33,6 +50,7 @@ impl Backend {
             analyzers: Arc::new(RwLock::new(Vec::new())),
             analyzed: Arc::new(RwLock::new(None)),
             status: Arc::new(RwLock::new(progress::AnalysisStatus::Finished)),
+            open_docs: Arc::new(RwLock::new(HashMap::new())),
             processes: Arc::new(RwLock::new(JoinSet::new())),
             process_tokens: Arc::new(RwLock::new(BTreeMap::new())),
             work_done_progress: Arc::new(RwLock::new(false)),
@@ -170,35 +188,55 @@ impl Backend {
     ) -> std::result::Result<Vec<decoration::Deco>, progress::AnalysisStatus> {
         let mut selected = decoration::SelectLocal::new(position);
         let mut error = progress::AnalysisStatus::Error;
-        if let Some(analyzed) = &*self.analyzed.read().await {
-            for (filename, file) in analyzed.0.iter() {
-                if filepath == filename {
-                    if !file.items.is_empty() {
-                        error = progress::AnalysisStatus::Finished;
-                    }
-                    for item in &file.items {
-                        utils::mir_visit(item, &mut selected);
-                    }
-                }
-            }
 
-            let mut calc = decoration::CalcDecos::new(selected.selected().iter().copied());
+        let analyzed_guard = self.analyzed.read().await;
+        let Some(analyzed) = analyzed_guard.as_ref() else {
+            return Err(error);
+        };
+
+        // Fast path: LSP file paths should be UTF-8 and match our stored file keys.
+        // Fall back to the previous Path comparison if the direct lookup misses.
+        let mut matched_file = filepath
+            .to_str()
+            .and_then(|path_str| analyzed.0.get(path_str));
+
+        if matched_file.is_none() {
             for (filename, file) in analyzed.0.iter() {
-                if filepath == filename {
-                    for item in &file.items {
-                        utils::mir_visit(item, &mut calc);
-                    }
+                if filepath == Path::new(filename) {
+                    matched_file = Some(file);
+                    break;
                 }
             }
-            calc.handle_overlapping();
-            let decos = calc.decorations();
-            if !decos.is_empty() {
-                Ok(decos)
-            } else {
-                Err(error)
-            }
-        } else {
+        }
+
+        let Some(file) = matched_file else {
+            return Err(error);
+        };
+
+        if !file.items.is_empty() {
+            error = progress::AnalysisStatus::Finished;
+        }
+
+        for item in &file.items {
+            utils::mir_visit(item, &mut selected);
+        }
+
+        let selected_local = selected.selected();
+        if selected_local.is_none() {
+            return Err(error);
+        }
+
+        let mut calc = decoration::CalcDecos::new(selected_local.iter().copied());
+        for item in &file.items {
+            utils::mir_visit(item, &mut calc);
+        }
+
+        calc.handle_overlapping();
+        let decos = calc.decorations();
+        if decos.is_empty() {
             Err(error)
+        } else {
+            Ok(decos)
         }
     }
 
@@ -208,39 +246,52 @@ impl Backend {
     ) -> Result<decoration::Decorations> {
         let is_analyzed = self.analyzed.read().await.is_some();
         let status = *self.status.read().await;
-        if let Some(path) = params.path()
-            && let Ok(text) = tokio::fs::read_to_string(&path).await
-        {
-            let position = params.position();
-            let pos = Loc(utils::line_char_to_index(
-                &text,
-                position.line,
-                position.character,
-            ));
-            let (decos, status) = match self.decos(&path, pos).await {
-                Ok(v) => (v, status),
-                Err(e) => (
-                    Vec::new(),
-                    if status == progress::AnalysisStatus::Finished {
-                        e
-                    } else {
-                        status
-                    },
-                ),
-            };
-            let decorations = decos.into_iter().map(|v| v.to_lsp_range(&text)).collect();
+
+        let Some(path) = params.path() else {
+            return Ok(decoration::Decorations {
+                is_analyzed,
+                status,
+                path: None,
+                decorations: Vec::new(),
+            });
+        };
+
+        let (_text, index) = if let Some(open) = self.open_docs.read().await.get(&path).cloned() {
+            (open.text, open.index)
+        } else if let Ok(text) = tokio::fs::read_to_string(&path).await {
+            let index = Arc::new(utils::LineCharIndex::new(&text));
+            (Arc::new(text), index)
+        } else {
             return Ok(decoration::Decorations {
                 is_analyzed,
                 status,
                 path: Some(path),
-                decorations,
+                decorations: Vec::new(),
             });
-        }
+        };
+
+        let position = params.position();
+        let pos = Loc(index.line_char_to_index(position.line, position.character));
+        let (decos, status) = match self.decos(&path, pos).await {
+            Ok(v) => (v, status),
+            Err(e) => (
+                Vec::new(),
+                if status == progress::AnalysisStatus::Finished {
+                    e
+                } else {
+                    status
+                },
+            ),
+        };
+
+        let mut decorations = Vec::with_capacity(decos.len());
+        decorations.extend(decos.into_iter().map(|v| v.to_lsp_range(index.as_ref())));
+
         Ok(decoration::Decorations {
             is_analyzed,
             status,
-            path: None,
-            decorations: Vec::new(),
+            path: Some(path),
+            decorations,
         })
     }
 
@@ -248,20 +299,26 @@ impl Backend {
         Self::check_with_options(path, false, false).await
     }
 
-    pub async fn check_with_options(
+    pub async fn check_report_with_options(
         path: impl AsRef<Path>,
         all_targets: bool,
         all_features: bool,
-    ) -> bool {
+    ) -> CheckReport {
         use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
         use std::io::IsTerminal;
 
+        let start = std::time::Instant::now();
         let path = path.as_ref();
         let (service, _) = LspService::build(Backend::new).finish();
         let backend = service.inner();
 
         if !backend.add_analyze_target(path).await {
-            return false;
+            return CheckReport {
+                ok: false,
+                checked_targets: 0,
+                total_targets: None,
+                duration: start.elapsed(),
+            };
         }
 
         let progress_bar = if std::io::stderr().is_terminal() {
@@ -288,6 +345,11 @@ impl Backend {
         backend.shutdown_subprocesses().await;
         let analyzers = { backend.analyzers.read().await.clone() };
 
+        let mut checked_targets = 0usize;
+        let mut total_targets = None;
+        let mut last_log_at = std::time::Instant::now();
+        let mut analyzed: Option<Crate> = None;
+
         for analyzer in analyzers {
             let mut iter = analyzer.analyze(all_targets, all_features).await;
             while let Some(event) = iter.next_event().await {
@@ -297,19 +359,24 @@ impl Backend {
                         package_index,
                         package_count,
                     } => {
+                        checked_targets = package_index;
+                        total_targets = Some(package_count);
+
                         if let Some(pb) = &progress_bar {
                             pb.set_length(package_count as u64);
                             pb.set_position(package_index as u64);
                             pb.set_message(format!("Checking {package}"));
+                        } else if last_log_at.elapsed() >= std::time::Duration::from_secs(1) {
+                            eprintln!("Checking {package} ({package_index}/{package_count})");
+                            last_log_at = std::time::Instant::now();
                         }
                     }
                     AnalyzerEvent::Analyzed(ws) => {
-                        let write = &mut *backend.analyzed.write().await;
                         for krate in ws.0.into_values() {
-                            if let Some(write) = write {
+                            if let Some(write) = &mut analyzed {
                                 write.merge(krate);
                             } else {
-                                *write = Some(krate);
+                                analyzed = Some(krate);
                             }
                         }
                     }
@@ -321,13 +388,71 @@ impl Backend {
             pb.finish_and_clear();
         }
 
-        backend
-            .analyzed
-            .read()
+        let ok = analyzed.as_ref().map(|v| !v.0.is_empty()).unwrap_or(false);
+
+        CheckReport {
+            ok,
+            checked_targets,
+            total_targets,
+            duration: start.elapsed(),
+        }
+    }
+
+    pub async fn check_with_options(
+        path: impl AsRef<Path>,
+        all_targets: bool,
+        all_features: bool,
+    ) -> bool {
+        Self::check_report_with_options(path, all_targets, all_features)
             .await
-            .as_ref()
-            .map(|v| !v.0.is_empty())
-            .unwrap_or(false)
+            .ok
+    }
+
+    #[cfg(feature = "bench")]
+    pub async fn load_analyzed_state_for_bench(
+        &self,
+        path: impl AsRef<Path>,
+        all_targets: bool,
+        all_features: bool,
+    ) -> bool {
+        let path = path.as_ref();
+
+        if !self.add_analyze_target(path).await {
+            *self.analyzed.write().await = None;
+            *self.status.write().await = progress::AnalysisStatus::Error;
+            return false;
+        }
+
+        self.shutdown_subprocesses().await;
+        *self.status.write().await = progress::AnalysisStatus::Analyzing;
+
+        let analyzers = { self.analyzers.read().await.clone() };
+        let mut analyzed: Option<Crate> = None;
+
+        for analyzer in analyzers {
+            let mut iter = analyzer.analyze(all_targets, all_features).await;
+            while let Some(event) = iter.next_event().await {
+                if let AnalyzerEvent::Analyzed(ws) = event {
+                    for krate in ws.0.into_values() {
+                        if let Some(write) = &mut analyzed {
+                            write.merge(krate);
+                        } else {
+                            analyzed = Some(krate);
+                        }
+                    }
+                }
+            }
+        }
+
+        let ok = analyzed.as_ref().map(|v| !v.0.is_empty()).unwrap_or(false);
+        *self.analyzed.write().await = analyzed;
+        *self.status.write().await = if ok {
+            progress::AnalysisStatus::Finished
+        } else {
+            progress::AnalysisStatus::Error
+        };
+
+        ok
     }
 
     pub async fn shutdown_subprocesses(&self) {
@@ -411,15 +536,77 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         if let Some(path) = params.text_document.uri.to_file_path()
-            && path.is_file()
             && params.text_document.language_id == "rust"
-            && self.add_analyze_target(&path).await
         {
-            self.do_analyze().await;
+            let text = Arc::new(params.text_document.text);
+            let index = Arc::new(utils::LineCharIndex::new(&text));
+            let line_start_bytes = Arc::new(utils::line_start_bytes(&text));
+            let path = path.into_owned();
+            self.open_docs.write().await.insert(
+                path.clone(),
+                OpenDoc {
+                    text,
+                    index,
+                    line_start_bytes,
+                },
+            );
+
+            if path.is_file() && self.add_analyze_target(&path).await {
+                self.do_analyze().await;
+            }
         }
     }
 
-    async fn did_change(&self, _params: DidChangeTextDocumentParams) {
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        if let Some(path) = params.text_document.uri.to_file_path() {
+            if params.content_changes.is_empty() {
+                self.open_docs.write().await.remove(path.as_ref());
+            } else {
+                let mut docs = self.open_docs.write().await;
+                if let Some(open) = docs.get_mut(path.as_ref()) {
+                    // Apply ordered incremental edits. If anything looks odd, drop the cache.
+                    let mut text = (*open.text).clone();
+                    let mut line_starts = utils::line_start_bytes(&text);
+                    let mut drop_cache = false;
+
+                    for change in &params.content_changes {
+                        if let Some(range) = change.range {
+                            let start = utils::line_utf16_to_byte_offset(
+                                &text,
+                                &line_starts,
+                                range.start.line,
+                                range.start.character,
+                            );
+                            let end = utils::line_utf16_to_byte_offset(
+                                &text,
+                                &line_starts,
+                                range.end.line,
+                                range.end.character,
+                            );
+                            if start > end || end > text.len() {
+                                drop_cache = true;
+                                break;
+                            }
+                            text.replace_range(start..end, &change.text);
+                            line_starts = utils::line_start_bytes(&text);
+                        } else {
+                            // Full text replacement.
+                            text = change.text.clone();
+                            line_starts = utils::line_start_bytes(&text);
+                        }
+                    }
+
+                    if drop_cache {
+                        docs.remove(path.as_ref());
+                    } else {
+                        open.text = Arc::new(text);
+                        open.index = Arc::new(utils::LineCharIndex::new(open.text.as_ref()));
+                        open.line_start_bytes = Arc::new(line_starts);
+                    }
+                }
+            }
+        }
+
         *self.analyzed.write().await = None;
         self.shutdown_subprocesses().await;
     }

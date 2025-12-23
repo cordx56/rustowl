@@ -33,6 +33,14 @@ name = "rustowl_bench_simple"
 harness = false
 name = "line_col_bench"
 
+[[bench]]
+harness = false
+name = "cargo_output_parse_bench"
+
+[[bench]]
+harness = false
+name = "decos_bench"
+
 [dependencies]
 anyhow = "1"
 cargo_metadata = "0.23"
@@ -93,6 +101,7 @@ clap_mangen = "0.2"
 clap-verbosity-flag = { version = "3", default-features = false, features = [
   "tracing"
 ] }
+jiff = "0.2"
 regex = "1"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
@@ -101,6 +110,11 @@ tikv-jemallocator = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 zip = "7.0.0"
+
+[features]
+# Bench-only helpers used by `cargo bench` targets.
+# Off by default to avoid exposing internal APIs.
+bench = []
 
 [profile.release]
 opt-level = 3

@@ -57,16 +57,16 @@ pub enum Deco<R = Range> {
     },
 }
 impl Deco<Range> {
-    pub fn to_lsp_range(&self, s: &str) -> Deco<lsp_types::Range> {
-        match self.clone() {
+    pub fn to_lsp_range(&self, index: &utils::LineCharIndex) -> Deco<lsp_types::Range> {
+        match self {
             Deco::Lifetime {
                 local,
                 range,
                 hover_text,
                 overlapped,
             } => {
-                let start = utils::index_to_line_char(s, range.from());
-                let end = utils::index_to_line_char(s, range.until());
+                let start = index.index_to_line_char(range.from());
+                let end = index.index_to_line_char(range.until());
                 let start = lsp_types::Position {
                     line: start.0,
                     character: start.1,
@@ -76,10 +76,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::Lifetime {
-                    local,
+                    local: *local,
                     range: lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: hover_text.clone(),
+                    overlapped: *overlapped,
                 }
             }
             Deco::ImmBorrow {
@@ -88,8 +88,8 @@ impl Deco<Range> {
                 hover_text,
                 overlapped,
             } => {
-                let start = utils::index_to_line_char(s, range.from());
-                let end = utils::index_to_line_char(s, range.until());
+                let start = index.index_to_line_char(range.from());
+                let end = index.index_to_line_char(range.until());
                 let start = lsp_types::Position {
                     line: start.0,
                     character: start.1,
@@ -99,10 +99,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::ImmBorrow {
-                    local,
+                    local: *local,
                     range: lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: hover_text.clone(),
+                    overlapped: *overlapped,
                 }
             }
             Deco::MutBorrow {
@@ -111,8 +111,8 @@ impl Deco<Range> {
                 hover_text,
                 overlapped,
             } => {
-                let start = utils::index_to_line_char(s, range.from());
-                let end = utils::index_to_line_char(s, range.until());
+                let start = index.index_to_line_char(range.from());
+                let end = index.index_to_line_char(range.until());
                 let start = lsp_types::Position {
                     line: start.0,
                     character: start.1,
@@ -122,10 +122,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::MutBorrow {
-                    local,
+                    local: *local,
                     range: lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: hover_text.clone(),
+                    overlapped: *overlapped,
                 }
             }
             Deco::Move {
@@ -134,8 +134,8 @@ impl Deco<Range> {
                 hover_text,
                 overlapped,
             } => {
-                let start = utils::index_to_line_char(s, range.from());
-                let end = utils::index_to_line_char(s, range.until());
+                let start = index.index_to_line_char(range.from());
+                let end = index.index_to_line_char(range.until());
                 let start = lsp_types::Position {
                     line: start.0,
                     character: start.1,
@@ -145,10 +145,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::Move {
-                    local,
+                    local: *local,
                     range: lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: hover_text.clone(),
+                    overlapped: *overlapped,
                 }
             }
             Deco::Call {
@@ -157,8 +157,8 @@ impl Deco<Range> {
                 hover_text,
                 overlapped,
             } => {
-                let start = utils::index_to_line_char(s, range.from());
-                let end = utils::index_to_line_char(s, range.until());
+                let start = index.index_to_line_char(range.from());
+                let end = index.index_to_line_char(range.until());
                 let start = lsp_types::Position {
                     line: start.0,
                     character: start.1,
@@ -168,10 +168,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::Call {
-                    local,
+                    local: *local,
                     range: lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: hover_text.clone(),
+                    overlapped: *overlapped,
                 }
             }
             Deco::SharedMut {
@@ -180,8 +180,8 @@ impl Deco<Range> {
                 hover_text,
                 overlapped,
             } => {
-                let start = utils::index_to_line_char(s, range.from());
-                let end = utils::index_to_line_char(s, range.until());
+                let start = index.index_to_line_char(range.from());
+                let end = index.index_to_line_char(range.until());
                 let start = lsp_types::Position {
                     line: start.0,
                     character: start.1,
@@ -191,10 +191,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::SharedMut {
-                    local,
+                    local: *local,
                     range: lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: hover_text.clone(),
+                    overlapped: *overlapped,
                 }
             }
 
@@ -204,8 +204,8 @@ impl Deco<Range> {
                 hover_text,
                 overlapped,
             } => {
-                let start = utils::index_to_line_char(s, range.from());
-                let end = utils::index_to_line_char(s, range.until());
+                let start = index.index_to_line_char(range.from());
+                let end = index.index_to_line_char(range.until());
                 let start = lsp_types::Position {
                     line: start.0,
                     character: start.1,
@@ -215,10 +215,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::Outlive {
-                    local,
+                    local: *local,
                     range: lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: hover_text.clone(),
+                    overlapped: *overlapped,
                 }
             }
         }

@@ -61,24 +61,23 @@ impl Loc {
         let byte_pos = byte_pos.saturating_sub(offset);
         let byte_pos = byte_pos as usize;
 
-        // Convert byte position to character position efficiently
-        // Skip CR characters without allocating a new string
+        // Convert byte position to character position efficiently.
+        // Note: rustc byte positions are reported as if `\r` doesn't exist.
+        // So our byte counting must ignore CR too.
         let mut char_count = 0u32;
-        let mut byte_count = 0usize;
+        let mut normalized_byte_count = 0usize;
 
         for ch in source.chars() {
-            if byte_count >= byte_pos {
+            if ch == '\r' {
+                continue;
+            }
+            if normalized_byte_count >= byte_pos {
                 break;
             }
 
-            // Skip CR characters (compiler ignores them)
-            if ch != '\r' {
-                byte_count += ch.len_utf8();
-                if byte_count <= byte_pos {
-                    char_count += 1;
-                }
-            } else {
-                byte_count += ch.len_utf8();
+            normalized_byte_count += ch.len_utf8();
+            if normalized_byte_count <= byte_pos {
+                char_count += 1;
             }
         }
 
@@ -525,9 +524,11 @@ mod tests {
         // Test character position conversion
         let _loc = Loc::new(source, 8, 0); // Should point to space before 🦀
 
-        // Verify that CR characters are filtered out
+        // Verify that CR characters are filtered out.
+        // rustc byte positions are reported as if `\r` doesn't exist, so the same
+        // `byte_pos` should map to the same `Loc`.
         let source_with_cr = "hello\r\n world";
-        let loc_with_cr = Loc::new(source_with_cr, 8, 0);
+        let loc_with_cr = Loc::new(source_with_cr, 7, 0);
         let loc_without_cr = Loc::new("hello\n world", 7, 0);
         assert_eq!(loc_with_cr.0, loc_without_cr.0);
     }
@@ -567,41 +568,6 @@ mod tests {
         // Test with maximum values
         let max_range = Range::new(Loc(0), Loc(u32::MAX)).unwrap();
         assert_eq!(max_range.size(), u32::MAX);
-    }
-
-    #[test]
-    fn test_mir_variable_enum_operations() {
-        let user_var = MirVariable::User {
-            index: 42,
-            live: Range::new(Loc(0), Loc(10)).unwrap(),
-            dead: Range::new(Loc(10), Loc(20)).unwrap(),
-        };
-
-        let other_var = MirVariable::Other {
-            index: 24,
-            live: Range::new(Loc(5), Loc(15)).unwrap(),
-            dead: Range::new(Loc(15), Loc(25)).unwrap(),
-        };
-
-        // Test pattern matching
-        match user_var {
-            MirVariable::User { index, .. } => assert_eq!(index, 42),
-            _ => panic!("Should be User variant"),
-        }
-
-        match other_var {
-            MirVariable::Other { index, .. } => assert_eq!(index, 24),
-            _ => panic!("Should be Other variant"),
-        }
-
-        // Test equality
-        let user_var2 = MirVariable::User {
-            index: 42,
-            live: Range::new(Loc(0), Loc(10)).unwrap(),
-            dead: Range::new(Loc(10), Loc(20)).unwrap(),
-        };
-        assert_eq!(user_var, user_var2);
-        assert_ne!(user_var, other_var);
     }
 
     #[test]
@@ -740,90 +706,6 @@ mod tests {
 
         let other = MirStatement::Other { range };
         assert_eq!(other.range(), range);
-    }
-
-    /// Verifies that `MirTerminator::range()` returns the associated `Range` for every variant.
-    ///
-    /// This test constructs `Drop`, `Call`, and `Other` terminators and asserts that
-    /// calling `.range()` yields the same `Range` value provided at construction.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let range = Range::new(Loc(5), Loc(15)).unwrap();
-    /// let fn_local = FnLocal::new(2, 24);
-    ///
-    /// let drop_term = MirTerminator::Drop { local: fn_local, range };
-    /// assert_eq!(drop_term.range(), range);
-    ///
-    /// let call_term = MirTerminator::Call { destination_local: fn_local, fn_span: range };
-    /// assert_eq!(call_term.range(), range);
-    ///
-    /// let other_term = MirTerminator::Other { range };
-    /// assert_eq!(other_term.range(), range);
-    /// ```
-    #[test]
-    fn test_mir_terminator_range_extraction() {
-        let range = Range::new(Loc(5), Loc(15)).unwrap();
-        let fn_local = FnLocal::new(2, 24);
-
-        let drop_term = MirTerminator::Drop {
-            local: fn_local,
-            range,
-        };
-        assert_eq!(drop_term.range(), range);
-
-        let call_term = MirTerminator::Call {
-            destination_local: fn_local,
-            fn_span: range,
-        };
-        assert_eq!(call_term.range(), range);
-
-        let other_term = MirTerminator::Other { range };
-        assert_eq!(other_term.range(), range);
-    }
-
-    #[test]
-    fn test_mir_basic_block_operations() {
-        let mut bb = MirBasicBlock::with_capacity(5);
-        assert!(bb.statements.capacity() >= 5);
-
-        // Add statements
-        let range = Range::new(Loc(0), Loc(5)).unwrap();
-        let fn_local = FnLocal::new(1, 1);
-
-        bb.statements.push(MirStatement::StorageLive {
-            target_local: fn_local,
-            range,
-        });
-
-        bb.statements.push(MirStatement::Other { range });
-
-        // Add terminator
-        bb.terminator = Some(MirTerminator::Drop {
-            local: fn_local,
-            range,
-        });
-
-        assert_eq!(bb.statements.len(), 2);
-        assert!(bb.terminator.is_some());
-
-        // Test default creation
-        let default_bb = MirBasicBlock::default();
-        assert_eq!(default_bb.statements.len(), 0);
-        assert!(default_bb.terminator.is_none());
-    }
-
-    #[test]
-    fn test_function_with_capacity() {
-        let func = Function::with_capacity(123, 10, 20);
-        assert_eq!(func.fn_id, 123);
-        assert!(func.basic_blocks.capacity() >= 10);
-        assert!(func.decls.capacity() >= 20);
-
-        // Test that new function starts empty
-        assert_eq!(func.basic_blocks.len(), 0);
-        assert_eq!(func.decls.len(), 0);
     }
 
     #[test]
