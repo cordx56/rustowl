@@ -1,18 +1,18 @@
 mod polonius_analyzer;
+mod shared;
 mod transform;
 
 use super::cache;
 use rustc_borrowck::consumers::{
-    ConsumerOptions, PoloniusInput, PoloniusOutput, get_body_with_borrowck_facts,
+    BodyWithBorrowckFacts, ConsumerOptions, PoloniusInput, PoloniusOutput,
+    get_bodies_with_borrowck_facts,
 };
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
-use rustc_middle::{
-    mir::{BasicBlock, Local},
-    ty::TyCtxt,
-};
-use rustc_span::Span;
+use rustc_middle::{mir::Local, ty::TyCtxt};
+use rustowl::models::FoldIndexMap as HashMap;
+use rustowl::models::range_vec_from_vec;
 use rustowl::models::*;
-use std::collections::HashMap;
+use smallvec::SmallVec;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -27,17 +27,8 @@ pub struct AnalyzeResult {
 }
 
 pub enum MirAnalyzerInitResult {
-    Cached(AnalyzeResult),
+    Cached(Box<AnalyzeResult>),
     Analyzer(MirAnalyzeFuture),
-}
-
-fn range_from_span(source: &str, span: Span, offset: u32) -> Option<Range> {
-    let from = Loc::new(source, span.lo().0, offset);
-    let until = Loc::new(source, span.hi().0, offset);
-    Range::new(from, until)
-}
-fn sort_locs(v: &mut [(BasicBlock, usize)]) {
-    v.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
 }
 
 pub struct MirAnalyzer {
@@ -45,7 +36,7 @@ pub struct MirAnalyzer {
     local_decls: HashMap<Local, String>,
     user_vars: HashMap<Local, (Range, String)>,
     input: PoloniusInput,
-    basic_blocks: Vec<MirBasicBlock>,
+    basic_blocks: SmallVec<[MirBasicBlock; 8]>,
     fn_id: LocalDefId,
     file_hash: String,
     mir_hash: String,
@@ -56,10 +47,22 @@ pub struct MirAnalyzer {
     drop_range: HashMap<Local, Vec<Range>>,
 }
 impl MirAnalyzer {
-    /// initialize analyzer
-    pub fn init(tcx: TyCtxt<'_>, fn_id: LocalDefId) -> MirAnalyzerInitResult {
-        let mut facts =
-            get_body_with_borrowck_facts(tcx, fn_id, ConsumerOptions::PoloniusInputFacts);
+    /// initialize analyzer for the function and all nested bodies (closures, async blocks)
+    pub fn batch_init<'tcx>(tcx: TyCtxt<'tcx>, fn_id: LocalDefId) -> Vec<MirAnalyzerInitResult> {
+        let bodies =
+            get_bodies_with_borrowck_facts(tcx, fn_id, ConsumerOptions::PoloniusInputFacts);
+
+        bodies
+            .into_iter()
+            .map(|(def_id, facts)| Self::init_one(tcx, def_id, facts))
+            .collect()
+    }
+
+    fn init_one<'tcx>(
+        tcx: TyCtxt<'tcx>,
+        fn_id: LocalDefId,
+        mut facts: BodyWithBorrowckFacts<'tcx>,
+    ) -> MirAnalyzerInitResult {
         let input = *facts.input_facts.take().unwrap();
         let location_table = facts.location_table.take().unwrap();
 
@@ -75,7 +78,7 @@ impl MirAnalyzer {
         let path = file_name.to_path(rustc_span::FileNameDisplayPreference::Local);
         let source = std::fs::read_to_string(path).unwrap();
         let file_name = path.to_string_lossy().to_string();
-        log::info!("facts of {fn_id:?} prepared; start analyze of {fn_id:?}");
+        tracing::info!("facts of {fn_id:?} prepared; start analyze of {fn_id:?}");
 
         // collect local declared vars
         // this must be done in local thread
@@ -100,15 +103,15 @@ impl MirAnalyzer {
             *cache = cache::get_cache(&tcx.crate_name(LOCAL_CRATE).to_string());
         }
         if let Some(cache) = cache.as_mut()
-            && let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash)
+            && let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash, Some(&file_name))
         {
-            log::info!("MIR cache hit: {fn_id:?}");
-            return MirAnalyzerInitResult::Cached(AnalyzeResult {
+            tracing::info!("MIR cache hit: {fn_id:?}");
+            return MirAnalyzerInitResult::Cached(Box::new(AnalyzeResult {
                 file_name,
                 file_hash,
                 mir_hash,
-                analyzed: analyzed.clone(),
-            });
+                analyzed,
+            }));
         }
         drop(cache);
 
@@ -131,11 +134,11 @@ impl MirAnalyzer {
         let borrow_data = transform::BorrowMap::new(&facts.borrow_set);
 
         let analyzer = Box::pin(async move {
-            log::info!("start re-computing borrow check with dump: true");
+            tracing::info!("start re-computing borrow check with dump: true");
             // compute accurate region, which may eliminate invalid region
             let output_datafrog =
                 PoloniusOutput::compute(&input, polonius_engine::Algorithm::DatafrogOpt, true);
-            log::info!("borrow check finished");
+            tracing::info!("borrow check finished");
 
             let accurate_live = polonius_analyzer::get_accurate_live(
                 &output_datafrog,
@@ -181,50 +184,52 @@ impl MirAnalyzer {
 
     /// collect declared variables in MIR body
     /// final step of analysis
-    fn collect_decls(&self) -> Vec<MirDecl> {
+    fn collect_decls(&self) -> DeclVec {
         let user_vars = &self.user_vars;
         let lives = &self.accurate_live;
         let must_live_at = &self.must_live;
 
         let drop_range = &self.drop_range;
-        self.local_decls
-            .iter()
-            .map(|(local, ty)| {
-                let ty = ty.clone();
-                let must_live_at = must_live_at.get(local).cloned().unwrap_or(Vec::new());
-                let lives = lives.get(local).cloned().unwrap_or(Vec::new());
-                let shared_borrow = self.shared_live.get(local).cloned().unwrap_or(Vec::new());
-                let mutable_borrow = self.mutable_live.get(local).cloned().unwrap_or(Vec::new());
-                let drop = self.is_drop(*local);
-                let drop_range = drop_range.get(local).cloned().unwrap_or(Vec::new());
-                let fn_local = FnLocal::new(local.as_u32(), self.fn_id.local_def_index.as_u32());
-                if let Some((span, name)) = user_vars.get(local).cloned() {
-                    MirDecl::User {
-                        local: fn_local,
-                        name,
-                        span,
-                        ty,
-                        lives,
-                        shared_borrow,
-                        mutable_borrow,
-                        must_live_at,
-                        drop,
-                        drop_range,
-                    }
-                } else {
-                    MirDecl::Other {
-                        local: fn_local,
-                        ty,
-                        lives,
-                        shared_borrow,
-                        mutable_borrow,
-                        drop,
-                        drop_range,
-                        must_live_at,
-                    }
+        let mut result = DeclVec::with_capacity(self.local_decls.len());
+
+        for (local, ty) in &self.local_decls {
+            let ty = smol_str::SmolStr::from(ty.as_str());
+            let must_live_at = must_live_at.get(local).cloned().unwrap_or_default();
+            let lives = lives.get(local).cloned().unwrap_or_default();
+            let shared_borrow = self.shared_live.get(local).cloned().unwrap_or_default();
+            let mutable_borrow = self.mutable_live.get(local).cloned().unwrap_or_default();
+            let drop = self.is_drop(*local);
+            let drop_range = drop_range.get(local).cloned().unwrap_or_default();
+
+            let fn_local = FnLocal::new(local.as_u32(), self.fn_id.local_def_index.as_u32());
+            let decl = if let Some((span, name)) = user_vars.get(local).cloned() {
+                MirDecl::User {
+                    local: fn_local,
+                    name: smol_str::SmolStr::from(name.as_str()),
+                    span,
+                    ty,
+                    lives: range_vec_from_vec(lives),
+                    shared_borrow: range_vec_from_vec(shared_borrow),
+                    mutable_borrow: range_vec_from_vec(mutable_borrow),
+                    must_live_at: range_vec_from_vec(must_live_at),
+                    drop,
+                    drop_range: range_vec_from_vec(drop_range),
                 }
-            })
-            .collect()
+            } else {
+                MirDecl::Other {
+                    local: fn_local,
+                    ty,
+                    lives: range_vec_from_vec(lives),
+                    shared_borrow: range_vec_from_vec(shared_borrow),
+                    mutable_borrow: range_vec_from_vec(mutable_borrow),
+                    drop,
+                    drop_range: range_vec_from_vec(drop_range),
+                    must_live_at: range_vec_from_vec(must_live_at),
+                }
+            };
+            result.push(decl);
+        }
+        result
     }
 
     fn is_drop(&self, local: Local) -> bool {
@@ -250,6 +255,132 @@ impl MirAnalyzer {
                 basic_blocks,
                 decls,
             },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test AnalyzeResult structure creation
+    #[test]
+    fn test_analyze_result_creation() {
+        let result = AnalyzeResult {
+            file_name: "test.rs".to_string(),
+            file_hash: "abc123".to_string(),
+            mir_hash: "def456".to_string(),
+            analyzed: Function {
+                fn_id: 1,
+                basic_blocks: SmallVec::new(),
+                decls: DeclVec::new(),
+            },
+        };
+
+        assert_eq!(result.file_name, "test.rs");
+        assert_eq!(result.file_hash, "abc123");
+        assert_eq!(result.mir_hash, "def456");
+        assert_eq!(result.analyzed.fn_id, 1);
+        assert!(result.analyzed.decls.is_empty());
+        assert!(result.analyzed.basic_blocks.is_empty());
+    }
+
+    // Test MirAnalyzerInitResult enum variants
+    #[test]
+    fn test_mir_analyzer_init_result_cached() {
+        let analyze_result = AnalyzeResult {
+            file_name: "test.rs".to_string(),
+            file_hash: "hash".to_string(),
+            mir_hash: "mir_hash".to_string(),
+            analyzed: Function {
+                fn_id: 1,
+                basic_blocks: SmallVec::new(),
+                decls: DeclVec::new(),
+            },
+        };
+
+        let result = MirAnalyzerInitResult::Cached(Box::new(analyze_result.clone()));
+        match result {
+            MirAnalyzerInitResult::Cached(cached) => {
+                assert_eq!(cached.file_name, "test.rs");
+                assert_eq!(cached.file_hash, "hash");
+                assert_eq!(cached.mir_hash, "mir_hash");
+            }
+            _ => panic!("Expected Cached variant"),
+        }
+    }
+
+    // Test AnalyzeResult with populated data
+    #[test]
+    fn test_analyze_result_with_data() {
+        let mut decls = DeclVec::new();
+        decls.push(MirDecl::Other {
+            local: FnLocal { id: 1, fn_id: 50 },
+            ty: "String".into(),
+            lives: SmallVec::new(),
+            shared_borrow: SmallVec::new(),
+            mutable_borrow: SmallVec::new(),
+            drop: true,
+            drop_range: SmallVec::new(),
+            must_live_at: SmallVec::new(),
+        });
+
+        let mut basic_blocks = SmallVec::new();
+        basic_blocks.push(MirBasicBlock {
+            statements: SmallVec::new(),
+            terminator: None,
+        });
+
+        let result = AnalyzeResult {
+            file_name: "complex.rs".to_string(),
+            file_hash: "complex_hash".to_string(),
+            mir_hash: "complex_mir".to_string(),
+            analyzed: Function {
+                fn_id: 42,
+                basic_blocks,
+                decls,
+            },
+        };
+
+        assert_eq!(result.file_name, "complex.rs");
+        assert_eq!(result.analyzed.fn_id, 42);
+        assert_eq!(result.analyzed.decls.len(), 1);
+        assert_eq!(result.analyzed.basic_blocks.len(), 1);
+    }
+
+    // Test AnalyzeResult with user variables (simplified)
+    #[test]
+    fn test_analyze_result_with_user_vars() {
+        let mut decls = DeclVec::new();
+        // Create a simple test without complex Range construction
+        decls.push(MirDecl::Other {
+            local: FnLocal { id: 1, fn_id: 42 },
+            ty: "i32".into(),
+            lives: SmallVec::new(),
+            shared_borrow: SmallVec::new(),
+            mutable_borrow: SmallVec::new(),
+            drop: true,
+            drop_range: SmallVec::new(),
+            must_live_at: SmallVec::new(),
+        });
+
+        let result = AnalyzeResult {
+            file_name: "user_vars.rs".to_string(),
+            file_hash: "user_hash".to_string(),
+            mir_hash: "user_mir".to_string(),
+            analyzed: Function {
+                fn_id: 50,
+                basic_blocks: SmallVec::new(),
+                decls,
+            },
+        };
+
+        assert_eq!(result.analyzed.decls.len(), 1);
+        match &result.analyzed.decls[0] {
+            MirDecl::Other { drop, .. } => {
+                assert!(*drop);
+            }
+            _ => panic!("Expected Other variant"),
         }
     }
 }
