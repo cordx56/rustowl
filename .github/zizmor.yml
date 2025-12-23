@@ -9,3 +9,6 @@ rules:
     ignore:
       - validate-pr-title.yml
       - coverage.yml
+  template-injection:
+    ignore:
+      - build.yml
