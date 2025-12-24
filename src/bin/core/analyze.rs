@@ -2,24 +2,21 @@ mod polonius_analyzer;
 mod transform;
 
 use super::cache;
-use polonius_engine::FactTypes;
 use rustc_borrowck::consumers::{
-    BorrowSet, ConsumerOptions, PoloniusInput, PoloniusLocationTable, PoloniusOutput, RustcFacts,
-    get_body_with_borrowck_facts,
+    ConsumerOptions, PoloniusInput, PoloniusOutput, get_body_with_borrowck_facts,
 };
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_middle::{
-    mir::{BasicBlock, Body, Local},
+    mir::{BasicBlock, Local},
     ty::TyCtxt,
 };
 use rustc_span::Span;
-use rustowl::{models::*, utils};
+use rustowl::models::*;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-pub type MirAnalyzeFuture<'tcx> =
-    Pin<Box<dyn Future<Output = MirAnalyzer<'tcx>> + Send + Sync + 'tcx>>;
+pub type MirAnalyzeFuture = Pin<Box<dyn Future<Output = MirAnalyzer> + Send + Sync>>;
 
 #[derive(Clone, Debug)]
 pub struct AnalyzeResult {
@@ -29,12 +26,10 @@ pub struct AnalyzeResult {
     pub analyzed: Function,
 }
 
-pub enum MirAnalyzerInitResult<'tcx> {
+pub enum MirAnalyzerInitResult {
     Cached(AnalyzeResult),
-    Analyzer(MirAnalyzeFuture<'tcx>),
+    Analyzer(MirAnalyzeFuture),
 }
-
-type Region = <RustcFacts as FactTypes>::Origin;
 
 fn range_from_span(source: &str, span: Span, offset: u32) -> Option<Range> {
     let from = Loc::new(source, span.lo().0, offset);
@@ -44,59 +39,29 @@ fn range_from_span(source: &str, span: Span, offset: u32) -> Option<Range> {
 fn sort_locs(v: &mut [(BasicBlock, usize)]) {
     v.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
 }
-fn erase_superset(mut ranges: Vec<Range>, erase_subset: bool) -> Vec<Range> {
-    let mut len = ranges.len();
-    let mut i = 0;
-    while i < len {
-        let mut j = i + 1;
-        while j < len {
-            let cond_j_i = !erase_subset
-                && ((ranges[j].from() <= ranges[i].from()
-                    && ranges[i].until() < ranges[j].until())
-                    || (ranges[j].from() < ranges[i].from()
-                        && ranges[i].until() <= ranges[j].until()));
-            let cond_i_j = erase_subset
-                && ((ranges[i].from() <= ranges[j].from()
-                    && ranges[j].until() < ranges[i].until())
-                    || (ranges[i].from() < ranges[j].from()
-                        && ranges[j].until() <= ranges[i].until()));
-            if cond_j_i || cond_i_j {
-                ranges.remove(j);
-            } else {
-                j += 1;
-            }
-            len = ranges.len();
-        }
-        i += 1;
-    }
-    ranges
-}
 
-pub struct MirAnalyzer<'tcx> {
+pub struct MirAnalyzer {
     file_name: String,
-    location_table: PoloniusLocationTable,
-    borrow_set: BorrowSet<'tcx>,
-    body: Body<'tcx>,
+    local_decls: HashMap<Local, String>,
     user_vars: HashMap<Local, (Range, String)>,
     input: PoloniusInput,
-    output_insensitive: PoloniusOutput,
-    output_datafrog: PoloniusOutput,
     basic_blocks: Vec<MirBasicBlock>,
     fn_id: LocalDefId,
     file_hash: String,
     mir_hash: String,
     accurate_live: HashMap<Local, Vec<Range>>,
+    must_live: HashMap<Local, Vec<Range>>,
+    shared_live: HashMap<Local, Vec<Range>>,
+    mutable_live: HashMap<Local, Vec<Range>>,
     drop_range: HashMap<Local, Vec<Range>>,
 }
-impl MirAnalyzer<'_> {
+impl MirAnalyzer {
     /// initialize analyzer
-    pub fn init(tcx: TyCtxt<'_>, fn_id: LocalDefId) -> MirAnalyzerInitResult<'_> {
+    pub fn init(tcx: TyCtxt<'_>, fn_id: LocalDefId) -> MirAnalyzerInitResult {
         let mut facts =
-            get_body_with_borrowck_facts(tcx, fn_id, ConsumerOptions::PoloniusOutputFacts);
+            get_body_with_borrowck_facts(tcx, fn_id, ConsumerOptions::PoloniusInputFacts);
         let input = *facts.input_facts.take().unwrap();
-        let body = facts.body.clone();
         let location_table = facts.location_table.take().unwrap();
-        let borrow_set = facts.borrow_set;
 
         let source_map = tcx.sess.source_map();
 
@@ -112,10 +77,21 @@ impl MirAnalyzer<'_> {
         let file_name = path.to_string_lossy().to_string();
         log::info!("facts of {fn_id:?} prepared; start analyze of {fn_id:?}");
 
+        // collect local declared vars
+        // this must be done in local thread
+        let local_decls = facts
+            .body
+            .local_decls
+            .iter_enumerated()
+            .map(|(local, decl)| (local, decl.ty.to_string()))
+            .collect();
+
         // region variables should not be hashed (it results an error)
         // so we erase region variables and set 'static as new region
-        let mir_hash =
-            cache::Hasher::get_hash(tcx, transform::erase_region_variables(tcx, body.clone()));
+        let mir_hash = cache::Hasher::get_hash(
+            tcx,
+            transform::erase_region_variables(tcx, facts.body.clone()),
+        );
         let file_hash = cache::Hasher::get_hash(tcx, &source);
         let mut cache = cache::CACHE.lock().unwrap();
 
@@ -137,11 +113,11 @@ impl MirAnalyzer<'_> {
         drop(cache);
 
         // collect user defined vars
-        // this should be done in local thread
-        let user_vars = transform::collect_user_vars(&source, offset, &body);
+        // this must be done in local thread
+        let user_vars = transform::collect_user_vars(&source, offset, &facts.body);
 
         // build basic blocks map
-        // this should be done in local thread
+        // this must be done in local thread
         let basic_blocks = transform::collect_basic_blocks(
             fn_id,
             &source,
@@ -150,15 +126,12 @@ impl MirAnalyzer<'_> {
             tcx.sess.source_map(),
         );
 
+        // collect borrow data
+        // this must be done in local thread
+        let borrow_data = transform::BorrowMap::new(&facts.borrow_set);
+
         let analyzer = Box::pin(async move {
             log::info!("start re-computing borrow check with dump: true");
-            // compute insensitive
-            // it may include invalid region, which can be used at showing wrong region
-            let output_insensitive = PoloniusOutput::compute(
-                &input,
-                polonius_engine::Algorithm::LocationInsensitive,
-                true,
-            );
             // compute accurate region, which may eliminate invalid region
             let output_datafrog =
                 PoloniusOutput::compute(&input, polonius_engine::Algorithm::DatafrogOpt, true);
@@ -170,23 +143,36 @@ impl MirAnalyzer<'_> {
                 &basic_blocks,
             );
 
+            let must_live = polonius_analyzer::get_must_live(
+                &output_datafrog,
+                &location_table,
+                &borrow_data,
+                &basic_blocks,
+            );
+
+            let (shared_live, mutable_live) = polonius_analyzer::get_borrow_live(
+                &output_datafrog,
+                &location_table,
+                &borrow_data,
+                &basic_blocks,
+            );
+
             let drop_range =
                 polonius_analyzer::drop_range(&output_datafrog, &location_table, &basic_blocks);
 
             MirAnalyzer {
                 file_name,
-                location_table,
-                borrow_set,
-                body,
+                local_decls,
                 input,
-                output_insensitive,
-                output_datafrog,
                 user_vars,
                 basic_blocks,
                 fn_id,
                 file_hash,
                 mir_hash,
                 accurate_live,
+                must_live,
+                shared_live,
+                mutable_live,
                 drop_range,
             }
         });
@@ -198,35 +184,21 @@ impl MirAnalyzer<'_> {
     fn collect_decls(&self) -> Vec<MirDecl> {
         let user_vars = &self.user_vars;
         let lives = &self.accurate_live;
+        let must_live_at = &self.must_live;
 
-        let (shared, mutable) = polonius_analyzer::get_borrow_live(
-            &self.output_datafrog,
-            &self.location_table,
-            &self.borrow_set,
-            &self.basic_blocks,
-        );
-        let must_live_at = polonius_analyzer::get_must_live(
-            &self.output_insensitive,
-            &self.location_table,
-            &self.borrow_set,
-            &self.basic_blocks,
-        );
         let drop_range = &self.drop_range;
-        self.body
-            .local_decls
-            .iter_enumerated()
-            .map(|(local, decl)| {
-                let ty = decl.ty.to_string();
-                let must_live_at = utils::eliminated_ranges(
-                    must_live_at.get(&local).cloned().unwrap_or(Vec::new()),
-                );
-                let lives = lives.get(&local).cloned().unwrap_or(Vec::new());
-                let shared_borrow = shared.get(&local).cloned().unwrap_or(Vec::new());
-                let mutable_borrow = mutable.get(&local).cloned().unwrap_or(Vec::new());
-                let drop = self.is_drop(local);
-                let drop_range = drop_range.get(&local).cloned().unwrap_or(Vec::new());
+        self.local_decls
+            .iter()
+            .map(|(local, ty)| {
+                let ty = ty.clone();
+                let must_live_at = must_live_at.get(local).cloned().unwrap_or(Vec::new());
+                let lives = lives.get(local).cloned().unwrap_or(Vec::new());
+                let shared_borrow = self.shared_live.get(local).cloned().unwrap_or(Vec::new());
+                let mutable_borrow = self.mutable_live.get(local).cloned().unwrap_or(Vec::new());
+                let drop = self.is_drop(*local);
+                let drop_range = drop_range.get(local).cloned().unwrap_or(Vec::new());
                 let fn_local = FnLocal::new(local.as_u32(), self.fn_id.local_def_index.as_u32());
-                if let Some((span, name)) = user_vars.get(&local).cloned() {
+                if let Some((span, name)) = user_vars.get(local).cloned() {
                     MirDecl::User {
                         local: fn_local,
                         name,

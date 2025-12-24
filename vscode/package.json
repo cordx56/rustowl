@@ -2,7 +2,7 @@
   "name": "rustowl-vscode",
   "displayName": "RustOwl VSCode",
   "description": "Visualize ownership and lifetimes in Rust",
-  "version": "0.3.4",
+  "version": "1.0.0-rc.1",
   "author": "cordx56 <cordx56@cordx.cx>",
   "publisher": "cordx56",
   "engines": {
@@ -116,31 +116,31 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.9",
-    "@types/node": "^24.2.1",
+    "@types/node": "^25.0.3",
     "@types/proxyquire": "^1.3.31",
-    "@types/sinon": "^17.0.4",
+    "@types/sinon": "^21.0.0",
     "@types/vscode": "^1.101.0",
-    "@typescript-eslint/eslint-plugin": "^8.39.1",
-    "@typescript-eslint/parser": "^8.39.1",
-    "@vscode/test-cli": "^0.0.11",
+    "@typescript-eslint/eslint-plugin": "^8.50.0",
+    "@typescript-eslint/parser": "^8.50.0",
+    "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^3.6.0",
+    "@vscode/vsce": "^3.7.1",
     "c8": "^10.1.3",
-    "esbuild": "^0.25.9",
-    "eslint": "^9.33.0",
-    "glob": "^11.0.3",
-    "mocha": "^11.7.1",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.39.2",
+    "glob": "^13.0.0",
+    "mocha": "^11.7.5",
     "npm-run-all2": "^8.0.4",
-    "ovsx": "^0.10.5",
-    "prettier": "^3.6.2",
+    "ovsx": "^0.10.7",
+    "prettier": "^3.7.4",
     "proxyquire": "^2.1.3",
-    "sinon": "^21.0.0",
-    "typescript": "^5.9.2"
+    "sinon": "^21.0.1",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "semver-parser": "^4.1.8",
     "vscode-languageclient": "^9.0.1",
-    "zod": "^4.0.17"
+    "zod": "^4.2.1"
   },
   "packageManager": "pnpm@10.14.0+sha512.ad27a79641b49c3e481a16a805baa71817a04bbe06a38d17e60e2eaee83f6a146c6a688125f5792e48dd5ba30e7da52a5cda4c3992b9ccf333f9ce223af84748"
 }

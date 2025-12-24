@@ -46,7 +46,7 @@ The minimal configuration for RustOwl using [lazy.nvim](https://github.com/folke
 {
   'cordx56/rustowl',
   version = '*', -- Latest stable version
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false, -- This plugin is already lazy
   opts = {},
 }
@@ -152,7 +152,7 @@ opts = {
 {
   'cordx56/rustowl',
   version = '*',
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false,
   opts = {},
 }
@@ -164,7 +164,7 @@ opts = {
 {
   'cordx56/rustowl',
   version = '*',
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false,
   opts = {
     auto_enable = true,
@@ -186,7 +186,7 @@ opts = {
 {
   'cordx56/rustowl',
   version = '*',
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false,
   opts = {
     auto_enable = false,
@@ -220,7 +220,7 @@ opts = {
 {
   'cordx56/rustowl',
   version = '*',
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false,
   opts = {
     colors = {
@@ -245,7 +245,7 @@ require('lazy').setup({
   {
     'cordx56/rustowl',
     version = '*',
-    build = 'cargo binstall rustowl',
+    build = 'cargo install rustowl',
     lazy = false,
     opts = {
       colors = {
