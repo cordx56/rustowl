@@ -33,13 +33,14 @@ pub enum AnalyzerEvent {
 pub struct Analyzer {
     path: PathBuf,
     metadata: Option<cargo_metadata::Metadata>,
+    rustc_threads: usize,
 }
 
 impl Analyzer {
-    pub async fn new(path: impl AsRef<Path>) -> Result<Self, ()> {
+    pub async fn new(path: impl AsRef<Path>, rustc_threads: usize) -> Result<Self, ()> {
         let path = path.as_ref().to_path_buf();
 
-        let mut cargo_cmd = toolchain::setup_cargo_command().await;
+        let mut cargo_cmd = toolchain::setup_cargo_command(rustc_threads).await;
 
         cargo_cmd
             .args([
@@ -68,11 +69,13 @@ impl Analyzer {
             Ok(Self {
                 path: metadata.workspace_root.as_std_path().to_path_buf(),
                 metadata: Some(metadata),
+                rustc_threads,
             })
         } else if path.is_file() && path.extension().map(|v| v == "rs").unwrap_or(false) {
             Ok(Self {
                 path,
                 metadata: None,
+                rustc_threads,
             })
         } else {
             log::warn!("Invalid analysis target: {}", path.display());
@@ -110,7 +113,7 @@ impl Analyzer {
         let package_name = metadata.root_package().as_ref().unwrap().name.to_string();
         let target_dir = metadata.target_directory.as_std_path().join("owl");
         log::info!("clear cargo cache");
-        let mut command = toolchain::setup_cargo_command().await;
+        let mut command = toolchain::setup_cargo_command(1).await;
         command
             .args(["clean", "--package", &package_name])
             .env("CARGO_TARGET_DIR", &target_dir)
@@ -119,7 +122,7 @@ impl Analyzer {
             .stderr(std::process::Stdio::null());
         command.spawn().unwrap().wait().await.ok();
 
-        let mut command = toolchain::setup_cargo_command().await;
+        let mut command = toolchain::setup_cargo_command(self.rustc_threads).await;
 
         let mut args = vec!["check", "--workspace"];
         if all_targets {
