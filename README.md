@@ -57,8 +57,8 @@ RustOwl visualizes those by using underlines:
 - 🟪 purple: mutable borrowing
 - 🟧 orange: value moved / function call
 - 🟥 red: lifetime error
-  - diff of lifetime between actual and expected, or
-  - invalid overlapped lifetime of mutable and shared (immutable) references
+  - Diff of lifetime between actual and expected, or
+  - Invalid overlapped lifetime of mutable and shared (immutable) references
 
 Detailed usage is described [here](docs/usage.md).
 
@@ -71,6 +71,7 @@ So, RustOwl can be used easily from other editor.
 
 <!--toc:start-->
 
+- [Table Of Contents](#table-of-contents)
 - [Support](#support)
 - [Quick Start](#quick-start)
   - [Prerequisite](#prerequisite)
@@ -81,14 +82,8 @@ So, RustOwl can be used easily from other editor.
   - [Emacs](#emacs)
   - [RustRover / IntelliJ IDEs](#rustrover--intellij-ides)
   - [Sublime Text](#sublime-text)
-- [Architecture / OS / package repositories](#architecture--os--package-repositories)
-  - [Cargo Binstall](#cargo-binstall)
-  - [Windows](#windows)
-  - [Archlinux](#archlinux)
-  - [Nix flake](#nix-flake)
-  - [GitHub Release](#github-release)
-  - [Docker](#docker)
-- [Build manually](#build-manually)
+- [Installation](#installation)
+- [Usage](#usage)
 - [Note](#note)
 <!--toc:end-->
 
@@ -100,7 +95,7 @@ Also, you can reach out to us on the Discord server provided above.
 
 ## Quick Start
 
-Here we describe how to start using RustOwl with VS Code.
+Here we describe how to start using RustOwl.
 
 ### Prerequisite
 
@@ -115,6 +110,8 @@ We tested this guide on macOS Sequoia 15.3.2 on arm64 architecture with VS Code 
 You can install VS Code extension from [this link](https://marketplace.visualstudio.com/items?itemName=cordx56.rustowl-vscode).
 RustOwl will be installed automatically when the extension is activated.
 
+For more detailed configuration options, see the [VS Code Configuration Guide](docs/vscode-configuration.md).
+
 ### Vscodium
 
 You can install Vscodium extension from [this link](https://open-vsx.org/extension/cordx56/rustowl-vscode).
@@ -123,10 +120,12 @@ RustOwl will be installed automatically when the extension is activated.
 After installation, the extension will automatically run RustOwl when you save any Rust program in cargo workspace.
 The initial analysis may take some time, but from the second run onward, compile caching is used to reduce the analysis time.
 
+Same as [VS Code](#vs-code), see the [VS Code Configuration Guide](docs/vscode-configuration.md) for more detailed configuration options.
+
 ## Other editor support
 
 We support Neovim and Emacs.
-You have to [install RustOwl](docs/installation.md) before using RustOwl with other editors.
+You have to [install RustOwl](./docs/installation.md) before using RustOwl with other editors.
 
 You can also create your own LSP client.
 If you would like to implement a client, please refer to the [The RustOwl LSP specification](docs/lsp-spec.md).
@@ -146,64 +145,6 @@ Minimal setup with [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```
 
 For comprehensive configuration options including custom highlight colors, see the [Neovim Configuration Guide](docs/neovim-configuration.md).
-
-<details>
-<summary>Recommended configuration: <b>Click to expand</b></summary>
-
-```lua
-{
-  'cordx56/rustowl',
-  version = '*', -- Latest stable version
-  build = 'cargo install rustowl',
-  lazy = false, -- This plugin is already lazy
-  opts = {
-    client = {
-      on_attach = function(_, buffer)
-        vim.keymap.set('n', '<leader>o', function()
-          require('rustowl').toggle(buffer)
-        end, { buffer = buffer, desc = 'Toggle RustOwl' })
-      end
-    },
-  },
-}
-```
-
-</details>
-
-Default options:
-
-```lua
-{
-  auto_attach = true, -- Auto attach the RustOwl LSP client when opening a Rust file
-  auto_enable = false, -- Enable RustOwl immediately when attaching the LSP client
-  idle_time = 500, -- Time in milliseconds to hover with the cursor before triggering RustOwl
-  client = {}, -- LSP client configuration that gets passed to `vim.lsp.start`
-  highlight_style = 'undercurl', -- You can also use 'underline'
-  colors = { -- Customize highlight colors (hex colors)
-    lifetime = '#00cc00',   -- 🟩 green: variable's actual lifetime
-    imm_borrow = '#0000cc', -- 🟦 blue: immutable borrowing
-    mut_borrow = '#cc00cc', -- 🟪 purple: mutable borrowing
-    move = '#cccc00',       -- 🟧 orange: value moved
-    call = '#cccc00',       -- 🟧 orange: function call
-    outlive = '#cc0000',    -- 🟥 red: lifetime error
-  },
-}
-```
-
-When opening a Rust file, the Neovim plugin creates the `Rustowl` user command:
-
-```vim
-:Rustowl {subcommand}
-```
-
-where `{subcommand}` can be one of:
-
-- `start_client`: Start the rustowl LSP client.
-- `stop_client`: Stop the rustowl LSP client.
-- `restart_client`: Restart the rustowl LSP client.
-- `enable`: Enable rustowl highlights.
-- `disable`: Disable rustowl highlights.
-- `toggle`: Toggle rustowl highlights.
 
 ### Emacs
 
@@ -225,6 +166,8 @@ Then use-package:
 
 You have to install RustOwl LSP server manually.
 
+For more detailed configuration options, see the [Emacs Configuration Guide](./docs/emacs-configuration.md).
+
 ### RustRover / IntelliJ IDEs
 
 There is a [third-party repository](https://github.com/siketyan/intellij-rustowl) that supports IntelliJ IDEs.
@@ -234,98 +177,13 @@ You have to install RustOwl LSP server manually.
 
 There is a [third-party repository](https://github.com/CREAsTIVE/LSP-rustowl) that supports Sublime Text.
 
-## Architecture / OS / package repositories
+## Installation
 
-### [Cargo Binstall](https://github.com/cargo-bins/cargo-binstall)
+Please see [Installation](docs/installation.md) for detailed installation instructions.
 
-One of the easiest way to install RustOwl is using cargo-binstall.
+## Usage
 
-```bash
-cargo binstall rustowl
-```
-
-Toolchain is automatically Downloaded and unpacked.
-
-### Windows
-
-We have a winget package, install with:
-
-```sh
-winget install rustowl
-```
-
-### Archlinux
-
-We have an AUR package. It downloads prebuilt binaries from release page. Run:
-
-```sh
-yay -S rustowl-bin
-```
-
-If you would like to build from that version instead:
-
-```sh
-yay -S rustowl
-```
-
-Replace `yay` with your AUR helper of choice.
-
-We also have a git version, that builds from source:
-
-```sh
-yay -S rustowl-git
-```
-
-### Nix flake
-
-There is a [third-party Nix flake repository](https://github.com/nix-community/rustowl-flake) in the Nix community.
-
-### GitHub Release
-
-Download only `rustowl` executable from [release page](https://github.com/cordx56/rustowl/releases/latest) and place it into the place you desire.
-Toolchain is automatically Downloaded and unpacked.
-
-### Docker
-
-You can run `rustowl` using the pre-built Docker image from GitHub Container Registry (GHCR).
-
-1. Pull the latest stable image
-
-```sh
-docker pull ghcr.io/cordx56/rustowl:latest
-```
-
-Or pull a specific version:
-
-```sh
-docker pull ghcr.io/cordx56/rustowl:v0.3.4
-```
-
-2. Run the image
-
-```sh
-docker run --rm -v /path/to/project:/app ghcr.io/cordx56/rustowl:latest
-```
-
-You can also pass command-line arguments as needed:
-
-```sh
-docker run --rm /path/to/project:/app ghcr.io/cordx56/rustowl:latest --help
-```
-
-3. (Optional) Use as a CLI
-
-To use `rustowl` as if it were installed on your system, you can create a shell alias:
-
-```sh
-alias rustowl='docker run --rm -v $(pwd):/app ghcr.io/cordx56/rustowl:latest'
-```
-
-Now you can run `rustowl` from your terminal like a regular command.
-
-## Build manually
-
-There is a [build guide](docs/build.md) to build RustOwl or extensions.
+Please see [Usage](docs/usage.md) for detailed usage instructions.
 
 ## Note
 
