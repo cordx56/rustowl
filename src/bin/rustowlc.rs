@@ -25,9 +25,6 @@ pub mod core;
 use std::process::exit;
 
 fn main() {
-    // Initialize crypto provider for HTTPS requests
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-
     rustowl::initialize_logging(tracing_subscriber::filter::LevelFilter::INFO);
 
     // This is cited from [rustc](https://github.com/rust-lang/rust/blob/3014e79f9c8d5510ea7b3a3b70d171d0948b1e96/compiler/rustc/src/main.rs).
