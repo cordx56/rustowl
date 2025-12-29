@@ -58,7 +58,6 @@ impl<'tcx> Hasher<'tcx> {
     }
 }
 
-/// Enhanced cache entry with metadata for robust caching
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CacheEntry {
     /// The cached function data
@@ -372,7 +371,7 @@ impl CacheData {
     }
 }
 
-/// Get cache data with robust error handling and validation
+/// Get cache data
 ///
 /// If cache is not enabled, then return None.
 /// If file doesn't exist, it returns empty [`CacheData`].
