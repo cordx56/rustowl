@@ -63,9 +63,6 @@ pub fn merge_ranges(r1: Range, r2: Range) -> Option<Range> {
 }
 
 /// Eliminates overlapping and adjacent ranges by merging them.
-///
-/// Optimized implementation: O(n log n) sort + linear merge instead of
-/// the previous O(n^2) pairwise merging loop. Keeps behavior identical.
 pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
     if ranges.len() <= 1 {
         return ranges;
@@ -165,11 +162,6 @@ pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
 ///
 /// `rustc` byte positions behave as if `\r` bytes do not exist in the source.
 /// `Loc` is a *logical character index* where `\r` is ignored too.
-///
-/// `Loc::new(source, byte_pos, offset)` previously scanned `source` on every
-/// call. When mapping thousands of MIR spans to ranges, that becomes a hot spot.
-/// This index scans the source once and then answers conversions in `O(1)`
-/// (ASCII fast-path) or `O(log n)` (binary search on UTF-8 char boundaries).
 #[derive(Debug, Clone)]
 pub struct NormalizedByteCharIndex {
     kind: NormalizedByteCharIndexKind,
