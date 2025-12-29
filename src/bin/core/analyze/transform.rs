@@ -1,3 +1,4 @@
+use ecow::EcoVec;
 use rayon::prelude::*;
 use rustc_borrowck::consumers::{BorrowIndex, BorrowSet, RichLocation};
 use rustc_hir::def_id::LocalDefId;
@@ -11,7 +12,6 @@ use rustc_middle::{
 use rustc_span::source_map::SourceMap;
 use rustowl::models::*;
 use rustowl::models::{FoldIndexMap as HashMap, FoldIndexSet as HashSet};
-use smallvec::SmallVec;
 
 /// RegionEraser to erase region variables from MIR body
 /// This is required to hash MIR body
@@ -44,6 +44,8 @@ pub fn collect_user_vars(
     offset: u32,
     body: &Body<'_>,
 ) -> HashMap<Local, (Range, String)> {
+    let index = rustowl::utils::NormalizedByteCharIndex::new(source);
+
     let mut result = HashMap::with_capacity_and_hasher(
         body.var_debug_info.len(),
         foldhash::quality::RandomState::default(),
@@ -51,7 +53,7 @@ pub fn collect_user_vars(
     for debug in &body.var_debug_info {
         if let VarDebugInfoContents::Place(place) = &debug.value
             && let Some(range) =
-                super::shared::range_from_span(source, debug.source_info.span, offset)
+                super::shared::range_from_span_indexed(&index, debug.source_info.span, offset)
         {
             result.insert(place.local, (range, debug.name.as_str().to_owned()));
         }
@@ -66,100 +68,72 @@ pub fn collect_basic_blocks(
     offset: u32,
     basic_blocks: &BasicBlocks<'_>,
     source_map: &SourceMap,
-) -> SmallVec<[MirBasicBlock; 8]> {
-    let mut result = SmallVec::with_capacity(basic_blocks.len());
+) -> EcoVec<MirBasicBlock> {
+    // Building the byte→Loc index once per file removes the previous
+    // `Loc::new` per-span scan hot spot.
+    let index = rustowl::utils::NormalizedByteCharIndex::new(source);
+    let fn_u32 = fn_id.local_def_index.as_u32();
+
+    // A small threshold helps avoid rayon overhead on tiny blocks.
+    const PAR_THRESHOLD: usize = 64;
+
+    let mut result = EcoVec::with_capacity(basic_blocks.len());
 
     for (_bb, bb_data) in basic_blocks.iter_enumerated() {
-        let statements: Vec<_> = bb_data
-            .statements
-            .iter()
-            // `source_map` is not Send
-            .filter(|stmt| stmt.source_info.span.is_visible(source_map))
-            .collect();
+        // `source_map` is not Send, so the visibility filter must run on the
+        // current thread.
+        let mut visible = Vec::with_capacity(bb_data.statements.len());
+        for stmt in &bb_data.statements {
+            if stmt.source_info.span.is_visible(source_map) {
+                visible.push(stmt);
+            }
+        }
 
-        let mut bb_statements = StatementVec::with_capacity(statements.len());
-        let collected_statements: Vec<_> = statements
-            .par_iter()
-            .filter_map(|statement| match &statement.kind {
-                StatementKind::Assign(v) => {
-                    let (place, rval) = &**v;
-                    let target_local_index = place.local.as_u32();
-                    let range_opt =
-                        super::shared::range_from_span(source, statement.source_info.span, offset);
-                    let rv = match rval {
-                        Rvalue::Use(Operand::Move(p)) => {
-                            let local = p.local;
-                            range_opt.map(|range| MirRval::Move {
-                                target_local: FnLocal::new(
-                                    local.as_u32(),
-                                    fn_id.local_def_index.as_u32(),
-                                ),
-                                range,
-                            })
-                        }
-                        Rvalue::Ref(_region, kind, place) => {
-                            let mutable = matches!(kind, BorrowKind::Mut { .. });
-                            let local = place.local;
-                            let outlive = None;
-                            range_opt.map(|range| MirRval::Borrow {
-                                target_local: FnLocal::new(
-                                    local.as_u32(),
-                                    fn_id.local_def_index.as_u32(),
-                                ),
-                                range,
-                                mutable,
-                                outlive,
-                            })
-                        }
-                        _ => None,
-                    };
-                    range_opt.map(|range| MirStatement::Assign {
-                        target_local: FnLocal::new(
-                            target_local_index,
-                            fn_id.local_def_index.as_u32(),
-                        ),
-                        range,
-                        rval: rv,
-                    })
-                }
-                _ => super::shared::range_from_span(source, statement.source_info.span, offset)
-                    .map(|range| MirStatement::Other { range }),
-            })
-            .collect();
-        bb_statements.extend(collected_statements);
+        let mut bb_statements = StatementVec::with_capacity(visible.len());
+        if visible.len() >= PAR_THRESHOLD {
+            let collected_statements: Vec<_> = visible
+                .par_iter()
+                .filter_map(|statement| statement_to_mir(&index, fn_u32, offset, statement))
+                .collect();
+            bb_statements.extend(collected_statements);
+        } else {
+            bb_statements.extend(
+                visible
+                    .iter()
+                    .filter_map(|statement| statement_to_mir(&index, fn_u32, offset, statement)),
+            );
+        }
 
         let terminator =
             bb_data
                 .terminator
                 .as_ref()
                 .and_then(|terminator| match &terminator.kind {
-                    TerminatorKind::Drop { place, .. } => {
-                        super::shared::range_from_span(source, terminator.source_info.span, offset)
-                            .map(|range| MirTerminator::Drop {
-                                local: FnLocal::new(
-                                    place.local.as_u32(),
-                                    fn_id.local_def_index.as_u32(),
-                                ),
-                                range,
-                            })
-                    }
+                    TerminatorKind::Drop { place, .. } => super::shared::range_from_span_indexed(
+                        &index,
+                        terminator.source_info.span,
+                        offset,
+                    )
+                    .map(|range| MirTerminator::Drop {
+                        local: FnLocal::new(place.local.as_u32(), fn_u32),
+                        range,
+                    }),
                     TerminatorKind::Call {
                         destination,
                         fn_span,
                         ..
-                    } => super::shared::range_from_span(source, *fn_span, offset).map(|fn_span| {
-                        MirTerminator::Call {
-                            destination_local: FnLocal::new(
-                                destination.local.as_u32(),
-                                fn_id.local_def_index.as_u32(),
-                            ),
+                    } => super::shared::range_from_span_indexed(&index, *fn_span, offset).map(
+                        |fn_span| MirTerminator::Call {
+                            destination_local: FnLocal::new(destination.local.as_u32(), fn_u32),
                             fn_span,
-                        }
-                    }),
-                    _ => {
-                        super::shared::range_from_span(source, terminator.source_info.span, offset)
-                            .map(|range| MirTerminator::Other { range })
-                    }
+                        },
+                    ),
+                    _ => super::shared::range_from_span_indexed(
+                        &index,
+                        terminator.source_info.span,
+                        offset,
+                    )
+                    .map(|range| MirTerminator::Other { range }),
                 });
 
         result.push(MirBasicBlock {
@@ -169,6 +143,52 @@ pub fn collect_basic_blocks(
     }
 
     result
+}
+
+fn statement_to_mir(
+    index: &rustowl::utils::NormalizedByteCharIndex,
+    fn_u32: u32,
+    offset: u32,
+    statement: &rustc_middle::mir::Statement<'_>,
+) -> Option<MirStatement> {
+    match &statement.kind {
+        StatementKind::Assign(v) => {
+            let (place, rval) = &**v;
+            let target_local_index = place.local.as_u32();
+            let range_opt =
+                super::shared::range_from_span_indexed(index, statement.source_info.span, offset);
+
+            let rv = match rval {
+                Rvalue::Use(Operand::Move(p)) => {
+                    let local = p.local;
+                    range_opt.map(|range| MirRval::Move {
+                        target_local: FnLocal::new(local.as_u32(), fn_u32),
+                        range,
+                    })
+                }
+                Rvalue::Ref(_region, kind, place) => {
+                    let mutable = matches!(kind, BorrowKind::Mut { .. });
+                    let local = place.local;
+                    let outlive = None;
+                    range_opt.map(|range| MirRval::Borrow {
+                        target_local: FnLocal::new(local.as_u32(), fn_u32),
+                        range,
+                        mutable,
+                        outlive,
+                    })
+                }
+                _ => None,
+            };
+
+            range_opt.map(|range| MirStatement::Assign {
+                target_local: FnLocal::new(target_local_index, fn_u32),
+                range,
+                rval: rv,
+            })
+        }
+        _ => super::shared::range_from_span_indexed(index, statement.source_info.span, offset)
+            .map(|range| MirStatement::Other { range }),
+    }
 }
 
 fn statement_location_to_range(
@@ -189,8 +209,8 @@ pub fn rich_locations_to_ranges(
     basic_blocks: &[MirBasicBlock],
     locations: &[RichLocation],
 ) -> Vec<Range> {
-    let mut starts = SmallVec::<[(BasicBlock, usize); 16]>::new();
-    let mut mids = SmallVec::<[(BasicBlock, usize); 16]>::new();
+    let mut starts: Vec<(BasicBlock, usize)> = Vec::new();
+    let mut mids: Vec<(BasicBlock, usize)> = Vec::new();
 
     for rich in locations {
         match rich {

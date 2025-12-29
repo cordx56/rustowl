@@ -1,12 +1,24 @@
 use std::env;
+use std::io::Read as _;
+use std::time::Duration;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use tokio::fs::{create_dir_all, read_to_string, remove_dir_all, rename};
 
 use flate2::read::GzDecoder;
-use tar::Archive;
+use tar::{Archive, EntryType};
+
+use tokio::fs::OpenOptions;
+use tokio::fs::{create_dir_all, read_to_string, remove_dir_all, rename};
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt};
+
+#[cfg(target_os = "windows")]
+use tokio::io::BufReader;
+
+#[cfg(target_os = "windows")]
+use tokio_util::compat::TokioAsyncReadCompatExt;
+use tokio_util::io::SyncIoBridge;
 
 pub const TOOLCHAIN: &str = env!("RUSTOWL_TOOLCHAIN");
 pub const HOST_TUPLE: &str = env!("HOST_TUPLE");
@@ -44,19 +56,30 @@ pub fn sysroot_from_runtime(runtime: impl AsRef<Path>) -> PathBuf {
     runtime.as_ref().join("sysroot").join(TOOLCHAIN)
 }
 
+fn sysroot_looks_installed(sysroot: &Path) -> bool {
+    // Avoid "folder exists" false-positives if a prior install was interrupted.
+    // For the minimal LSP flow we at least need rustc + cargo.
+    let rustc = if cfg!(windows) { "rustc.exe" } else { "rustc" };
+    let cargo = if cfg!(windows) { "cargo.exe" } else { "cargo" };
+
+    sysroot.join("bin").join(rustc).is_file()
+        && sysroot.join("bin").join(cargo).is_file()
+        && sysroot.join("lib").is_dir()
+}
+
 async fn get_runtime_dir() -> PathBuf {
     let sysroot = sysroot_from_runtime(&*FALLBACK_RUNTIME_DIR);
-    if FALLBACK_RUNTIME_DIR.is_dir() && sysroot.is_dir() {
+    if FALLBACK_RUNTIME_DIR.is_dir() && sysroot_looks_installed(&sysroot) {
         return FALLBACK_RUNTIME_DIR.clone();
     }
 
-    tracing::debug!("sysroot not found; start setup toolchain");
+    tracing::debug!("sysroot not found (or incomplete); start setup toolchain");
     if let Err(e) = setup_toolchain(&*FALLBACK_RUNTIME_DIR, false).await {
         tracing::error!("{e:?}");
         std::process::exit(1);
-    } else {
-        FALLBACK_RUNTIME_DIR.clone()
     }
+
+    FALLBACK_RUNTIME_DIR.clone()
 }
 
 pub async fn get_sysroot() -> PathBuf {
@@ -70,105 +93,583 @@ pub async fn get_sysroot() -> PathBuf {
     sysroot_from_runtime(get_runtime_dir().await)
 }
 
-async fn download(url: &str) -> Result<Vec<u8>, ()> {
+const DOWNLOAD_CAP_BYTES: u64 = 2_000_000_000;
+
+#[derive(Clone, Copy, Debug)]
+struct DownloadCaps {
+    max_download: u64,
+    max_retries: usize,
+    retry_backoff: Duration,
+}
+
+impl DownloadCaps {
+    const DEFAULT: Self = Self {
+        max_download: DOWNLOAD_CAP_BYTES,
+        max_retries: 5,
+        retry_backoff: Duration::from_millis(250),
+    };
+}
+
+fn hash_url_for_filename(url: &str) -> String {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    url.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+fn spool_dir_for_runtime(runtime: &Path) -> PathBuf {
+    runtime.join(".rustowl-cache").join("downloads")
+}
+
+async fn resumable_download_pipe(
+    url: &str,
+    spool_path: &Path,
+    caps: DownloadCaps,
+    progress: Option<indicatif::ProgressBar>,
+) -> Result<
+    (
+        tokio::io::DuplexStream,
+        tokio::task::JoinHandle<Result<(), ()>>,
+    ),
+    (),
+> {
+    // One-directional usage: downloader writes to `writer_end`, extractor reads from `reader_end`.
+    let (mut writer_end, reader_end) = tokio::io::duplex(128 * 1024);
+
+    let url = url.to_owned();
+    let spool_path = spool_path.to_path_buf();
+
+    let task = tokio::spawn(async move {
+        let result =
+            stream_into_pipe_with_resume(&url, &spool_path, &mut writer_end, caps, progress).await;
+        // Ensure the reader sees EOF even on errors.
+        let _ = writer_end.shutdown().await;
+        result
+    });
+
+    Ok((reader_end, task))
+}
+
+async fn stream_into_pipe_with_resume(
+    url: &str,
+    spool_path: &Path,
+    writer: &mut (impl tokio::io::AsyncWrite + Unpin),
+    caps: DownloadCaps,
+    progress: Option<indicatif::ProgressBar>,
+) -> Result<(), ()> {
     static HTTP_CLIENT: std::sync::LazyLock<reqwest::Client> =
         std::sync::LazyLock::new(reqwest::Client::new);
 
-    tracing::debug!("start downloading {url}...");
-
-    let mut resp = match HTTP_CLIENT
-        .get(url)
-        .send()
-        .await
-        .and_then(|v| v.error_for_status())
-    {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::error!("failed to download tarball");
-            tracing::error!("{e:?}");
-            return Err(());
-        }
+    let mut existing = match tokio::fs::metadata(spool_path).await {
+        Ok(meta) => meta.len(),
+        Err(_) => 0,
     };
 
-    // Used for amortizing allocations, not for limiting.
-    const DEFAULT_RESERVE: usize = 200_000_000;
-    const MAX_DOWNLOAD_CAP: usize = 2_000_000_000; // basic DoS protection
-
-    let expected_size = resp.content_length().map(|v| v as usize);
-    if matches!(expected_size, Some(v) if v > MAX_DOWNLOAD_CAP) {
-        tracing::error!("refusing to download {url}: content-length exceeds cap");
-        return Err(());
+    if let Some(pb) = &progress {
+        pb.set_position(existing);
+        pb.set_message("Downloading...".to_string());
     }
 
-    let max_bytes = expected_size.unwrap_or(MAX_DOWNLOAD_CAP);
-    let reserve = expected_size
-        .unwrap_or(DEFAULT_RESERVE)
-        .min(DEFAULT_RESERVE);
+    tracing::debug!(
+        "downloading {url} into {} (resume from {existing})",
+        spool_path.display()
+    );
 
-    let mut data = Vec::with_capacity(reserve);
-    let mut downloaded = 0usize;
+    // If we have a partial spool, validate Range support before replaying.
+    let mut resp = if existing > 0 {
+        let r = HTTP_CLIENT
+            .get(url)
+            .header(reqwest::header::RANGE, format!("bytes={existing}-"))
+            .send()
+            .await
+            .map_err(|e| {
+                tracing::error!("failed to download runtime archive");
+                tracing::error!("{e:?}");
+            })?;
 
-    while let Some(chunk) = match resp.chunk().await {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::error!("failed to download runtime archive");
-            tracing::error!("{e:?}");
+        match r.status() {
+            reqwest::StatusCode::PARTIAL_CONTENT => {
+                // Replay already-downloaded bytes so extraction starts immediately.
+                let f = tokio::fs::File::open(spool_path).await.map_err(|e| {
+                    tracing::error!("failed to open spool file {}: {e}", spool_path.display());
+                })?;
+                let copied = tokio::io::copy(&mut f.take(existing), writer)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("failed to replay cached bytes: {e}");
+                    })?;
+                if let Some(pb) = &progress {
+                    pb.set_position(existing);
+                }
+                if copied != existing {
+                    tracing::error!("spool replay mismatch: expected {existing}, got {copied}");
+                    return Err(());
+                }
+                r
+            }
+            // Some servers respond 416 when the local file is already complete.
+            reqwest::StatusCode::RANGE_NOT_SATISFIABLE => {
+                tracing::debug!("range not satisfiable; replaying spool and finishing");
+                let f = tokio::fs::File::open(spool_path).await.map_err(|e| {
+                    tracing::error!("failed to open spool file {}: {e}", spool_path.display());
+                })?;
+                let copied = tokio::io::copy(&mut f.take(existing), writer)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("failed to replay cached bytes: {e}");
+                    })?;
+                if let Some(pb) = &progress {
+                    pb.set_position(existing);
+                }
+                if copied != existing {
+                    tracing::error!("spool replay mismatch: expected {existing}, got {copied}");
+                    return Err(());
+                }
+                return Ok(());
+            }
+            // Server ignored range; start fresh (but only safe before extraction sees bytes).
+            reqwest::StatusCode::OK => {
+                tracing::debug!("server did not honor range; restarting download");
+                existing = 0;
+                let _ = tokio::fs::remove_file(spool_path).await;
+                HTTP_CLIENT
+                    .get(url)
+                    .send()
+                    .await
+                    .and_then(|v| v.error_for_status())
+                    .map_err(|e| {
+                        tracing::error!("failed to download runtime archive");
+                        tracing::error!("{e:?}");
+                    })?
+            }
+            other => {
+                tracing::error!("unexpected HTTP status for range request: {other}");
+                return Err(());
+            }
+        }
+    } else {
+        HTTP_CLIENT
+            .get(url)
+            .send()
+            .await
+            .and_then(|v| v.error_for_status())
+            .map_err(|e| {
+                tracing::error!("failed to download runtime archive");
+                tracing::error!("{e:?}");
+            })?
+    };
+
+    let mut downloaded = existing;
+
+    loop {
+        let expected_total = match (downloaded, resp.content_length()) {
+            (0, Some(v)) => Some(v),
+            (n, Some(v)) => Some(n.saturating_add(v)),
+            _ => None,
+        };
+        if matches!(expected_total, Some(v) if v > caps.max_download) {
+            tracing::error!("refusing to download {url}: size exceeds cap");
             return Err(());
         }
-    } {
-        downloaded = downloaded.saturating_add(chunk.len());
-        if downloaded > max_bytes {
+
+        if let (Some(pb), Some(total)) = (progress.as_ref(), expected_total) {
+            pb.set_length(total);
+        }
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(spool_path)
+            .await
+            .map_err(|e| {
+                tracing::error!("failed to open download file {}: {e}", spool_path.display());
+            })?;
+
+        match stream_response_body(
+            url,
+            &mut resp,
+            &mut file,
+            writer,
+            &mut downloaded,
+            caps,
+            progress.as_ref(),
+        )
+        .await
+        {
+            Ok(()) => {
+                file.flush().await.ok();
+                tracing::debug!("download finished: {} bytes", downloaded);
+                return Ok(());
+            }
+            Err(()) => {
+                // Retry loop: request from current offset.
+                // If this fails `max_retries` times, we error out.
+                let mut attempt = 1usize;
+                loop {
+                    if attempt > caps.max_retries {
+                        tracing::error!("download failed after {} retries", caps.max_retries);
+                        return Err(());
+                    }
+
+                    tokio::time::sleep(caps.retry_backoff * attempt as u32).await;
+                    tracing::debug!("retrying download from byte {downloaded} (attempt {attempt})");
+
+                    let r = HTTP_CLIENT
+                        .get(url)
+                        .header(reqwest::header::RANGE, format!("bytes={downloaded}-"))
+                        .send()
+                        .await
+                        .and_then(|v| v.error_for_status());
+
+                    match r {
+                        Ok(v) if v.status() == reqwest::StatusCode::PARTIAL_CONTENT => {
+                            resp = v;
+                            break;
+                        }
+                        Ok(v) => {
+                            tracing::error!("server did not honor resume range: {}", v.status());
+                            return Err(());
+                        }
+                        Err(e) => {
+                            tracing::debug!("retry request failed: {e:?}");
+                            attempt += 1;
+                            continue;
+                        }
+                    }
+                }
+
+                // Continue outer loop with new response.
+                continue;
+            }
+        }
+    }
+}
+
+async fn stream_response_body(
+    url: &str,
+    resp: &mut reqwest::Response,
+    file: &mut tokio::fs::File,
+    writer: &mut (impl tokio::io::AsyncWrite + Unpin),
+    downloaded: &mut u64,
+    caps: DownloadCaps,
+    progress: Option<&indicatif::ProgressBar>,
+) -> Result<(), ()> {
+    while let Some(chunk) = resp.chunk().await.map_err(|e| {
+        tracing::error!("failed to read download chunk: {e:?}");
+    })? {
+        *downloaded = downloaded.saturating_add(chunk.len() as u64);
+        if *downloaded > caps.max_download {
             tracing::error!("refusing to download {url}: exceeded size cap");
             return Err(());
         }
-        data.extend_from_slice(&chunk);
+
+        file.write_all(&chunk).await.map_err(|e| {
+            tracing::error!("failed writing download chunk: {e}");
+        })?;
+        writer.write_all(&chunk).await.map_err(|e| {
+            tracing::error!("failed piping download chunk: {e}");
+        })?;
+
+        if let Some(pb) = progress {
+            pb.set_position(*downloaded);
+        }
     }
 
-    tracing::debug!("download finished");
-    Ok(data)
-}
-async fn download_tarball_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
-    let data = download(url).await?;
-    let dest = dest.to_path_buf();
-    tokio::task::spawn_blocking(move || {
-        let decoder = GzDecoder::new(&*data);
-        let mut archive = Archive::new(decoder);
-        archive.unpack(&dest)
-    })
-    .await
-    .map_err(|e| {
-        tracing::error!("failed to join unpack task: {e}");
-    })?
-    .map_err(|_| {
-        tracing::error!("failed to unpack tarball");
-    })?;
-    tracing::debug!("successfully unpacked");
     Ok(())
 }
-#[cfg(target_os = "windows")]
-async fn download_zip_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
-    use zip::ZipArchive;
-    let data = download(url).await?;
-    let cursor = std::io::Cursor::new(&*data);
 
-    let mut archive = match ZipArchive::new(cursor) {
-        Ok(archive) => archive,
-        Err(e) => {
-            tracing::error!("failed to read ZIP archive");
-            tracing::error!("{e:?}");
+fn safe_join_tar_path(dest: &Path, path: &Path) -> Result<PathBuf, ()> {
+    use std::path::Component;
+
+    let mut out = dest.to_path_buf();
+    let mut pushed_any = false;
+
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => {
+                out.push(part);
+                pushed_any = true;
+            }
+            Component::CurDir => continue,
+            _ => return Err(()),
+        }
+    }
+
+    if !pushed_any {
+        return Err(());
+    }
+
+    Ok(out)
+}
+
+fn unpack_tarball_gz(reader: impl std::io::Read, dest: &Path) -> Result<(), ()> {
+    // basic DoS protection
+    const MAX_ENTRY_UNCOMPRESSED: u64 = DOWNLOAD_CAP_BYTES;
+    const MAX_TOTAL_UNCOMPRESSED: u64 = DOWNLOAD_CAP_BYTES;
+
+    let decoder = GzDecoder::new(reader);
+    let mut archive = Archive::new(decoder);
+
+    let mut total_uncompressed = 0u64;
+    for entry in archive.entries().map_err(|_| ())? {
+        let mut entry = entry.map_err(|_| ())?;
+
+        let entry_type = entry.header().entry_type();
+        match entry_type {
+            EntryType::Regular | EntryType::Directory => {}
+            // Be conservative: skip symlinks/hardlinks/devices.
+            _ => {
+                continue;
+            }
+        }
+
+        let path = entry.path().map_err(|_| ())?;
+        let out_path = safe_join_tar_path(dest, &path).map_err(|_| ())?;
+
+        #[cfg(unix)]
+        let mode = entry.header().mode().ok();
+
+        if entry_type == EntryType::Directory {
+            std::fs::create_dir_all(&out_path).map_err(|_| ())?;
+            #[cfg(unix)]
+            if let Some(mode) = mode {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&out_path, std::fs::Permissions::from_mode(mode));
+            }
+            continue;
+        }
+
+        if let Some(parent) = out_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|_| ())?;
+        }
+
+        let mut out = std::fs::File::create(&out_path).map_err(|_| ())?;
+        let mut limited = (&mut entry).take(MAX_ENTRY_UNCOMPRESSED.saturating_add(1));
+        let written = std::io::copy(&mut limited, &mut out).map_err(|_| ())?;
+
+        if written > MAX_ENTRY_UNCOMPRESSED {
             return Err(());
         }
-    };
+
+        #[cfg(unix)]
+        if let Some(mode) = mode {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&out_path, std::fs::Permissions::from_mode(mode));
+        }
+
+        total_uncompressed = total_uncompressed.saturating_add(written);
+        if total_uncompressed > MAX_TOTAL_UNCOMPRESSED {
+            return Err(());
+        }
+    }
+
+    Ok(())
+}
+
+async fn download_tarball_and_extract(
+    url: &str,
+    dest: &Path,
+    spool_dir: &Path,
+    progress: Option<indicatif::ProgressBar>,
+) -> Result<(), ()> {
+    create_dir_all(spool_dir).await.map_err(|e| {
+        tracing::error!("failed to create spool dir {}: {e}", spool_dir.display());
+    })?;
+
+    if let Some(pb) = &progress {
+        pb.set_message("Downloading...".to_string());
+    }
+
+    let archive_path = spool_dir.join(format!("{}.tar.gz", hash_url_for_filename(url)));
+
+    let (reader, download_task) =
+        resumable_download_pipe(url, &archive_path, DownloadCaps::DEFAULT, progress.clone())
+            .await?;
+
     let dest = dest.to_path_buf();
-    tokio::task::spawn_blocking(move || archive.extract(&dest))
-        .await
+    let unpack_task = tokio::task::spawn_blocking(move || {
+        let reader = SyncIoBridge::new(reader);
+        unpack_tarball_gz(reader, &dest)
+    });
+
+    let (download_res, unpack_res) = tokio::join!(download_task, unpack_task);
+
+    download_res
         .map_err(|e| {
-            tracing::error!("failed to join zip unpack task: {e}");
+            tracing::error!("failed to join download task: {e}");
         })?
-        .map_err(|e| {
-            tracing::error!("failed to unpack zip: {e}");
+        .map_err(|_| {
+            tracing::error!("download failed");
         })?;
-    tracing::debug!("successfully unpacked");
+
+    if let Some(pb) = &progress {
+        pb.set_message("Extracting".to_string());
+    }
+
+    unpack_res
+        .map_err(|e| {
+            tracing::error!("failed to join unpack task: {e}");
+        })?
+        .map_err(|_| {
+            tracing::error!("failed to unpack tarball");
+        })?;
+
+    if let Some(pb) = progress {
+        pb.finish_with_message("Installed");
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn safe_join_zip_path(dest: &Path, filename: &str) -> Result<PathBuf, ()> {
+    use std::path::Component;
+
+    let path = Path::new(filename);
+    let mut out = dest.to_path_buf();
+    let mut pushed_any = false;
+
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => {
+                out.push(part);
+                pushed_any = true;
+            }
+            Component::CurDir => continue,
+            _ => return Err(()),
+        }
+    }
+
+    if !pushed_any {
+        return Err(());
+    }
+
+    Ok(out)
+}
+
+#[cfg(target_os = "windows")]
+async fn download_zip_and_extract(
+    url: &str,
+    dest: &Path,
+    spool_dir: &Path,
+    progress: Option<indicatif::ProgressBar>,
+) -> Result<(), ()> {
+    use tokio::io::AsyncReadExt as _;
+    use tokio_util::compat::FuturesAsyncReadCompatExt as _;
+
+    create_dir_all(spool_dir).await.map_err(|e| {
+        tracing::error!("failed to create spool dir {}: {e}", spool_dir.display());
+    })?;
+
+    if let Some(pb) = &progress {
+        pb.set_message("Downloading...".to_string());
+    }
+
+    let archive_path = spool_dir.join(format!("{}.zip", hash_url_for_filename(url)));
+
+    let (reader, download_task) =
+        resumable_download_pipe(url, &archive_path, DownloadCaps::DEFAULT, progress.clone())
+            .await?;
+
+    // Zip stream reader is async, so extract on async task.
+    let dest = dest.to_path_buf();
+    let unpack_task = tokio::spawn(async move {
+        let reader = BufReader::new(reader);
+        let mut zip = async_zip::base::read::stream::ZipFileReader::with_tokio(reader);
+
+        // basic DoS protection
+        const MAX_ENTRY_UNCOMPRESSED: u64 = DOWNLOAD_CAP_BYTES;
+        const MAX_TOTAL_UNCOMPRESSED: u64 = DOWNLOAD_CAP_BYTES;
+        let mut total_uncompressed = 0u64;
+
+        while let Some(entry) = zip.next_with_entry().await.map_err(|e| {
+            tracing::error!("failed reading zip entry: {e:?}");
+        })? {
+            let filename = entry.reader().entry().filename().as_str().map_err(|_| ())?;
+            let out_path = safe_join_zip_path(&dest, filename)?;
+
+            if filename.ends_with('/') {
+                tokio::fs::create_dir_all(&out_path).await.map_err(|e| {
+                    tracing::error!("failed creating dir {}: {e}", out_path.display());
+                })?;
+                zip = entry.skip().await.map_err(|e| {
+                    tracing::error!("failed skipping zip dir entry: {e:?}");
+                })?;
+                continue;
+            }
+
+            if let Some(parent) = out_path.parent() {
+                tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                    tracing::error!("failed creating parent dir {}: {e}", parent.display());
+                })?;
+            }
+
+            let mut file = tokio::fs::File::create(&out_path).await.map_err(|e| {
+                tracing::error!("failed creating file {}: {e}", out_path.display());
+            })?;
+
+            let mut entry_reader = entry.reader().compat();
+            let mut buf = [0u8; 32 * 1024];
+            let mut written_for_entry = 0u64;
+
+            loop {
+                let n = entry_reader.read(&mut buf).await.map_err(|e| {
+                    tracing::error!("failed reading zip data: {e}");
+                })?;
+                if n == 0 {
+                    break;
+                }
+                written_for_entry = written_for_entry.saturating_add(n as u64);
+                if written_for_entry > MAX_ENTRY_UNCOMPRESSED {
+                    tracing::error!("zip entry exceeds size cap");
+                    return Err(());
+                }
+                total_uncompressed = total_uncompressed.saturating_add(n as u64);
+                if total_uncompressed > MAX_TOTAL_UNCOMPRESSED {
+                    tracing::error!("zip total exceeds size cap");
+                    return Err(());
+                }
+
+                file.write_all(&buf[..n]).await.map_err(|e| {
+                    tracing::error!("failed writing zip data: {e}");
+                })?;
+            }
+
+            zip = entry.done().await.map_err(|e| {
+                tracing::error!("failed finishing zip entry: {e:?}");
+            })?;
+        }
+
+        Ok::<(), ()>(())
+    });
+
+    let (download_res, unpack_res) = tokio::join!(download_task, unpack_task);
+
+    download_res
+        .map_err(|e| {
+            tracing::error!("failed to join download task: {e}");
+        })?
+        .map_err(|_| {
+            tracing::error!("download failed");
+        })?;
+
+    if let Some(pb) = &progress {
+        pb.set_message("Extracting".to_string());
+    }
+
+    unpack_res
+        .map_err(|e| {
+            tracing::error!("failed to join unpack task: {e}");
+        })?
+        .map_err(|_| {
+            tracing::error!("failed to unpack zip");
+        })?;
+
+    if let Some(pb) = progress {
+        pb.finish_with_message("Installed");
+    }
+
     Ok(())
 }
 
@@ -177,7 +678,12 @@ struct ExtractedComponent {
     extracted_root: PathBuf,
 }
 
-async fn fetch_component(component: &str, base_url: &str) -> Result<ExtractedComponent, ()> {
+async fn fetch_component(
+    component: &str,
+    base_url: &str,
+    spool_dir: &Path,
+    progress: Option<indicatif::ProgressBar>,
+) -> Result<ExtractedComponent, ()> {
     let tempdir = tempfile::tempdir().map_err(|_| ())?;
     let temp_path = tempdir.path().to_owned();
     tracing::debug!("temp dir is made: {}", temp_path.display());
@@ -185,7 +691,7 @@ async fn fetch_component(component: &str, base_url: &str) -> Result<ExtractedCom
     let component_toolchain = format!("{component}-{TOOLCHAIN_CHANNEL}-{HOST_TUPLE}");
     let tarball_url = format!("{base_url}/{component_toolchain}.tar.gz");
 
-    download_tarball_and_extract(&tarball_url, &temp_path).await?;
+    download_tarball_and_extract(&tarball_url, &temp_path, spool_dir, progress).await?;
 
     Ok(ExtractedComponent {
         _tempdir: tempdir,
@@ -242,7 +748,7 @@ pub async fn setup_toolchain(dest: impl AsRef<Path>, skip_rustowl: bool) -> Resu
 }
 
 pub async fn setup_rust_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
-    use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+    use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
     use std::io::IsTerminal;
 
     let sysroot = sysroot_from_runtime(dest.as_ref());
@@ -261,57 +767,68 @@ pub async fn setup_rust_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
 
     const COMPONENTS: [&str; 3] = ["rustc", "rust-std", "cargo"];
 
-    let progress = if std::io::stderr().is_terminal() {
-        let pb = ProgressBar::new(COMPONENTS.len() as u64);
-        pb.set_draw_target(ProgressDrawTarget::stderr());
-        pb.set_style(
-            ProgressStyle::with_template(
-                "{spinner:.green} {wide_msg} [{bar:40.cyan/blue}] {pos}/{len}",
-            )
-            .unwrap(),
-        );
-        pb.set_message("Downloading and extracting Rust toolchain...");
-        Some(pb)
+    let spool_dir = spool_dir_for_runtime(dest.as_ref());
+
+    let mp = if std::io::stderr().is_terminal() {
+        Some(MultiProgress::with_draw_target(ProgressDrawTarget::stderr()))
     } else {
         None
     };
 
-    let _progress_guard = progress
-        .as_ref()
-        .cloned()
-        .map(crate::ActiveProgressBarGuard::set);
+    // Ensure `tracing` output is routed through a progress bar so it doesn't
+    // corrupt the multi-progress rendering.
+    let _log_guard = mp.as_ref().map(|mp| {
+        let pb = mp.add(ProgressBar::hidden());
+        crate::ActiveProgressBarGuard::set(pb)
+    });
 
-    // Download + extract all components in parallel, but report progress as each finishes.
     let mut fetched = HashMap::<&'static str, ExtractedComponent>::new();
     let mut set = tokio::task::JoinSet::new();
+
     for component in COMPONENTS {
         let base_url = base_url.clone();
-        set.spawn(async move { (component, fetch_component(component, &base_url).await) });
+        let spool_dir = spool_dir.clone();
+
+        let pb: Option<ProgressBar> = mp.as_ref().map(|mp| {
+            let pb = mp.add(ProgressBar::new(0));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "{spinner:.green} {prefix:8} {msg:40} [{bar:40.cyan/blue}] {percent:>3}% ({bytes_per_sec:>10}, {eta:>6})",
+                )
+                .unwrap(),
+            );
+            pb.set_prefix(component.to_string());
+            pb.set_message("Starting...".to_string());
+            pb
+        });
+
+        set.spawn(async move {
+            let res = fetch_component(component, &base_url, &spool_dir, pb.clone()).await;
+            if let Some(pb) = pb {
+                match &res {
+                    Ok(_) => pb.finish_with_message("Installed"),
+                    Err(_) => pb.finish_with_message("Failed"),
+                }
+            }
+            (component, res)
+        });
     }
 
-    let mut completed = 0usize;
     while let Some(joined) = set.join_next().await {
         match joined {
             Ok((component, Ok(extracted))) => {
-                completed += 1;
-                if let Some(pb) = &progress {
-                    pb.inc(1);
-                    pb.set_message(format!("Fetched {component}"));
-                } else {
-                    eprintln!("Fetched {component} ({completed}/{})", COMPONENTS.len());
-                }
                 fetched.insert(component, extracted);
             }
             Ok((_component, Err(()))) => {
-                if let Some(pb) = progress {
-                    pb.finish_and_clear();
+                if let Some(mp) = &mp {
+                    let _ = mp.clear();
                 }
                 return Err(());
             }
             Err(e) => {
                 tracing::error!("failed to join toolchain fetch task: {e}");
-                if let Some(pb) = progress {
-                    pb.finish_and_clear();
+                if let Some(mp) = &mp {
+                    let _ = mp.clear();
                 }
                 return Err(());
             }
@@ -326,8 +843,8 @@ pub async fn setup_rust_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
     install_extracted_component(rust_std, &sysroot).await?;
     install_extracted_component(cargo, &sysroot).await?;
 
-    if let Some(pb) = progress {
-        pb.finish_and_clear();
+    if let Some(mp) = mp {
+        let _ = mp.clear();
     }
 
     tracing::debug!("installing Rust toolchain finished");
@@ -335,22 +852,27 @@ pub async fn setup_rust_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
 }
 pub async fn setup_rustowl_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
     tracing::debug!("start installing RustOwl toolchain...");
+
+    let spool_dir = spool_dir_for_runtime(dest.as_ref());
+
     #[cfg(not(target_os = "windows"))]
     let rustowl_toolchain_result = {
         let rustowl_tarball_url = format!(
             "https://github.com/cordx56/rustowl/releases/download/v{}/rustowl-{HOST_TUPLE}.tar.gz",
             clap::crate_version!(),
         );
-        download_tarball_and_extract(&rustowl_tarball_url, dest.as_ref()).await
+        download_tarball_and_extract(&rustowl_tarball_url, dest.as_ref(), &spool_dir, None).await
     };
+
     #[cfg(target_os = "windows")]
     let rustowl_toolchain_result = {
         let rustowl_zip_url = format!(
             "https://github.com/cordx56/rustowl/releases/download/v{}/rustowl-{HOST_TUPLE}.zip",
             clap::crate_version!(),
         );
-        download_zip_and_extract(&rustowl_zip_url, dest.as_ref()).await
+        download_zip_and_extract(&rustowl_zip_url, dest.as_ref(), &spool_dir, None).await
     };
+
     if rustowl_toolchain_result.is_ok() {
         tracing::debug!("installing RustOwl toolchain finished");
     } else {

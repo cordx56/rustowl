@@ -2,7 +2,7 @@ use divan::{AllocProfiler, Bencher, black_box};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use rustowl::models::Loc;
-use rustowl::utils::{index_to_line_char, line_char_to_index};
+use rustowl::utils::{NormalizedByteCharIndex, index_to_line_char, line_char_to_index};
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -76,6 +76,35 @@ mod line_col_conversion {
                 let line = RNG.with(|rng| rng.borrow_mut().random_range(0..10_000u32));
                 let idx = line_char_to_index(&source, line, 0);
                 black_box(idx);
+            });
+    }
+
+    #[divan::bench]
+    fn loc_from_byte_pos_uncached(bencher: Bencher) {
+        bencher
+            .with_inputs(get_or_init_source)
+            .bench_values(|(source, total)| {
+                // Pick a random logical char index and approximate as byte position.
+                // This is a microbench; we mainly care about relative overhead.
+                let pos = RNG.with(|rng| rng.borrow_mut().random_range(0..total));
+                let loc = rustowl::models::Loc::new(&source, pos, 0);
+                black_box(loc);
+            });
+    }
+
+    #[divan::bench]
+    fn loc_from_byte_pos_cached(bencher: Bencher) {
+        bencher
+            .with_inputs(|| {
+                let (source, total) = get_or_init_source();
+                let index = NormalizedByteCharIndex::new(&source);
+                (source, total, index)
+            })
+            .bench_values(|(source, total, index)| {
+                // Keep the index reused across iterations.
+                let pos = RNG.with(|rng| rng.borrow_mut().random_range(0..total));
+                let loc = index.loc_from_byte_pos(pos, 0);
+                black_box((source, loc));
             });
     }
 }

@@ -1,12 +1,16 @@
 //! Shared analysis helpers extracted from MIR analyze pipeline.
 use rustc_middle::mir::BasicBlock;
 use rustc_span::Span;
-use rustowl::models::{Loc, Range};
+use rustowl::models::Range;
+use rustowl::utils::NormalizedByteCharIndex;
 
-/// Construct a `Range` from a rustc `Span` relative to file offset.
-pub fn range_from_span(source: &str, span: Span, offset: u32) -> Option<Range> {
-    let from = Loc::new(source, span.lo().0, offset);
-    let until = Loc::new(source, span.hi().0, offset);
+pub fn range_from_span_indexed(
+    index: &NormalizedByteCharIndex,
+    span: Span,
+    offset: u32,
+) -> Option<Range> {
+    let from = index.loc_from_byte_pos(span.lo().0, offset);
+    let until = index.loc_from_byte_pos(span.hi().0, offset);
     Range::new(from, until)
 }
 

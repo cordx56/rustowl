@@ -3,6 +3,7 @@ mod shared;
 mod transform;
 
 use super::cache;
+use ecow::{EcoString, EcoVec};
 use rustc_borrowck::consumers::{
     BodyWithBorrowckFacts, ConsumerOptions, PoloniusInput, PoloniusOutput,
     get_bodies_with_borrowck_facts,
@@ -12,7 +13,6 @@ use rustc_middle::{mir::Local, ty::TyCtxt};
 use rustowl::models::FoldIndexMap as HashMap;
 use rustowl::models::range_vec_from_vec;
 use rustowl::models::*;
-use smallvec::SmallVec;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -36,7 +36,7 @@ pub struct MirAnalyzer {
     local_decls: HashMap<Local, String>,
     user_vars: HashMap<Local, (Range, String)>,
     input: PoloniusInput,
-    basic_blocks: SmallVec<[MirBasicBlock; 8]>,
+    basic_blocks: EcoVec<MirBasicBlock>,
     fn_id: LocalDefId,
     file_hash: String,
     mir_hash: String,
@@ -193,7 +193,7 @@ impl MirAnalyzer {
         let mut result = DeclVec::with_capacity(self.local_decls.len());
 
         for (local, ty) in &self.local_decls {
-            let ty = smol_str::SmolStr::from(ty.as_str());
+            let ty: EcoString = ty.as_str().into();
             let must_live_at = must_live_at.get(local).cloned().unwrap_or_default();
             let lives = lives.get(local).cloned().unwrap_or_default();
             let shared_borrow = self.shared_live.get(local).cloned().unwrap_or_default();
@@ -205,7 +205,7 @@ impl MirAnalyzer {
             let decl = if let Some((span, name)) = user_vars.get(local).cloned() {
                 MirDecl::User {
                     local: fn_local,
-                    name: smol_str::SmolStr::from(name.as_str()),
+                    name: EcoString::from(name.as_str()),
                     span,
                     ty,
                     lives: range_vec_from_vec(lives),
@@ -272,7 +272,7 @@ mod tests {
             mir_hash: "def456".to_string(),
             analyzed: Function {
                 fn_id: 1,
-                basic_blocks: SmallVec::new(),
+                basic_blocks: EcoVec::new(),
                 decls: DeclVec::new(),
             },
         };
@@ -294,7 +294,7 @@ mod tests {
             mir_hash: "mir_hash".to_string(),
             analyzed: Function {
                 fn_id: 1,
-                basic_blocks: SmallVec::new(),
+                basic_blocks: EcoVec::new(),
                 decls: DeclVec::new(),
             },
         };
@@ -317,17 +317,17 @@ mod tests {
         decls.push(MirDecl::Other {
             local: FnLocal { id: 1, fn_id: 50 },
             ty: "String".into(),
-            lives: SmallVec::new(),
-            shared_borrow: SmallVec::new(),
-            mutable_borrow: SmallVec::new(),
+            lives: EcoVec::new(),
+            shared_borrow: EcoVec::new(),
+            mutable_borrow: EcoVec::new(),
             drop: true,
-            drop_range: SmallVec::new(),
-            must_live_at: SmallVec::new(),
+            drop_range: EcoVec::new(),
+            must_live_at: EcoVec::new(),
         });
 
-        let mut basic_blocks = SmallVec::new();
+        let mut basic_blocks = EcoVec::new();
         basic_blocks.push(MirBasicBlock {
-            statements: SmallVec::new(),
+            statements: EcoVec::new(),
             terminator: None,
         });
 
@@ -356,12 +356,12 @@ mod tests {
         decls.push(MirDecl::Other {
             local: FnLocal { id: 1, fn_id: 42 },
             ty: "i32".into(),
-            lives: SmallVec::new(),
-            shared_borrow: SmallVec::new(),
-            mutable_borrow: SmallVec::new(),
+            lives: EcoVec::new(),
+            shared_borrow: EcoVec::new(),
+            mutable_borrow: EcoVec::new(),
             drop: true,
-            drop_range: SmallVec::new(),
-            must_live_at: SmallVec::new(),
+            drop_range: EcoVec::new(),
+            must_live_at: EcoVec::new(),
         });
 
         let result = AnalyzeResult {
@@ -370,7 +370,7 @@ mod tests {
             mir_hash: "user_mir".to_string(),
             analyzed: Function {
                 fn_id: 50,
-                basic_blocks: SmallVec::new(),
+                basic_blocks: EcoVec::new(),
                 decls,
             },
         };

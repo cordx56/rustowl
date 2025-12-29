@@ -89,7 +89,7 @@ pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
     merged
 }
 
-/// Version of [`eliminated_ranges`] that works with SmallVec.
+/// Version of [`eliminated_ranges`] that works with `RangeVec`.
 pub fn eliminated_ranges_small(ranges: RangeVec) -> Vec<Range> {
     eliminated_ranges(range_vec_into_vec(ranges))
 }
@@ -122,7 +122,7 @@ pub fn exclude_ranges(from: Vec<Range>, excludes: Vec<Range>) -> Vec<Range> {
     eliminated_ranges(from)
 }
 
-/// Version of [`exclude_ranges`] that works with SmallVec.
+/// Version of [`exclude_ranges`] that works with `RangeVec`.
 pub fn exclude_ranges_small(from: RangeVec, excludes: Vec<Range>) -> Vec<Range> {
     exclude_ranges(range_vec_into_vec(from), excludes)
 }
@@ -157,6 +157,93 @@ pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
         }
         if let Some(term) = &bb.terminator {
             visitor.visit_term(term);
+        }
+    }
+}
+
+/// Precomputed mapping from *normalized* byte offsets to `Loc`.
+///
+/// `rustc` byte positions behave as if `\r` bytes do not exist in the source.
+/// `Loc` is a *logical character index* where `\r` is ignored too.
+///
+/// `Loc::new(source, byte_pos, offset)` previously scanned `source` on every
+/// call. When mapping thousands of MIR spans to ranges, that becomes a hot spot.
+/// This index scans the source once and then answers conversions in `O(1)`
+/// (ASCII fast-path) or `O(log n)` (binary search on UTF-8 char boundaries).
+#[derive(Debug, Clone)]
+pub struct NormalizedByteCharIndex {
+    kind: NormalizedByteCharIndexKind,
+}
+
+#[derive(Debug, Clone)]
+enum NormalizedByteCharIndexKind {
+    /// ASCII without CR: logical char index == byte index.
+    AsciiNoCr { len_bytes: u32 },
+    /// General case: `ends[i]` is the normalized byte offset at the end of char i.
+    General { ends: Vec<u32>, len_bytes: u32 },
+}
+
+impl NormalizedByteCharIndex {
+    pub fn new(source: &str) -> Self {
+        if source.is_ascii() && !source.as_bytes().contains(&b'\r') {
+            return Self {
+                kind: NormalizedByteCharIndexKind::AsciiNoCr {
+                    len_bytes: source.len().min(u32::MAX as usize) as u32,
+                },
+            };
+        }
+
+        let mut ends = Vec::with_capacity(source.len().min(1024));
+        let mut normalized = 0u32;
+
+        for ch in source.chars() {
+            if ch == '\r' {
+                continue;
+            }
+            normalized = normalized.saturating_add(ch.len_utf8().min(u32::MAX as usize) as u32);
+            ends.push(normalized);
+        }
+
+        Self {
+            kind: NormalizedByteCharIndexKind::General {
+                ends,
+                len_bytes: normalized,
+            },
+        }
+    }
+
+    /// Convert a normalized byte offset (CR bytes excluded) to a logical `Loc`.
+    pub fn loc_from_normalized_byte_pos(&self, byte_pos: u32) -> crate::models::Loc {
+        match &self.kind {
+            NormalizedByteCharIndexKind::AsciiNoCr { len_bytes } => {
+                crate::models::Loc(byte_pos.min(*len_bytes))
+            }
+            NormalizedByteCharIndexKind::General { ends, len_bytes } => {
+                let clamped = byte_pos.min(*len_bytes);
+                let n = ends.partition_point(|&end| end <= clamped);
+                crate::models::Loc(n.min(u32::MAX as usize) as u32)
+            }
+        }
+    }
+
+    /// Equivalent to `Loc::new(source, byte_pos, offset)`, but uses this index.
+    pub fn loc_from_byte_pos(&self, byte_pos: u32, offset: u32) -> crate::models::Loc {
+        self.loc_from_normalized_byte_pos(byte_pos.saturating_sub(offset))
+    }
+
+    pub fn normalized_len_bytes(&self) -> u32 {
+        match &self.kind {
+            NormalizedByteCharIndexKind::AsciiNoCr { len_bytes } => *len_bytes,
+            NormalizedByteCharIndexKind::General { len_bytes, .. } => *len_bytes,
+        }
+    }
+
+    pub fn eof(&self) -> crate::models::Loc {
+        match &self.kind {
+            NormalizedByteCharIndexKind::AsciiNoCr { len_bytes } => crate::models::Loc(*len_bytes),
+            NormalizedByteCharIndexKind::General { ends, .. } => {
+                crate::models::Loc(ends.len().min(u32::MAX as usize) as u32)
+            }
         }
     }
 }

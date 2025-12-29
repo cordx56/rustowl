@@ -45,13 +45,27 @@ impl Analyzer {
     pub async fn new(path: impl AsRef<Path>, rustc_threads: usize) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
 
+        // `cargo metadata` may invoke `rustc` for target information. It must use a real
+        // rustc, not `rustowlc`. Also, user Cargo configs may set `build.rustc-wrapper` (e.g.
+        // `sccache`), so we explicitly disable wrappers for this invocation.
         let mut cargo_cmd = toolchain::setup_cargo_command(rustc_threads).await;
-
         cargo_cmd
+            // NOTE: `setup_cargo_command` sets `RUSTC`/`RUSTC_WORKSPACE_WRAPPER` to `rustowlc`.
+            // We must override that for `cargo metadata`.
+            .env("RUSTC", toolchain::get_executable_path("rustc").await)
+            .env_remove("RUSTC_WORKSPACE_WRAPPER")
+            .env_remove("RUSTC_WRAPPER")
+            // `--config` values are TOML; `""` sets the wrapper to an empty string.
             .args([
-                "metadata".to_owned(),
-                "--filter-platform".to_owned(),
-                toolchain::HOST_TUPLE.to_owned(),
+                "--config",
+                "build.rustc-wrapper=\"\"",
+                "--config",
+                "build.rustc-workspace-wrapper=\"\"",
+                "metadata",
+                "--format-version",
+                "1",
+                "--filter-platform",
+                toolchain::HOST_TUPLE,
             ])
             .current_dir(if path.is_file() {
                 path.parent().unwrap()
@@ -59,15 +73,32 @@ impl Analyzer {
                 &path
             })
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
 
-        let metadata = if let Ok(child) = cargo_cmd.spawn()
-            && let Ok(output) = child.wait_with_output().await
-        {
-            let data = String::from_utf8_lossy(&output.stdout);
-            cargo_metadata::MetadataCommand::parse(data).ok()
-        } else {
-            None
+        let metadata = match cargo_cmd.output().await {
+            Ok(output) if output.status.success() => {
+                let data = String::from_utf8_lossy(&output.stdout);
+                cargo_metadata::MetadataCommand::parse(data).ok()
+            }
+            Ok(output) => {
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    tracing::debug!(
+                        "`cargo metadata` failed (status={}):\nstdout:\n{}\nstderr:\n{}",
+                        output.status,
+                        stdout.trim(),
+                        stderr.trim()
+                    );
+                }
+                None
+            }
+            Err(e) => {
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    tracing::debug!("failed to spawn `cargo metadata`: {e}");
+                }
+                None
+            }
         };
 
         if let Some(metadata) = metadata {

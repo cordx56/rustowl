@@ -727,17 +727,17 @@ mod tests {
     use super::*;
     use crate::models::{FnLocal, Loc, MirDecl, Range};
     use crate::utils::MirVisitor;
-    use smallvec::SmallVec;
+    use ecow::EcoVec;
 
     #[test]
     fn test_async_variable_filtering() {
         let mut selector = SelectLocal::new(Loc(10));
 
         // Test that async variables are filtered out
-        let mut lives_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        let mut lives_vec: EcoVec<Range> = EcoVec::new();
         lives_vec.push(Range::new(Loc(0), Loc(20)).unwrap());
 
-        let mut drop_range_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        let mut drop_range_vec: EcoVec<Range> = EcoVec::new();
         drop_range_vec.push(Range::new(Loc(15), Loc(25)).unwrap());
 
         let async_var_decl = MirDecl::User {
@@ -745,10 +745,10 @@ mod tests {
             name: "_task_context".into(),
             ty: "i32".into(),
             lives: lives_vec,
-            shared_borrow: SmallVec::new(),
-            mutable_borrow: SmallVec::new(),
+            shared_borrow: EcoVec::new(),
+            mutable_borrow: EcoVec::new(),
             drop_range: drop_range_vec,
-            must_live_at: SmallVec::new(),
+            must_live_at: EcoVec::new(),
             drop: false,
             span: Range::new(Loc(5), Loc(15)).unwrap(),
         };
@@ -764,10 +764,10 @@ mod tests {
         let mut selector = SelectLocal::new(Loc(10));
 
         // Test that regular variables are not filtered out
-        let mut lives_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        let mut lives_vec: EcoVec<Range> = EcoVec::new();
         lives_vec.push(Range::new(Loc(0), Loc(20)).unwrap());
 
-        let mut drop_range_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        let mut drop_range_vec: EcoVec<Range> = EcoVec::new();
         drop_range_vec.push(Range::new(Loc(15), Loc(25)).unwrap());
 
         let regular_var_decl = MirDecl::User {
@@ -775,10 +775,10 @@ mod tests {
             name: "my_var".into(),
             ty: "i32".into(),
             lives: lives_vec,
-            shared_borrow: SmallVec::new(),
-            mutable_borrow: SmallVec::new(),
+            shared_borrow: EcoVec::new(),
+            mutable_borrow: EcoVec::new(),
             drop_range: drop_range_vec,
-            must_live_at: SmallVec::new(),
+            must_live_at: EcoVec::new(),
             drop: false,
             span: Range::new(Loc(5), Loc(15)).unwrap(),
         };
@@ -822,10 +822,10 @@ mod tests {
         let locals = vec![FnLocal::new(1, 1)];
         let mut calc = CalcDecos::new(locals);
 
-        let mut lives_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        let mut lives_vec: EcoVec<Range> = EcoVec::new();
         lives_vec.push(Range::new(Loc(0), Loc(20)).unwrap());
 
-        let mut drop_range_vec: SmallVec<[Range; 4]> = SmallVec::new();
+        let mut drop_range_vec: EcoVec<Range> = EcoVec::new();
         drop_range_vec.push(Range::new(Loc(15), Loc(25)).unwrap());
 
         let decl = MirDecl::User {
@@ -833,10 +833,10 @@ mod tests {
             name: "test_var".into(),
             ty: "i32".into(),
             lives: lives_vec,
-            shared_borrow: SmallVec::new(),
-            mutable_borrow: SmallVec::new(),
+            shared_borrow: EcoVec::new(),
+            mutable_borrow: EcoVec::new(),
             drop_range: drop_range_vec,
-            must_live_at: SmallVec::new(),
+            must_live_at: EcoVec::new(),
             drop: false,
             span: Range::new(Loc(5), Loc(15)).unwrap(),
         };

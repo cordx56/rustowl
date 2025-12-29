@@ -4,10 +4,10 @@
 //! ownership information, lifetimes, and analysis results extracted
 //! from Rust code via compiler integration.
 
+use ecow::{EcoString, EcoVec};
 use foldhash::quality::RandomState as FoldHasher;
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 
 /// An IndexMap with FoldHasher for fast + high-quality hashing.
 pub type FoldIndexMap<K, V> = IndexMap<K, V, FoldHasher>;
@@ -61,7 +61,9 @@ impl Loc {
         let byte_pos = byte_pos.saturating_sub(offset);
         let byte_pos = byte_pos as usize;
 
-        // Convert byte position to character position efficiently.
+        // This method is intentionally allocation-free. Hot paths should prefer
+        // `utils::NormalizedByteCharIndex` to avoid repeatedly scanning `source`.
+        //
         // Note: rustc byte positions are reported as if `\r` doesn't exist.
         // So our byte counting must ignore CR too.
         let mut char_count = 0u32;
@@ -259,7 +261,7 @@ impl MirVariables {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct File {
-    pub items: SmallVec<[Function; 4]>, // Most files have few functions
+    pub items: EcoVec<Function>,
 }
 
 impl Default for File {
@@ -271,13 +273,13 @@ impl Default for File {
 impl File {
     pub fn new() -> Self {
         Self {
-            items: SmallVec::new(),
+            items: EcoVec::new(),
         }
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            items: SmallVec::with_capacity(capacity),
+            items: EcoVec::with_capacity(capacity),
         }
     }
 }
@@ -306,25 +308,30 @@ pub struct Crate(pub FoldIndexMap<String, File>);
 impl Crate {
     pub fn merge(&mut self, other: Self) {
         let Crate(files) = other;
-        for (file, mut mir) in files {
+        for (file, mir) in files {
             match self.0.get_mut(&file) {
                 Some(existing) => {
-                    // Pre-allocate capacity for better performance
-                    let new_size = existing.items.len() + mir.items.len();
-                    if existing.items.capacity() < new_size {
-                        existing
-                            .items
-                            .reserve_exact(new_size - existing.items.capacity());
-                    }
-
                     let mut seen_ids = FoldIndexSet::with_capacity_and_hasher(
                         existing.items.len(),
                         FoldHasher::default(),
                     );
                     seen_ids.extend(existing.items.iter().map(|i| i.fn_id));
 
-                    mir.items.retain(|item| seen_ids.insert(item.fn_id));
-                    existing.items.append(&mut mir.items);
+                    // `EcoVec` doesn't offer `retain`/`append`, so rebuild the delta.
+                    let new_items: EcoVec<Function> = mir
+                        .items
+                        .iter()
+                        .filter(|&item| seen_ids.insert(item.fn_id))
+                        .cloned()
+                        .collect();
+
+                    if !new_items.is_empty() {
+                        let mut merged =
+                            EcoVec::with_capacity(existing.items.len() + new_items.len());
+                        merged.extend(existing.items.iter().cloned());
+                        merged.extend(new_items);
+                        existing.items = merged;
+                    }
                 }
                 None => {
                     self.0.insert(file, mir);
@@ -433,18 +440,20 @@ impl MirBasicBlock {
     }
 }
 
-// Type aliases for commonly small collections
-pub type RangeVec = SmallVec<[Range; 4]>; // Most variables have few ranges
-pub type StatementVec = SmallVec<[MirStatement; 8]>; // Most basic blocks have few statements
-pub type DeclVec = SmallVec<[MirDecl; 16]>; // Most functions have moderate number of declarations
+// Type aliases for commonly cloned collections.
+//
+// These were previously `SmallVec` to optimize for small inline sizes.
+// We now use `EcoVec` to make cloning across the LSP boundary cheap.
+pub type RangeVec = EcoVec<Range>;
+pub type StatementVec = EcoVec<MirStatement>;
+pub type DeclVec = EcoVec<MirDecl>;
 
-// Helper functions for conversions since we can't impl traits on type aliases
 pub fn range_vec_into_vec(ranges: RangeVec) -> Vec<Range> {
-    ranges.into_vec()
+    ranges.into_iter().collect()
 }
 
 pub fn range_vec_from_vec(vec: Vec<Range>) -> RangeVec {
-    RangeVec::from_vec(vec)
+    vec.into()
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -452,9 +461,9 @@ pub fn range_vec_from_vec(vec: Vec<Range>) -> RangeVec {
 pub enum MirDecl {
     User {
         local: FnLocal,
-        name: smol_str::SmolStr,
+        name: EcoString,
         span: Range,
-        ty: smol_str::SmolStr,
+        ty: EcoString,
         lives: RangeVec,
         shared_borrow: RangeVec,
         mutable_borrow: RangeVec,
@@ -464,7 +473,7 @@ pub enum MirDecl {
     },
     Other {
         local: FnLocal,
-        ty: smol_str::SmolStr,
+        ty: EcoString,
         lives: RangeVec,
         shared_borrow: RangeVec,
         mutable_borrow: RangeVec,
@@ -477,7 +486,7 @@ pub enum MirDecl {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Function {
     pub fn_id: u32,
-    pub basic_blocks: SmallVec<[MirBasicBlock; 8]>, // Most functions have few basic blocks
+    pub basic_blocks: EcoVec<MirBasicBlock>,
     pub decls: DeclVec,
 }
 
@@ -485,7 +494,7 @@ impl Function {
     pub fn new(fn_id: u32) -> Self {
         Self {
             fn_id,
-            basic_blocks: SmallVec::new(),
+            basic_blocks: EcoVec::new(),
             decls: DeclVec::new(),
         }
     }
@@ -508,7 +517,7 @@ impl Function {
     pub fn with_capacity(fn_id: u32, bb_capacity: usize, decl_capacity: usize) -> Self {
         Self {
             fn_id,
-            basic_blocks: SmallVec::with_capacity(bb_capacity),
+            basic_blocks: EcoVec::with_capacity(bb_capacity),
             decls: DeclVec::with_capacity(decl_capacity),
         }
     }
@@ -1183,7 +1192,7 @@ mod tests {
                     format!("module_{file_idx}.rs")
                 };
 
-                let mut functions = smallvec::SmallVec::new();
+                let mut functions = EcoVec::new();
 
                 // Each file has many functions
                 for fn_idx in 0..10 {
@@ -1454,19 +1463,15 @@ mod tests {
             "FnLocal should be compact: {fn_local_size} bytes"
         );
 
-        // Test SmallVec doesn't allocate for small sizes
-        let small_vec = smallvec::SmallVec::<[Function; 4]>::new();
-        let small_vec_size = mem::size_of_val(&small_vec);
-        assert!(small_vec_size > 0);
+        // Spot-check `EcoVec` remains a compact container.
+        let vec = EcoVec::<Function>::new();
+        let vec_size = mem::size_of_val(&vec);
+        assert!(vec_size > 0);
 
-        // Add items within inline capacity
-        let mut small_vec = smallvec::SmallVec::<[Function; 4]>::new();
+        let mut vec = EcoVec::<Function>::new();
         for i in 0..4 {
-            small_vec.push(Function::new(i));
+            vec.push(Function::new(i));
         }
-        assert!(
-            !small_vec.spilled(),
-            "Should not spill for small collections"
-        );
+        assert_eq!(vec.len(), 4);
     }
 }

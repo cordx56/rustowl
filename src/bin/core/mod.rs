@@ -2,6 +2,7 @@ mod analyze;
 mod cache;
 
 use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
+use ecow::EcoVec;
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
 use rustc_middle::{query::queries, ty::TyCtxt, util::Providers};
@@ -154,7 +155,7 @@ pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
     map.insert(
         analyzed.file_name.to_owned(),
         File {
-            items: smallvec::smallvec![analyzed.analyzed],
+            items: EcoVec::from([analyzed.analyzed]),
         },
     );
     let krate = Crate(map);
@@ -198,7 +199,6 @@ pub fn run_compiler() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use smallvec::SmallVec;
     use std::sync::atomic::Ordering;
 
     #[test]
@@ -245,7 +245,7 @@ mod tests {
         // Create a mock AnalyzeResult
         let analyzed = Function {
             fn_id: 1,
-            basic_blocks: SmallVec::new(),
+            basic_blocks: EcoVec::new(),
             decls: DeclVec::new(),
         };
 
@@ -403,7 +403,7 @@ mod tests {
         file_map.insert(
             file_name.clone(),
             File {
-                items: smallvec::smallvec![test_function],
+                items: EcoVec::from([test_function]),
             },
         );
         let krate = Crate(file_map);
@@ -436,7 +436,7 @@ mod tests {
         file_map.insert(
             "main.rs".to_string(),
             File {
-                items: smallvec::smallvec![test_function],
+                items: EcoVec::from([test_function]),
             },
         );
         let krate = Crate(file_map);
@@ -553,7 +553,7 @@ mod tests {
 
             for file_idx in 0..5 {
                 let file_name = format!("src/module_{file_idx}.rs");
-                let mut functions = smallvec::SmallVec::new();
+                let mut functions = EcoVec::new();
 
                 for fn_idx in 0..3 {
                     let function = Function::new((crate_idx * 100 + file_idx * 10 + fn_idx) as u32);
@@ -609,7 +609,7 @@ mod tests {
             file_map.insert(
                 "test.rs".to_string(),
                 File {
-                    items: smallvec::smallvec![function],
+                    items: EcoVec::from([function]),
                 },
             );
 
@@ -881,23 +881,20 @@ mod tests {
             }
         }
 
-        // Test SmallVec allocation patterns
-        let mut small_vec = smallvec::SmallVec::<[Function; 4]>::new();
-        let _initial_size = mem::size_of_val(&small_vec);
+        // Basic `EcoVec` growth sanity check.
+        let mut vec = EcoVec::<Function>::new();
+        let _initial_size = mem::size_of_val(&vec);
 
-        // Add functions and observe size changes
         for i in 0..10 {
-            small_vec.push(Function::new(i));
-            let current_size = mem::size_of_val(&small_vec);
-
-            // Size should remain reasonable (but Function objects are large)
+            vec.push(Function::new(i));
+            let current_size = mem::size_of_val(&vec);
             assert!(
                 current_size < 100_000,
-                "SmallVec size should remain reasonable: {current_size} bytes"
+                "EcoVec size should remain reasonable: {current_size} bytes"
             );
         }
 
-        assert!(small_vec.len() == 10);
+        assert_eq!(vec.len(), 10);
     }
 
     #[test]

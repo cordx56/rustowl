@@ -50,11 +50,11 @@ clap_complete_nushell = "4"
 clap-verbosity-flag = { version = "3", default-features = false, features = [
   "tracing"
 ] }
-flate2 = "1"
+ecow = { version = "0.2", features = ["serde"] }
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 foldhash = "0.2.0"
 indexmap = { version = "2", features = ["rayon", "serde"] }
-indicatif = "0.18"
-log = "0.4"
+indicatif = { version = "0.18", features = ["improved_unicode", "rayon"] }
 memchr = "2"
 num_cpus = "1"
 process_alive = "0.2"
@@ -63,6 +63,7 @@ reqwest = { version = "0.12", default-features = false, features = [
   "http2",
   "rustls-tls-native-roots-no-provider",
   "socks",
+  "stream",
   "system-proxy",
 ] }
 rustls = { version = "0.23.35", default-features = false, features = [
@@ -70,8 +71,6 @@ rustls = { version = "0.23.35", default-features = false, features = [
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-smallvec = { version = "1.15", features = ["serde", "union"] }
-smol_str = { version = "0.3", features = ["serde"] }
 tar = "0.4.44"
 tempfile = "3"
 tokio = { version = "1", features = [
@@ -85,11 +84,13 @@ tokio = { version = "1", features = [
   "sync",
   "time",
 ] }
-tokio-util = "0.7"
+tokio-util = { version = "0.7", features = ["compat", "io-util"] }
 tower-lsp-server = "0.23"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "smallvec"] }
-uuid = { version = "1", features = ["v4"] }
+# Keep smallvec only for tracing-subscriber's internal buffers.
+# rustowl's own data structures use `ecow` instead.
+uuid = { version = "1", features = ["fast-rng", "v4"] }
 
 [dev-dependencies]
 divan = "0.1"
@@ -111,7 +112,11 @@ tikv-jemalloc-sys = "0.6"
 tikv-jemallocator = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-zip = "7.0.0"
+async_zip = { version = "0.0.18", default-features = false, features = [
+  "deflate",
+  "tokio",
+  "tokio-util"
+] }
 
 [features]
 # Bench-only helpers used by `cargo bench` targets.
