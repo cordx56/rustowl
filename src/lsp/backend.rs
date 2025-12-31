@@ -628,26 +628,10 @@ impl LanguageServer for Backend {
 mod tests {
     use super::*;
     use crate::miri_async_test;
-    use std::sync::Once;
-
-    static CRYPTO_PROVIDER_INIT: Once = Once::new();
-
-    /// Safely initialize the crypto provider once to avoid multiple installation issues
-    fn init_crypto_provider() {
-        CRYPTO_PROVIDER_INIT.call_once(|| {
-            // Try to install the crypto provider, but don't panic if it's already installed
-            let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        });
-
-        // Also try to install it directly in case the Once didn't work
-        // This is safe to call multiple times
-        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-    }
 
     #[test]
     fn test_check_method() {
         miri_async_test!(async {
-            init_crypto_provider();
             let temp_dir = tempfile::tempdir().unwrap();
             let cargo_toml = temp_dir.path().join("Cargo.toml");
             tokio::fs::write(
@@ -666,8 +650,6 @@ mod tests {
     #[test]
     fn test_check_with_options() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let temp_dir = tempfile::tempdir().unwrap();
             let cargo_toml = temp_dir.path().join("Cargo.toml");
             tokio::fs::write(
@@ -686,7 +668,6 @@ mod tests {
     #[test]
     fn test_check_invalid_path() {
         miri_async_test!(async {
-            init_crypto_provider();
             let result = Backend::check(Path::new("/nonexistent/path"), 1).await;
 
             assert!(!result);
@@ -696,8 +677,6 @@ mod tests {
     #[test]
     fn test_check_with_options_invalid_path() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let result =
                 Backend::check_with_options(Path::new("/nonexistent/path"), false, false, 1).await;
             assert!(!result);
@@ -707,8 +686,6 @@ mod tests {
     #[test]
     fn test_check_valid_cargo_no_src() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let temp_dir = tempfile::tempdir().unwrap();
             let cargo_toml = temp_dir.path().join("Cargo.toml");
             tokio::fs::write(
@@ -727,8 +704,6 @@ mod tests {
     #[test]
     fn test_check_with_different_options() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let temp_dir = tempfile::tempdir().unwrap();
             let cargo_toml = temp_dir.path().join("Cargo.toml");
             tokio::fs::write(
@@ -755,8 +730,6 @@ mod tests {
     #[test]
     fn test_check_with_workspace() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let temp_dir = tempfile::tempdir().unwrap();
 
             // Create workspace Cargo.toml
@@ -785,8 +758,6 @@ mod tests {
     #[test]
     fn test_check_malformed_cargo() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let temp_dir = tempfile::tempdir().unwrap();
             let cargo_toml = temp_dir.path().join("Cargo.toml");
 
@@ -807,7 +778,6 @@ mod tests {
     #[test]
     fn test_check_empty_directory() {
         miri_async_test!(async {
-            init_crypto_provider();
             let temp_dir = tempfile::tempdir().unwrap();
 
             let result = Backend::check(&temp_dir.path(), 1).await;
@@ -819,8 +789,6 @@ mod tests {
     #[test]
     fn test_check_with_options_empty_directory() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let temp_dir = tempfile::tempdir().unwrap();
 
             let result = Backend::check_with_options(&temp_dir.path(), true, true, 1).await;
@@ -832,8 +800,6 @@ mod tests {
     #[test]
     fn test_check_nested_cargo() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let temp_dir = tempfile::tempdir().unwrap();
             let nested_dir = temp_dir.path().join("nested");
             tokio::fs::create_dir(&nested_dir).await.unwrap();
@@ -855,8 +821,6 @@ mod tests {
     #[test]
     fn test_check_with_binary_target() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let temp_dir = tempfile::tempdir().unwrap();
             let cargo_toml = temp_dir.path().join("Cargo.toml");
 
@@ -880,8 +844,6 @@ mod tests {
     #[test]
     fn test_check_with_library_target() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let temp_dir = tempfile::tempdir().unwrap();
             let cargo_toml = temp_dir.path().join("Cargo.toml");
 
@@ -905,8 +867,6 @@ mod tests {
     #[test]
     fn test_check_with_mixed_targets() {
         miri_async_test!(async {
-            init_crypto_provider();
-
             let temp_dir = tempfile::tempdir().unwrap();
             let cargo_toml = temp_dir.path().join("Cargo.toml");
 

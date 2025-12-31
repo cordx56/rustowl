@@ -179,11 +179,6 @@ async fn start_lsp_server(rustc_threads: usize) {
 
 #[tokio::main]
 async fn main() {
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .expect("crypto provider already installed");
-
-    // Check if -V was used (before parsing consumes args)
     let used_short_flag = std::env::args().any(|arg| arg == "-V");
 
     let parsed_args = Cli::parse();
@@ -526,15 +521,5 @@ mod tests {
         // Test that we can get current directory or fallback
         let path = env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         assert!(path.exists() || path.as_os_str() == ".");
-    }
-
-    // Test crypto provider installation
-    #[test]
-    fn test_crypto_provider_installation() {
-        // Test that crypto provider can be installed
-        // This might fail if already installed, but shouldn't panic
-        let result = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        // Either it succeeds or it's already installed
-        assert!(result.is_ok() || result.is_err());
     }
 }
