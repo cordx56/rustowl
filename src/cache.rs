@@ -109,41 +109,52 @@ use std::sync::LazyLock;
 #[cfg(test)]
 static ENV_LOCK: LazyLock<std::sync::Mutex<()>> = LazyLock::new(|| std::sync::Mutex::new(()));
 
-/// Temporarily sets an environment variable for the duration of a closure, restoring the previous state afterwards.
-///
-/// The function saves the current value of `key` (if any), sets `key` to `value`, runs `f()`, and then restores `key` to its original value:
-/// - If the variable existed before, it is reset to its previous value.
-/// - If the variable did not exist before, it is removed after `f` returns.
-///
-/// This is intended for use in tests to run code under specific environment settings without leaking changes.
-///
-/// # Examples
-///
-/// ```
-/// // Ensure a value is visible inside the closure and restored afterwards.
-/// use std::env;
-///
-/// let prev = env::var("MY_TEST_VAR").ok();
-/// with_env("MY_TEST_VAR", "temp", || {
-///     assert_eq!(env::var("MY_TEST_VAR").unwrap(), "temp");
-/// });
-/// assert_eq!(env::var("MY_TEST_VAR").ok(), prev);
-/// ```
+#[cfg(test)]
+struct EnvGuard {
+    key: String,
+    old_value: Option<String>,
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl EnvGuard {
+    fn set(key: &str, value: &str) -> Self {
+        let lock = ENV_LOCK.lock().unwrap();
+        let old_value = env::var(key).ok();
+        unsafe {
+            env::set_var(key, value);
+        }
+        Self {
+            key: key.to_owned(),
+            old_value,
+            _lock: lock,
+        }
+    }
+}
+
+#[cfg(test)]
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        if let Some(v) = self.old_value.take() {
+            unsafe {
+                env::set_var(&self.key, v);
+            }
+        } else {
+            unsafe {
+                env::remove_var(&self.key);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 fn with_env<F>(key: &str, value: &str, f: F)
 where
     F: FnOnce(),
 {
-    let _guard = ENV_LOCK.lock().unwrap();
-    let old_value = env::var(key).ok();
-    unsafe {
-        env::set_var(key, value);
-    }
+    let guard = EnvGuard::set(key, value);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
-    match old_value {
-        Some(v) => unsafe { env::set_var(key, v) },
-        None => unsafe { env::remove_var(key) },
-    }
+    drop(guard);
     if let Err(panic) = result {
         std::panic::resume_unwind(panic);
     }

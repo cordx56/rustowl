@@ -1,6 +1,5 @@
 use crate::{cache::*, error::*, models::*, toolchain};
 use anyhow::bail;
-use memchr::memmem;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -15,6 +14,7 @@ use tokio::{
 pub struct CargoCheckMessageTarget {
     name: String,
 }
+
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(tag = "reason", rename_all = "kebab-case")]
 pub enum CargoCheckMessage {
@@ -45,9 +45,11 @@ impl Analyzer {
     pub async fn new(path: impl AsRef<Path>, rustc_threads: usize) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
 
-        // `cargo metadata` may invoke `rustc` for target information. It must use a real
-        // rustc, not `rustowlc`. Also, user Cargo configs may set `build.rustc-wrapper` (e.g.
-        // `sccache`), so we explicitly disable wrappers for this invocation.
+        // `cargo metadata` may invoke an external `rustc` to probe target information.
+        // We'll run it with an explicit `rustc` (not `rustowlc`) and without any wrappers.
+        //
+        // NOTE: `setup_cargo_command` may set `RUSTC`/`RUSTC_WORKSPACE_WRAPPER` for analysis runs,
+        // which would be wrong for metadata.
         let mut cargo_cmd = toolchain::setup_cargo_command(rustc_threads).await;
         cargo_cmd
             // NOTE: `setup_cargo_command` sets `RUSTC`/`RUSTC_WORKSPACE_WRAPPER` to `rustowlc`.
@@ -227,12 +229,11 @@ impl Analyzer {
             // prevent command from dropped
             let mut checked_count = 0usize;
 
-            // Heuristic byte markers to avoid parsing unrelated cargo messages.
-            // - `compiler-artifact` comes from `cargo --message-format=json`
-            // - Workspace output is emitted by `rustowlc` via `println!(serde_json::to_string(&ws))`
-            //   and is a top-level JSON object (no `reason` key).
-            let artifact_marker = b"\"reason\":\"compiler-artifact\"";
-            let reason_string_marker = b"\"reason\":\"";
+            // Cargo emits JSON objects tagged with `{"reason": ...}`.
+            // rustowlc emits a serialized `Workspace` JSON object.
+            //
+            // Distinguish them by attempting to parse any line as a `Workspace` first.
+            // If that fails, treat it as a cargo message (and optionally parse progress from it).
 
             let mut buf = Vec::with_capacity(16 * 1024);
             loop {
@@ -251,33 +252,25 @@ impl Analyzer {
                     continue;
                 }
 
-                // Fast path: crate-checked progress messages.
-                if memmem::find(&buf, artifact_marker).is_some() {
-                    if let Ok(CargoCheckMessage::CompilerArtifact { target }) =
-                        serde_json::from_slice::<CargoCheckMessage>(&buf)
-                    {
-                        let checked = target.name;
-                        tracing::trace!("crate {checked} checked");
-
-                        checked_count = checked_count.saturating_add(1);
-                        let event = AnalyzerEvent::CrateChecked {
-                            package: checked,
-                            package_index: checked_count,
-                            package_count,
-                        };
-                        let _ = sender.send(event).await;
-                    }
-                    continue;
-                }
-
-                // Workspace output does not have Cargo's `reason: "..."` tag; avoid parsing cargo JSON messages.
-                // (Workspace *can* contain a top-level key named `reason`, e.g. crate named "reason".)
-                if memmem::find(&buf, reason_string_marker).is_some() {
-                    continue;
-                }
-
                 if let Ok(ws) = serde_json::from_slice::<Workspace>(&buf) {
                     let event = AnalyzerEvent::Analyzed(ws);
+                    let _ = sender.send(event).await;
+                    continue;
+                }
+
+                // Not a Workspace line; maybe a Cargo JSON message.
+                if let Ok(CargoCheckMessage::CompilerArtifact { target }) =
+                    serde_json::from_slice::<CargoCheckMessage>(&buf)
+                {
+                    let checked = target.name;
+                    tracing::trace!("crate {checked} checked");
+
+                    checked_count = checked_count.saturating_add(1);
+                    let event = AnalyzerEvent::CrateChecked {
+                        package: checked,
+                        package_index: checked_count,
+                        package_count,
+                    };
                     let _ = sender.send(event).await;
                 }
             }
@@ -323,7 +316,6 @@ impl Analyzer {
         let notify_c = notify.clone();
         let _handle = tokio::spawn(async move {
             // prevent command from dropped
-            let reason_string_marker = b"\"reason\":\"";
 
             let mut buf = Vec::with_capacity(16 * 1024);
             loop {
@@ -338,11 +330,6 @@ impl Analyzer {
                     buf.pop();
                 }
                 if buf.is_empty() {
-                    continue;
-                }
-
-                // Ignore cargo JSON messages (they have `reason: "..."`).
-                if memmem::find(&buf, reason_string_marker).is_some() {
                     continue;
                 }
 
@@ -377,12 +364,12 @@ impl AnalyzeEventIter {
             _ = self.notify.notified() => {
                 match self.child.wait().await {
                     Ok(status) => {
-                         if !status.success() {
-                            tracing::error!("Analyzer process exited with status: {}", status);
-                         }
+                        if !status.success() {
+                            tracing::debug!("Analyzer process exited with status: {}", status);
+                        }
                     }
                     Err(e) => {
-                        tracing::error!("Failed to wait for analyzer process: {}", e);
+                        tracing::debug!("Failed to wait for analyzer process: {}", e);
                     }
                 }
                 None

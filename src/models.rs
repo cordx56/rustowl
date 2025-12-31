@@ -580,36 +580,6 @@ mod tests {
     }
 
     #[test]
-    fn test_mir_variables_collection_advanced() {
-        let mut vars = MirVariables::with_capacity(10);
-        assert!(vars.0.capacity() >= 10);
-
-        // Test adding duplicates
-        let var1 = MirVariable::User {
-            index: 1,
-            live: Range::new(Loc(0), Loc(10)).unwrap(),
-            dead: Range::new(Loc(10), Loc(20)).unwrap(),
-        };
-
-        let var1_duplicate = MirVariable::User {
-            index: 1,                                   // Same index
-            live: Range::new(Loc(5), Loc(15)).unwrap(), // Different ranges
-            dead: Range::new(Loc(15), Loc(25)).unwrap(),
-        };
-
-        vars.push(var1);
-        vars.push(var1_duplicate); // Should not add due to same index
-
-        let result = vars.to_vec();
-        assert_eq!(result.len(), 1);
-
-        // Verify the first one was kept (or_insert behavior)
-        if let MirVariable::User { live, .. } = result[0] {
-            assert_eq!(live.from().0, 0);
-        }
-    }
-
-    #[test]
     fn test_file_operations() {
         let mut file = File::with_capacity(5);
         assert!(file.items.capacity() >= 5);

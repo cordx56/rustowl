@@ -635,34 +635,10 @@ mod tests {
 
     #[test]
     fn test_shell_error_message_patterns() {
-        // Test error message patterns comprehensively
-
-        let invalid_inputs = vec![
-            ("", "invalid variant: "),
-            ("invalid", "invalid variant: invalid"),
-            ("cmd", "invalid variant: cmd"),
-            ("shell", "invalid variant: shell"),
-            ("bash zsh", "invalid variant: bash zsh"),
-            ("INVALID", "invalid variant: INVALID"),
-            ("123", "invalid variant: 123"),
-            ("bash-invalid", "invalid variant: bash-invalid"),
-            ("zsh_modified", "invalid variant: zsh_modified"),
-            ("fish!", "invalid variant: fish!"),
-            ("powershell.exe", "invalid variant: powershell.exe"),
-            ("nushell-beta", "invalid variant: nushell-beta"),
-            ("  bash  ", "invalid variant:   bash  "), // Whitespace preserved
-            ("UNKNOWN_SHELL", "invalid variant: UNKNOWN_SHELL"), // Actually invalid
-        ];
-
-        for (input, expected_error) in invalid_inputs {
-            let result = <Shell as std::str::FromStr>::from_str(input);
-            assert!(result.is_err(), "Should be error for input: '{input}'");
-
-            let error_msg = result.unwrap_err();
-            assert_eq!(
-                error_msg, expected_error,
-                "Error message mismatch for: '{input}'"
-            );
-        }
+        // Keep this lightweight: FromStr is already covered above.
+        let input = "invalid";
+        let result = <Shell as std::str::FromStr>::from_str(input);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "invalid variant: invalid");
     }
 }

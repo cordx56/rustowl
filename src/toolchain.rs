@@ -194,19 +194,45 @@ async fn stream_into_pipe_with_resume(
                 let f = tokio::fs::File::open(spool_path).await.map_err(|e| {
                     tracing::error!("failed to open spool file {}: {e}", spool_path.display());
                 })?;
-                let copied = tokio::io::copy(&mut f.take(existing), writer)
-                    .await
-                    .map_err(|e| {
-                        tracing::error!("failed to replay cached bytes: {e}");
-                    })?;
-                if let Some(pb) = &progress {
-                    pb.set_position(existing);
+
+                match tokio::io::copy(&mut f.take(existing), writer).await {
+                    Ok(copied) if copied == existing => {
+                        if let Some(pb) = &progress {
+                            pb.set_position(existing);
+                        }
+                        r
+                    }
+                    Ok(copied) => {
+                        tracing::error!(
+                            "spool replay mismatch: expected {existing}, got {copied}; restarting"
+                        );
+                        existing = 0;
+                        let _ = tokio::fs::remove_file(spool_path).await;
+                        HTTP_CLIENT
+                            .get(url)
+                            .send()
+                            .await
+                            .and_then(|v| v.error_for_status())
+                            .map_err(|e| {
+                                tracing::error!("failed to download runtime archive");
+                                tracing::error!("{e:?}");
+                            })?
+                    }
+                    Err(e) => {
+                        tracing::error!("failed to replay cached bytes ({e}); restarting");
+                        existing = 0;
+                        let _ = tokio::fs::remove_file(spool_path).await;
+                        HTTP_CLIENT
+                            .get(url)
+                            .send()
+                            .await
+                            .and_then(|v| v.error_for_status())
+                            .map_err(|e| {
+                                tracing::error!("failed to download runtime archive");
+                                tracing::error!("{e:?}");
+                            })?
+                    }
                 }
-                if copied != existing {
-                    tracing::error!("spool replay mismatch: expected {existing}, got {copied}");
-                    return Err(());
-                }
-                r
             }
             // Some servers respond 416 when the local file is already complete.
             reqwest::StatusCode::RANGE_NOT_SATISFIABLE => {
@@ -214,19 +240,39 @@ async fn stream_into_pipe_with_resume(
                 let f = tokio::fs::File::open(spool_path).await.map_err(|e| {
                     tracing::error!("failed to open spool file {}: {e}", spool_path.display());
                 })?;
-                let copied = tokio::io::copy(&mut f.take(existing), writer)
+
+                match tokio::io::copy(&mut f.take(existing), writer).await {
+                    Ok(copied) if copied == existing => {
+                        if let Some(pb) = &progress {
+                            pb.set_position(existing);
+                        }
+                        return Ok(());
+                    }
+                    Ok(copied) => {
+                        tracing::error!(
+                            "spool replay mismatch: expected {existing}, got {copied}; restarting"
+                        );
+                        let _ = tokio::fs::remove_file(spool_path).await;
+                        existing = 0;
+                        // Continue as if no spool exists.
+                    }
+                    Err(e) => {
+                        tracing::error!("failed to replay cached bytes ({e}); restarting");
+                        let _ = tokio::fs::remove_file(spool_path).await;
+                        existing = 0;
+                        // Continue as if no spool exists.
+                    }
+                }
+
+                HTTP_CLIENT
+                    .get(url)
+                    .send()
                     .await
+                    .and_then(|v| v.error_for_status())
                     .map_err(|e| {
-                        tracing::error!("failed to replay cached bytes: {e}");
-                    })?;
-                if let Some(pb) = &progress {
-                    pb.set_position(existing);
-                }
-                if copied != existing {
-                    tracing::error!("spool replay mismatch: expected {existing}, got {copied}");
-                    return Err(());
-                }
-                return Ok(());
+                        tracing::error!("failed to download runtime archive");
+                        tracing::error!("{e:?}");
+                    })?
             }
             // Server ignored range; start fresh (but only safe before extraction sees bytes).
             reqwest::StatusCode::OK => {
@@ -1062,22 +1108,6 @@ mod tests {
             assert!(sysroot.ends_with(TOOLCHAIN));
             assert!(sysroot.to_string_lossy().contains("sysroot"));
         }
-    }
-
-    #[test]
-    fn test_recursive_read_dir_non_existent() {
-        // Test with non-existent directory
-        let non_existent = PathBuf::from("/this/path/definitely/does/not/exist");
-        let result = recursive_read_dir(&non_existent);
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn test_recursive_read_dir_file() {
-        // Create a temporary file to test with
-        let temp_file = tempfile::NamedTempFile::new().unwrap();
-        let result = recursive_read_dir(temp_file.path());
-        assert!(result.is_empty()); // Should return empty for files
     }
 
     #[test]

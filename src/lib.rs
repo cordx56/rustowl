@@ -1,8 +1,10 @@
 //! # RustOwl Library
 //!
 //! RustOwl is a Language Server Protocol (LSP) implementation for visualizing
-//! ownership and lifetimes in Rust code. This library provides the core
-//! functionality for analyzing Rust programs and extracting ownership information.
+//! ownership and lifetimes in Rust code.
+//!
+//! The core analysis is performed by the `rustowlc` binary (a rustc wrapper).
+//! This library provides the common data models and the LSP-side orchestration.
 //!
 //! ## Core Components
 //!

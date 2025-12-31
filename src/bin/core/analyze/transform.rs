@@ -51,12 +51,17 @@ pub fn collect_user_vars(
         foldhash::quality::RandomState::default(),
     );
     for debug in &body.var_debug_info {
-        if let VarDebugInfoContents::Place(place) = &debug.value
-            && let Some(range) =
-                super::shared::range_from_span_indexed(&index, debug.source_info.span, offset)
-        {
-            result.insert(place.local, (range, debug.name.as_str().to_owned()));
-        }
+        let VarDebugInfoContents::Place(place) = &debug.value else {
+            continue;
+        };
+
+        let Some(range) =
+            super::shared::range_from_span_indexed(&index, debug.source_info.span, offset)
+        else {
+            continue;
+        };
+
+        result.insert(place.local, (range, debug.name.as_str().to_owned()));
     }
     result
 }
