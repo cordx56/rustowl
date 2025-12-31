@@ -45,16 +45,8 @@ impl Analyzer {
     pub async fn new(path: impl AsRef<Path>, rustc_threads: usize) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
 
-        // `cargo metadata` may invoke an external `rustc` to probe target information.
-        // We'll run it with an explicit `rustc` (not `rustowlc`) and without any wrappers.
-        //
-        // NOTE: `setup_cargo_command` may set `RUSTC`/`RUSTC_WORKSPACE_WRAPPER` for analysis runs,
-        // which would be wrong for metadata.
         let mut cargo_cmd = toolchain::setup_cargo_command(rustc_threads).await;
         cargo_cmd
-            // NOTE: `setup_cargo_command` sets `RUSTC`/`RUSTC_WORKSPACE_WRAPPER` to `rustowlc`.
-            // We must override that for `cargo metadata`.
-            .env("RUSTC", toolchain::get_executable_path("rustc").await)
             .env_remove("RUSTC_WORKSPACE_WRAPPER")
             .env_remove("RUSTC_WRAPPER")
             // `--config` values are TOML; `""` sets the wrapper to an empty string.

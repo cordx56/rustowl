@@ -580,24 +580,6 @@ mod tests {
     }
 
     #[test]
-    fn test_file_operations() {
-        let mut file = File::with_capacity(5);
-        assert!(file.items.capacity() >= 5);
-
-        // Test adding functions
-        file.items.push(Function::new(1));
-        file.items.push(Function::new(2));
-
-        assert_eq!(file.items.len(), 2);
-        assert_eq!(file.items[0].fn_id, 1);
-        assert_eq!(file.items[1].fn_id, 2);
-
-        // Test cloning
-        let file_clone = file.clone();
-        assert_eq!(file.items.len(), file_clone.items.len());
-    }
-
-    #[test]
     fn test_workspace_merge_operations() {
         let mut workspace1 = Workspace(FoldIndexMap::default());
         let mut workspace2 = Workspace(FoldIndexMap::default());

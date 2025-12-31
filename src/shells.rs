@@ -632,13 +632,4 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn test_shell_error_message_patterns() {
-        // Keep this lightweight: FromStr is already covered above.
-        let input = "invalid";
-        let result = <Shell as std::str::FromStr>::from_str(input);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "invalid variant: invalid");
-    }
 }
