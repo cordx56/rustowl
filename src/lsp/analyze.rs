@@ -1,4 +1,6 @@
-use crate::{cache::*, models::*, toolchain};
+use crate::{cache::*, error::*, models::*, toolchain};
+use anyhow::bail;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -12,11 +14,13 @@ use tokio::{
 pub struct CargoCheckMessageTarget {
     name: String,
 }
+
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(tag = "reason", rename_all = "kebab-case")]
 pub enum CargoCheckMessage {
-    #[allow(unused)]
-    CompilerArtifact { target: CargoCheckMessageTarget },
+    CompilerArtifact {
+        target: CargoCheckMessageTarget,
+    },
     #[allow(unused)]
     BuildFinished {},
 }
@@ -24,6 +28,7 @@ pub enum CargoCheckMessage {
 pub enum AnalyzerEvent {
     CrateChecked {
         package: String,
+        package_index: usize,
         package_count: usize,
     },
     Analyzed(Workspace),
@@ -37,16 +42,24 @@ pub struct Analyzer {
 }
 
 impl Analyzer {
-    pub async fn new(path: impl AsRef<Path>, rustc_threads: usize) -> Result<Self, ()> {
+    pub async fn new(path: impl AsRef<Path>, rustc_threads: usize) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
 
         let mut cargo_cmd = toolchain::setup_cargo_command(rustc_threads).await;
-
         cargo_cmd
+            .env_remove("RUSTC_WORKSPACE_WRAPPER")
+            .env_remove("RUSTC_WRAPPER")
+            // `--config` values are TOML; `""` sets the wrapper to an empty string.
             .args([
-                "metadata".to_owned(),
-                "--filter-platform".to_owned(),
-                toolchain::HOST_TUPLE.to_owned(),
+                "--config",
+                "build.rustc-wrapper=\"\"",
+                "--config",
+                "build.rustc-workspace-wrapper=\"\"",
+                "metadata",
+                "--format-version",
+                "1",
+                "--filter-platform",
+                toolchain::HOST_TUPLE,
             ])
             .current_dir(if path.is_file() {
                 path.parent().unwrap()
@@ -54,15 +67,32 @@ impl Analyzer {
                 &path
             })
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
 
-        let metadata = if let Ok(child) = cargo_cmd.spawn()
-            && let Ok(output) = child.wait_with_output().await
-        {
-            let data = String::from_utf8_lossy(&output.stdout);
-            cargo_metadata::MetadataCommand::parse(data).ok()
-        } else {
-            None
+        let metadata = match cargo_cmd.output().await {
+            Ok(output) if output.status.success() => {
+                let data = String::from_utf8_lossy(&output.stdout);
+                cargo_metadata::MetadataCommand::parse(data).ok()
+            }
+            Ok(output) => {
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    tracing::debug!(
+                        "`cargo metadata` failed (status={}):\nstdout:\n{}\nstderr:\n{}",
+                        output.status,
+                        stdout.trim(),
+                        stderr.trim()
+                    );
+                }
+                None
+            }
+            Err(e) => {
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    tracing::debug!("failed to spawn `cargo metadata`: {e}");
+                }
+                None
+            }
         };
 
         if let Some(metadata) = metadata {
@@ -78,8 +108,8 @@ impl Analyzer {
                 rustc_threads,
             })
         } else {
-            log::warn!("Invalid analysis target: {}", path.display());
-            Err(())
+            tracing::error!("Invalid analysis target: {}", path.display());
+            bail!("Invalid analysis target: {}", path.display());
         }
     }
     pub fn target_path(&self) -> &Path {
@@ -112,14 +142,14 @@ impl Analyzer {
     ) -> AnalyzeEventIter {
         let package_name = metadata.root_package().as_ref().unwrap().name.to_string();
         let target_dir = metadata.target_directory.as_std_path().join("owl");
-        log::info!("clear cargo cache");
-        let mut command = toolchain::setup_cargo_command(1).await;
+        tracing::debug!("clear cargo cache");
+        let mut command = toolchain::setup_cargo_command(self.rustc_threads).await;
         command
             .args(["clean", "--package", &package_name])
             .env("CARGO_TARGET_DIR", &target_dir)
             .current_dir(&self.path)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         command.spawn().unwrap().wait().await.ok();
 
         let mut command = toolchain::setup_cargo_command(self.rustc_threads).await;
@@ -138,51 +168,106 @@ impl Analyzer {
             .env("CARGO_TARGET_DIR", &target_dir)
             .env_remove("RUSTC_WRAPPER")
             .current_dir(&self.path)
-            .stdout(std::process::Stdio::piped())
+            .stdout(Stdio::piped())
             .kill_on_drop(true);
 
         if is_cache() {
             set_cache_path(&mut command, target_dir);
         }
 
-        if log::max_level()
-            .to_level()
-            .map(|v| v < log::Level::Info)
-            .unwrap_or(true)
-        {
-            command.stderr(std::process::Stdio::null());
+        if !tracing::enabled!(tracing::Level::INFO) {
+            command.stderr(Stdio::null());
         }
 
-        let package_count = metadata.packages.len();
+        // Cargo emits `compiler-artifact` per compilation unit. `metadata.packages[*].targets`
+        // includes lots of targets Cargo won't build for `cargo check` (tests/benches/examples,
+        // and dependency binaries), which can wildly overcount.
+        //
+        // We estimate the total units Cargo will actually build:
+        // - Workspace members: lib/bin/proc-macro/custom-build; plus test/bench/example with --all-targets
+        // - Dependencies: lib/proc-macro/custom-build only
+        let workspace_members: HashSet<_> = metadata.workspace_members.iter().cloned().collect();
 
-        log::info!("start analyzing package {package_name}");
+        let package_count = metadata
+            .packages
+            .iter()
+            .map(|p| {
+                let is_workspace_member = workspace_members.contains(&p.id);
+                p.targets
+                    .iter()
+                    .filter(|t| {
+                        let always = t.is_lib()
+                            || t.is_proc_macro()
+                            || t.is_custom_build()
+                            || (is_workspace_member && t.is_bin());
+                        let extra = all_targets
+                            && is_workspace_member
+                            && (t.is_test() || t.is_bench() || t.is_example());
+                        always || extra
+                    })
+                    .count()
+            })
+            .sum::<usize>()
+            .max(1);
+
+        tracing::debug!("start analyzing package {package_name}");
         let mut child = command.spawn().unwrap();
-        let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
 
         let (sender, receiver) = mpsc::channel(1024);
         let notify = Arc::new(Notify::new());
         let notify_c = notify.clone();
         let _handle = tokio::spawn(async move {
             // prevent command from dropped
-            while let Ok(Some(line)) = stdout.next_line().await {
+            let mut checked_count = 0usize;
+
+            // Cargo emits JSON objects tagged with `{"reason": ...}`.
+            // rustowlc emits a serialized `Workspace` JSON object.
+            //
+            // Distinguish them by attempting to parse any line as a `Workspace` first.
+            // If that fails, treat it as a cargo message (and optionally parse progress from it).
+
+            let mut buf = Vec::with_capacity(16 * 1024);
+            loop {
+                buf.clear();
+                match stdout.read_until(b'\n', &mut buf).await {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+
+                // Trim trailing newline(s) to keep serde_json happy.
+                while matches!(buf.last(), Some(b'\n' | b'\r')) {
+                    buf.pop();
+                }
+                if buf.is_empty() {
+                    continue;
+                }
+
+                if let Ok(ws) = serde_json::from_slice::<Workspace>(&buf) {
+                    let event = AnalyzerEvent::Analyzed(ws);
+                    let _ = sender.send(event).await;
+                    continue;
+                }
+
+                // Not a Workspace line; maybe a Cargo JSON message.
                 if let Ok(CargoCheckMessage::CompilerArtifact { target }) =
-                    serde_json::from_str(&line)
+                    serde_json::from_slice::<CargoCheckMessage>(&buf)
                 {
                     let checked = target.name;
-                    log::info!("crate {checked} checked");
+                    tracing::trace!("crate {checked} checked");
 
+                    checked_count = checked_count.saturating_add(1);
                     let event = AnalyzerEvent::CrateChecked {
                         package: checked,
+                        package_index: checked_count,
                         package_count,
                     };
                     let _ = sender.send(event).await;
                 }
-                if let Ok(ws) = serde_json::from_str::<Workspace>(&line) {
-                    let event = AnalyzerEvent::Analyzed(ws);
-                    let _ = sender.send(event).await;
-                }
             }
-            log::info!("stdout closed");
+
+            tracing::debug!("stdout closed");
             notify_c.notify_one();
         });
 
@@ -206,37 +291,47 @@ impl Analyzer {
         command.arg("-o/dev/null");
         #[cfg(windows)]
         command.arg("-oNUL");
-        command
-            .arg(path)
-            .stdout(std::process::Stdio::piped())
-            .kill_on_drop(true);
+        command.arg(path).stdout(Stdio::piped()).kill_on_drop(true);
 
         toolchain::set_rustc_env(&mut command, &sysroot);
 
-        if log::max_level()
-            .to_level()
-            .map(|v| v < log::Level::Info)
-            .unwrap_or(true)
-        {
-            command.stderr(std::process::Stdio::null());
+        if !tracing::enabled!(tracing::Level::INFO) {
+            command.stderr(Stdio::null());
         }
 
-        log::info!("start analyzing {}", path.display());
+        tracing::debug!("start analyzing {}", path.display());
         let mut child = command.spawn().unwrap();
-        let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
 
         let (sender, receiver) = mpsc::channel(1024);
         let notify = Arc::new(Notify::new());
         let notify_c = notify.clone();
         let _handle = tokio::spawn(async move {
             // prevent command from dropped
-            while let Ok(Some(line)) = stdout.next_line().await {
-                if let Ok(ws) = serde_json::from_str::<Workspace>(&line) {
+
+            let mut buf = Vec::with_capacity(16 * 1024);
+            loop {
+                buf.clear();
+                match stdout.read_until(b'\n', &mut buf).await {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+
+                while matches!(buf.last(), Some(b'\n' | b'\r')) {
+                    buf.pop();
+                }
+                if buf.is_empty() {
+                    continue;
+                }
+
+                if let Ok(ws) = serde_json::from_slice::<Workspace>(&buf) {
                     let event = AnalyzerEvent::Analyzed(ws);
                     let _ = sender.send(event).await;
                 }
             }
-            log::info!("stdout closed");
+
+            tracing::debug!("stdout closed");
             notify_c.notify_one();
         });
 
@@ -258,7 +353,19 @@ impl AnalyzeEventIter {
     pub async fn next_event(&mut self) -> Option<AnalyzerEvent> {
         tokio::select! {
             v = self.receiver.recv() => v,
-            _ = self.notify.notified() => None,
+            _ = self.notify.notified() => {
+                match self.child.wait().await {
+                    Ok(status) => {
+                        if !status.success() {
+                            tracing::debug!("Analyzer process exited with status: {}", status);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::debug!("Failed to wait for analyzer process: {}", e);
+                    }
+                }
+                None
+            },
         }
     }
 }

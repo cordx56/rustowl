@@ -22,6 +22,25 @@ fn main() -> Result<(), Error> {
     let host_tuple = get_host_tuple();
     println!("cargo::rustc-env=HOST_TUPLE={host_tuple}");
 
+    // Git information for detailed version output
+    // Always set these env vars (empty string if not found, handled at runtime)
+    println!(
+        "cargo::rustc-env=GIT_TAG={}",
+        get_git_tag().unwrap_or_default()
+    );
+    println!(
+        "cargo::rustc-env=GIT_COMMIT_HASH={}",
+        get_git_commit_hash().unwrap_or_default()
+    );
+    println!(
+        "cargo::rustc-env=BUILD_TIME={}",
+        get_build_time().unwrap_or_default()
+    );
+    println!(
+        "cargo::rustc-env=RUSTC_VERSION={}",
+        get_rustc_version().unwrap_or_default()
+    );
+
     #[cfg(target_os = "macos")]
     {
         println!("cargo::rustc-link-arg-bin=rustowlc=-Wl,-rpath,@executable_path/../lib");
@@ -86,4 +105,53 @@ fn get_host_tuple() -> String {
         .output()
         .map(|v| String::from_utf8(v.stdout).unwrap().trim().to_string())
         .expect("failed to obtain host-tuple")
+}
+
+fn get_git_tag() -> Option<String> {
+    Command::new("git")
+        .args(["describe", "--tags", "--abbrev=0"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            String::from_utf8(output.stdout)
+                .ok()
+                .map(|s| s.trim().to_string())
+        })
+        .filter(|s| !s.is_empty())
+}
+
+fn get_git_commit_hash() -> Option<String> {
+    Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            String::from_utf8(output.stdout)
+                .ok()
+                .map(|s| s.trim().to_string())
+        })
+        .filter(|s| !s.is_empty())
+}
+
+fn get_build_time() -> Option<String> {
+    use jiff::{Unit, Zoned};
+
+    let now = Zoned::now().in_tz("UTC").ok()?.round(Unit::Second).ok()?;
+    Some(now.strftime("%Y-%m-%d %H:%M:%S UTC").to_string())
+}
+
+fn get_rustc_version() -> Option<String> {
+    Command::new(env::var("RUSTC").unwrap_or("rustc".to_string()))
+        .args(["--version"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            String::from_utf8(output.stdout)
+                .ok()
+                .map(|s| s.trim().to_string())
+        })
+        .filter(|s| !s.is_empty())
 }

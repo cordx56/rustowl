@@ -1,0 +1,14 @@
+rules:
+  cache-poisoning:
+    ignore:
+      - release.yml
+  use-trusted-publishing:
+    ignore:
+      - release.yml
+  dangerous-triggers:
+    ignore:
+      - validate-pr-title.yml
+      - coverage.yml
+  template-injection:
+    ignore:
+      - build.yml

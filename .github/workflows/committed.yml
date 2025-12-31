@@ -1,0 +1,18 @@
+name: Commitlint
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Lint Commits
+        uses: crate-ci/committed@bb02f309663f9baced8dbd5fdd80c6369ddf3efd # v1.1.8

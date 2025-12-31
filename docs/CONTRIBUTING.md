@@ -67,10 +67,10 @@ Note: Using this method is strongly discouraged officially. See [Unstable Book](
 
 To compile `rustowlc` with stable compiler, you should set environment variable as `RUSTC_BOOTSTRAP=1`.
 
-For example building with stable 1.89.0 Rust compiler:
+For example building with stable 1.92.0 Rust compiler:
 
 ```bash
-RUSTC_BOOTSTRAP=1 rustup run 1.89.0 cargo build --release
+RUSTC_BOOTSTRAP=1 rustup run 1.92.0 cargo build --release
 ```
 
 Note that by using normal `cargo` command RustOwl will be built with nightly compiler since there is a `rust-toolchain.toml` which specifies nightly compiler for development environment.
@@ -108,6 +108,54 @@ This script performs:
 - Build verification
 - Unit test execution
 - VS Code extension checks (formatting, linting, type checking)
+
+### Writing Miri-Compatible Async Tests
+
+Miri doesn't support `#[tokio::test]` directly. RustOwl provides the `miri_async_test!` macro for writing async tests that work with both regular test runs and Miri:
+
+```rust
+use crate::miri_async_test;
+
+#[test]
+fn test_async_operation() {
+    miri_async_test!(async {
+        // Your async test code here
+        let result = some_async_function().await;
+        assert!(result.is_ok());
+    });
+}
+```
+
+The macro creates a tokio runtime with `enable_all()` and runs the async block. See the [Miri issue](https://github.com/rust-lang/miri/issues/602#issuecomment-884019764) for background.
+
+> [!IMPORTANT]
+> The `miri_async_test!` macro enables tokio's IO driver, which uses platform-specific syscalls (`kqueue` on macOS, `epoll` on Linux) that Miri doesn't support. For tests that require the IO driver (e.g., LSP backend tests, networking, file system operations via `tokio::fs`), exclude the entire test module from Miri:
+
+```rust
+// Tests requiring tokio IO driver - excluded from Miri
+#[cfg(all(test, not(miri)))]
+mod tests {
+    use crate::miri_async_test;
+
+    #[test]
+    fn test_with_io() {
+        miri_async_test!(async {
+            // Test code using tokio::fs, networking, etc.
+        });
+    }
+}
+```
+
+For individual tests that cannot run under Miri but don't need the IO driver, use conditional compilation:
+
+```rust
+#[cfg_attr(not(miri), tokio::test)]
+#[cfg_attr(miri, test)]
+#[cfg_attr(miri, ignore)]
+async fn test_requiring_external_io() {
+    // Test code
+}
+```
 
 ### Security and Memory Safety Testing
 
@@ -202,14 +250,15 @@ If the automated scripts are not available, ensure:
    ./scripts/bench.sh --save before-changes
    ```
 
-2. **During development**:
+1. **During development**:
 
    ```bash
    # Run quick checks frequently
    ./scripts/dev-checks.sh --fix
    ```
 
-3. **Before committing**:
+1. **Before committing**:
+
    ```bash
    # Run comprehensive validation
    ./scripts/dev-checks.sh

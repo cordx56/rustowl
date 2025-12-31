@@ -1,5 +1,4 @@
 name: NeoVim Checks
-
 on:
   pull_request:
     paths:
@@ -25,55 +24,54 @@ on:
       - nvim-tests/**/*
       - scripts/run_nvim_tests.sh
       - .github/workflows/neovim-checks.yml
-
+permissions:
+  contents: read
 env:
   CARGO_TERM_COLOR: always
-
 jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: Setup Neovim
-        uses: rhysd/action-setup-vim@v1
+        uses: rhysd/action-setup-vim@19e3dd31a84dbc2c5445d65e9b363f616cab96c1 # v1.6.0
         with:
           neovim: true
           version: v0.11.2
-
       - name: Setup RustOwl
         run: |
           ./scripts/build/toolchain cargo build --release
           ./scripts/build/toolchain cargo install --path .
-
       - name: Run Tests
         run: ./scripts/run_nvim_tests.sh
-
   style:
     name: Check Styling Using Stylua
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: Run Stylua
-        uses: JohnnyMorganz/stylua-action@v4
+        uses: JohnnyMorganz/stylua-action@479972f01e665acfcba96ada452c36608bdbbb5e # v4.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           version: latest
           args: --check .
-
   lint:
     name: Lint Code Using Selene
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: Lint Lua code with Selene
-        uses: YoloWingPixie/selene-lua-linter-action@v1
+        uses: YoloWingPixie/selene-lua-linter-action@24ecf180fd5bb4d3b40b4296de61b32179cb79d1 # v1
         with:
           config-path: "selene.toml"
           working-directory: "."
