@@ -15,13 +15,19 @@ jobs:
     if: github.event.action != 'labeled' || github.event.label.name == 'do-build-check'
     strategy:
       matrix:
-        os:
-          - ubuntu-24.04
-          - ubuntu-24.04-arm
-          - macos-15
-          - macos-15-intel
-          - windows-2022
-          - windows-11-arm
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -47,14 +53,12 @@ jobs:
         run: echo "TOOLCHAIN_ARCH=aarch64" >> $GITHUB_ENV
       - name: setup env
         run: |
-          host_tuple="$(./scripts/build/toolchain eval 'echo $HOST_TUPLE')"
-          echo "host_tuple=$host_tuple" >> $GITHUB_ENV
           toolchain="$(./scripts/build/toolchain eval 'echo $RUSTOWL_TOOLCHAIN')"
           echo "toolchain=$toolchain" >> $GITHUB_ENV
 
-          ([[ "$host_tuple" == *msvc* ]] && echo "exec_ext=.exe" || echo "exec_ext=") >> $GITHUB_ENV
-          ([[ "$host_tuple" == *windows* ]] && echo "is_windows=true" || echo "is_windows=false") >> $GITHUB_ENV
-          ([[ "$host_tuple" == *linux* ]] && echo "is_linux=true" || echo "is_linux=false") >> $GITHUB_ENV
+          ([[ "${{ matrix.target }}" == *msvc* ]] && echo "exec_ext=.exe" || echo "exec_ext=") >> $GITHUB_ENV
+          ([[ "${{ matrix.target }}" == *windows* ]] && echo "is_windows=true" || echo "is_windows=false") >> $GITHUB_ENV
+          ([[ "${{ matrix.target }}" == *linux* ]] && echo "is_linux=true" || echo "is_linux=false") >> $GITHUB_ENV
       - name: Install zig
         if: ${{ env.is_linux == 'true' }}
         uses: mlugg/setup-zig@fa65c4058643678a4e4a9a60513944a7d8d35440 # v2.1.0
@@ -64,26 +68,26 @@ jobs:
         run: |
           if [[ "${{ env.is_linux }}" == "true" ]]; then
             ./scripts/build/toolchain cargo install --locked cargo-zigbuild
-            ./scripts/build/toolchain cargo zigbuild --target ${{ env.host_tuple }}.2.17 --profile=${{ env.build_profile }}
+            ./scripts/build/toolchain cargo zigbuild --target ${{ matrix.target }}.2.17 --profile=${{ env.build_profile }}
           else
-            ./scripts/build/toolchain cargo build --target ${{ env.host_tuple }} --profile=${{ env.build_profile }}
+            ./scripts/build/toolchain cargo build --target ${{ matrix.target }} --profile=${{ env.build_profile }}
           fi
       - name: Check the functionality
         run: |
-          ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
+          ./target/${{ matrix.target }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
       - name: Set archive name
         run: |
           if [[ "${{ env.is_windows }}" == "true" ]]; then
-            echo "archive_name=rustowl-${{ env.host_tuple }}.zip" >> $GITHUB_ENV
+            echo "archive_name=rustowl-${{ matrix.target }}.zip" >> $GITHUB_ENV
           else
-            echo "archive_name=rustowl-${{ env.host_tuple }}.tar.gz" >> $GITHUB_ENV
+            echo "archive_name=rustowl-${{ matrix.target }}.tar.gz" >> $GITHUB_ENV
           fi
       - name: Setup archive artifacts
         run: |
           rm -rf rustowl && mkdir -p rustowl/sysroot/${{ env.toolchain }}/bin
 
-          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./rustowl/
-          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/sysroot/${{ env.toolchain }}/bin
+          cp target/${{ matrix.target }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./rustowl/
+          cp target/${{ matrix.target }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/sysroot/${{ env.toolchain }}/bin
 
           cp README.md ./rustowl
           cp LICENSE ./rustowl
@@ -102,13 +106,13 @@ jobs:
             cd ..
           fi
 
-          cp ./rustowl/rustowl${{ env.exec_ext }} ./rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
+          cp ./rustowl/rustowl${{ env.exec_ext }} ./rustowl-${{ matrix.target }}${{ env.exec_ext }}
       - name: Upload
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: rustowl-runtime-${{ env.host_tuple }}
+          name: rustowl-runtime-${{ matrix.target }}
           path: |
-            rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
+            rustowl-${{ matrix.target }}${{ env.exec_ext }}
             ${{ env.archive_name }}
   vscode:
     if: github.event.action != 'labeled' || github.event.label.name == 'do-build-check'
