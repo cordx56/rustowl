@@ -1,5 +1,5 @@
 use std::env;
-use std::io::Read as _;
+use std::io::Read;
 use std::time::Duration;
 
 use std::collections::HashMap;
@@ -11,7 +11,7 @@ use tar::{Archive, EntryType};
 
 use tokio::fs::OpenOptions;
 use tokio::fs::{create_dir_all, read_to_string, remove_dir_all, rename};
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[cfg(target_os = "windows")]
 use tokio::io::BufReader;
@@ -733,9 +733,6 @@ async fn download_zip_and_extract(
     spool_dir: &Path,
     progress: Option<indicatif::ProgressBar>,
 ) -> Result<(), ()> {
-    use tokio::io::AsyncReadExt as _;
-    use tokio_util::compat::FuturesAsyncReadCompatExt as _;
-
     create_dir_all(spool_dir).await.map_err(|e| {
         tracing::error!("failed to create spool dir {}: {e}", spool_dir.display());
     })?;
