@@ -34,6 +34,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Get Rust version
+        shell: bash
         run: |
           echo RUSTUP_TOOLCHAIN=$(cat ./scripts/build/channel) >> $GITHUB_ENV
       - name: Install Rust toolchain
