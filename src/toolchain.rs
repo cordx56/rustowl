@@ -751,7 +751,7 @@ async fn download_zip_and_extract(
     let dest = dest.to_path_buf();
     let unpack_task = tokio::spawn(async move {
         let reader = BufReader::new(reader);
-        let mut zip = async_zip::tokio:::read::stream::ZipFileReader::with_tokio(reader);
+        let mut zip = async_zip::tokio::read::stream::ZipFileReader::with_tokio(reader);
 
         // basic DoS protection
         const MAX_ENTRY_UNCOMPRESSED: u64 = DOWNLOAD_CAP_BYTES;
