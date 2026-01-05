@@ -110,7 +110,6 @@ tikv-jemallocator = "0.6"
 async_zip = { version = "0.0.18", default-features = false, features = [
   "deflate",
   "tokio",
-  "tokio-util"
 ] }
 
 [features]
