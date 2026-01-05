@@ -814,7 +814,8 @@ async fn download_zip_and_extract(
                 })?;
             }
 
-            zip = entry.done(entry_reader.into_inner()).await.map_err(|e| {
+            let _ = entry_reader;
+            zip = entry.done().await.map_err(|e| {
                 tracing::error!("failed finishing zip entry: {e:?}");
             })?;
         }
@@ -1262,21 +1263,26 @@ mod tests {
         assert_eq!(envs.get("RUSTC_BOOTSTRAP").map(String::as_str), Some("1"));
 
         #[cfg(target_os = "linux")]
-        let lib = sysroot.join("lib").to_string_lossy().to_string();
-        assert!(
-            envs.get("LD_LIBRARY_PATH")
-                .is_some_and(|v| v.contains(lib.as_str()))
-        );
+        {
+            let lib = sysroot.join("lib").to_string_lossy().to_string();
+            assert!(
+                envs.get("LD_LIBRARY_PATH")
+                    .is_some_and(|v| v.contains(lib.as_str()))
+            );
+        }
         #[cfg(target_os = "macos")]
-        assert!(
-            envs.get("DYLD_FALLBACK_LIBRARY_PATH")
-                .is_some_and(|v| v.contains(&sysroot.join("lib").to_string_lossy()))
-        );
+        {
+            let lib = sysroot.join("lib").to_string_lossy().to_string();
+            assert!(
+                envs.get("DYLD_FALLBACK_LIBRARY_PATH")
+                    .is_some_and(|v| v.contains(lib.as_str()))
+            );
+        }
         #[cfg(target_os = "windows")]
-        assert!(
-            envs.get("Path")
-                .is_some_and(|v| v.contains(&sysroot.join("bin").to_string_lossy()))
-        );
+        {
+            let bin = sysroot.join("bin").to_string_lossy().to_string();
+            assert!(envs.get("Path").is_some_and(|v| v.contains(bin.as_str())));
+        }
     }
 
     use crate::miri_async_test;
