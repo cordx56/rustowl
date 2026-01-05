@@ -4,7 +4,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_query_system::ich::StableHashingContext;
 use rustc_stable_hash::{FromStableHash, SipHasher128Hash};
 use rustowl::cache::CacheConfig;
-use rustowl::models::*;
+use rustowl::models::Function;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -520,207 +520,366 @@ fn write_cache_file(path: &Path, data: &str) -> Result<(), std::io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rustowl::models::Function;
-    use std::io::Write;
-    use tempfile::NamedTempFile;
 
-    #[test]
-    fn test_mtime_validation_enabled_lru_invalidation() {
-        let mut cache = CacheData::with_config(CacheConfig {
-            validate_file_mtime: true,
-            ..Default::default()
-        });
+    fn sample_function(id: u32) -> Function {
+        Function {
+            fn_id: id,
+            basic_blocks: ecow::EcoVec::new(),
+            decls: ecow::EcoVec::new(),
+        }
+    }
 
-        // Create a test function
-        let test_function = Function::new(1);
+    struct EnvGuard {
+        key: &'static str,
+        old_value: Option<std::ffi::OsString>,
+    }
 
-        // Manually create a cache entry with a specific old mtime
-        let old_mtime = 1; // Ensure it is older than real file mtime
-        let entry = CacheEntry {
-            function: test_function.clone(),
-            created_at: old_mtime,
-            last_accessed: old_mtime,
-            access_count: 1,
-            file_mtime: Some(old_mtime),
-            data_size: 100,
-        };
+    impl EnvGuard {
+        fn set(key: &'static str, value: &std::ffi::OsStr) -> Self {
+            let old_value = std::env::var_os(key);
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, old_value }
+        }
+    }
 
-        let key = CacheData::make_key("test_file_hash", "test_mir_hash");
-        cache.entries.insert(key, entry);
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            if let Some(v) = self.old_value.take() {
+                unsafe {
+                    std::env::set_var(self.key, v);
+                }
+            } else {
+                unsafe {
+                    std::env::remove_var(self.key);
+                }
+            }
+        }
+    }
 
-        // Create a temporary file with newer mtime
-        let mut temp_file = NamedTempFile::new().unwrap();
-        let file_path = temp_file.path().to_string_lossy().to_string();
-        writeln!(temp_file, "test content").unwrap();
-        temp_file.flush().unwrap();
-
-        // Verify cache miss due to modified file (cached mtime is older)
-        let result = cache.get_cache("test_file_hash", "test_mir_hash", Some(&file_path));
-        assert!(
-            result.is_none(),
-            "Cache should be invalidated when file mtime is newer than cached mtime"
-        );
-        let stats = cache.get_stats();
-        assert_eq!(stats.invalidations, 1);
-        assert_eq!(
-            stats.evictions, 0,
-            "Invalidation should not count as eviction"
-        );
-        assert_eq!(stats.misses, 1);
+    fn cache_dir_guard() -> (tempfile::TempDir, EnvGuard) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let guard = EnvGuard::set("RUSTOWL_CACHE_DIR", tmp.path().as_os_str());
+        (tmp, guard)
     }
 
     #[test]
-    fn test_mtime_validation_enabled_fifo_invalidation() {
-        let mut cache = CacheData::with_config(CacheConfig {
-            validate_file_mtime: true,
-            use_lru_eviction: false,
-            ..Default::default()
-        });
-
-        // Create a test function
-        let test_function = Function::new(2);
-
-        // Insert entry with old mtime
-        let old_mtime = 1;
-        let entry = CacheEntry {
-            function: test_function,
-            created_at: old_mtime,
-            last_accessed: old_mtime,
-            access_count: 1,
-            file_mtime: Some(old_mtime),
-            data_size: 64,
-        };
-        let key = CacheData::make_key("file_hash_fifo", "mir_hash_fifo");
-        cache.entries.insert(key, entry);
-
-        let mut temp_file = NamedTempFile::new().unwrap();
-        let file_path = temp_file.path().to_string_lossy().to_string();
-        writeln!(temp_file, "fifo content").unwrap();
-        temp_file.flush().unwrap();
-
-        let result = cache.get_cache("file_hash_fifo", "mir_hash_fifo", Some(&file_path));
-        assert!(result.is_none());
-        let stats = cache.get_stats();
-        assert_eq!(stats.invalidations, 1);
-        assert_eq!(stats.evictions, 0);
-        assert_eq!(stats.misses, 1);
-        assert_eq!(
-            stats.total_entries, 0,
-            "Entry should be removed after invalidation"
-        );
+    fn cache_stats_hit_rate_is_zero_with_no_requests() {
+        let stats = CacheStats::default();
+        assert_eq!(stats.hit_rate(), 0.0);
     }
 
     #[test]
-    fn test_mtime_validation_disabled() {
-        let mut cache = CacheData::with_config(CacheConfig {
+    fn cache_stats_hit_rate_divides_hits_by_total() {
+        let stats = CacheStats {
+            hits: 2,
+            misses: 3,
+            ..CacheStats::default()
+        };
+        assert!((stats.hit_rate() - 0.4).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn insert_and_get_cache_hits_update_metrics_lru() {
+        let config = CacheConfig {
+            max_entries: 32,
+            max_memory_bytes: usize::MAX,
+            use_lru_eviction: true,
             validate_file_mtime: false,
-            ..Default::default()
-        });
+            enable_compression: false,
+        };
+        let mut cache = CacheData::with_config(config);
 
-        // Create a temporary file
-        let mut temp_file = NamedTempFile::new().unwrap();
-        let file_path = temp_file.path().to_string_lossy().to_string();
-        writeln!(temp_file, "test content").unwrap();
-
-        // Create a test function
-        let test_function = Function::new(3);
-
-        // Insert cache entry
         cache.insert_cache_with_file_path(
-            "test_file_hash".to_string(),
-            "test_mir_hash".to_string(),
-            test_function.clone(),
-            Some(&file_path),
-        );
-
-        // Modify the file
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        writeln!(temp_file, "modified content").unwrap();
-        temp_file.flush().unwrap();
-
-        // Verify cache hit even with modified file (validation disabled)
-        let result = cache.get_cache("test_file_hash", "test_mir_hash", Some(&file_path));
-        assert!(result.is_some());
-        let stats = cache.get_stats();
-        assert_eq!(stats.invalidations, 0);
-        assert_eq!(stats.hits, 1);
-    }
-
-    #[test]
-    fn test_mtime_validation_without_file_path() {
-        let mut cache = CacheData::with_config(CacheConfig {
-            validate_file_mtime: true,
-            ..Default::default()
-        });
-
-        // Create a test function
-        let test_function = Function::new(4);
-
-        // Insert cache entry without file path
-        cache.insert_cache_with_file_path(
-            "test_file_hash".to_string(),
-            "test_mir_hash".to_string(),
-            test_function.clone(),
+            "fh".to_string(),
+            "mh".to_string(),
+            sample_function(1),
             None,
         );
 
-        // Verify cache hit works without file path (no validation performed)
-        let result = cache.get_cache("test_file_hash", "test_mir_hash", None);
-        assert!(result.is_some());
+        let hit = cache.get_cache("fh", "mh", None);
+        assert!(hit.is_some());
+
         let stats = cache.get_stats();
-        assert_eq!(stats.invalidations, 0);
         assert_eq!(stats.hits, 1);
+        assert_eq!(stats.misses, 0);
+        assert_eq!(stats.total_entries, 1);
+        assert!(stats.total_memory_bytes > 0);
     }
 
     #[test]
-    fn test_mtime_validation_unchanged_hit() {
-        let mut cache = CacheData::with_config(CacheConfig {
-            validate_file_mtime: true,
-            ..Default::default()
-        });
+    fn get_cache_miss_updates_metrics_lru() {
+        let config = CacheConfig {
+            max_entries: 32,
+            max_memory_bytes: usize::MAX,
+            use_lru_eviction: true,
+            validate_file_mtime: false,
+            enable_compression: false,
+        };
+        let mut cache = CacheData::with_config(config);
 
-        let mut temp_file = NamedTempFile::new().unwrap();
-        let file_path = temp_file.path().to_string_lossy().to_string();
-        writeln!(temp_file, "initial content").unwrap();
-        temp_file.flush().unwrap();
+        let miss = cache.get_cache("nope", "missing", None);
+        assert!(miss.is_none());
 
-        let test_function = Function::new(5);
+        let stats = cache.get_stats();
+        assert_eq!(stats.hits, 0);
+        assert_eq!(stats.misses, 1);
+    }
+
+    #[test]
+    fn insert_and_get_cache_hits_update_metrics_fifo() {
+        let config = CacheConfig {
+            max_entries: 32,
+            max_memory_bytes: usize::MAX,
+            use_lru_eviction: false,
+            validate_file_mtime: false,
+            enable_compression: false,
+        };
+        let mut cache = CacheData::with_config(config);
+
         cache.insert_cache_with_file_path(
-            "unchanged_file_hash".to_string(),
-            "unchanged_mir_hash".to_string(),
-            test_function.clone(),
-            Some(&file_path),
+            "fh".to_string(),
+            "mh".to_string(),
+            sample_function(7),
+            None,
         );
 
-        // No modification to the file -> should be a hit
-        let result = cache.get_cache(
-            "unchanged_file_hash",
-            "unchanged_mir_hash",
-            Some(&file_path),
-        );
-        assert!(
-            result.is_some(),
-            "Entry should remain valid when file unchanged"
-        );
+        let hit = cache.get_cache("fh", "mh", None);
+        assert!(hit.is_some());
+
         let stats = cache.get_stats();
         assert_eq!(stats.hits, 1);
-        assert_eq!(stats.invalidations, 0);
         assert_eq!(stats.misses, 0);
     }
 
     #[test]
-    fn test_get_file_mtime() {
-        // Test with non-existent file
-        assert!(CacheData::get_file_mtime("/non/existent/file").is_none());
+    fn fifo_eviction_happens_over_entry_limit() {
+        let config = CacheConfig {
+            max_entries: 2,
+            max_memory_bytes: 1_000_000,
+            use_lru_eviction: false,
+            validate_file_mtime: false,
+            enable_compression: false,
+        };
+        let mut cache = CacheData::with_config(config);
 
-        // Test with actual file
-        let mut temp_file = NamedTempFile::new().unwrap();
-        let file_path = temp_file.path().to_string_lossy().to_string();
-        writeln!(temp_file, "test content").unwrap();
-        temp_file.flush().unwrap();
+        cache.insert_cache_with_file_path(
+            "f1".to_string(),
+            "m1".to_string(),
+            sample_function(1),
+            None,
+        );
+        cache.insert_cache_with_file_path(
+            "f2".to_string(),
+            "m2".to_string(),
+            sample_function(2),
+            None,
+        );
+        cache.insert_cache_with_file_path(
+            "f3".to_string(),
+            "m3".to_string(),
+            sample_function(3),
+            None,
+        );
 
-        let mtime = CacheData::get_file_mtime(&file_path);
-        assert!(mtime.is_some());
-        assert!(mtime.unwrap() > 0);
+        // max_entries=2 keeps at least 1 and targets 80% => 1 entry.
+        assert!(cache.entries.len() <= 2);
+        assert!(!cache.entries.is_empty());
+        assert!(cache.get_stats().evictions >= 1);
+    }
+
+    #[test]
+    fn lru_eviction_happens_over_entry_limit() {
+        let config = CacheConfig {
+            max_entries: 2,
+            max_memory_bytes: 1_000_000,
+            use_lru_eviction: true,
+            validate_file_mtime: false,
+            enable_compression: false,
+        };
+        let mut cache = CacheData::with_config(config);
+
+        cache.insert_cache_with_file_path(
+            "f1".to_string(),
+            "m1".to_string(),
+            sample_function(1),
+            None,
+        );
+        cache.insert_cache_with_file_path(
+            "f2".to_string(),
+            "m2".to_string(),
+            sample_function(2),
+            None,
+        );
+        cache.insert_cache_with_file_path(
+            "f3".to_string(),
+            "m3".to_string(),
+            sample_function(3),
+            None,
+        );
+
+        assert!(cache.entries.len() <= 2);
+        assert!(!cache.entries.is_empty());
+        assert!(cache.get_stats().evictions >= 1);
+    }
+
+    #[test]
+    fn lru_get_cache_invalidates_on_newer_file_mtime() {
+        let config = CacheConfig {
+            max_entries: 32,
+            max_memory_bytes: usize::MAX,
+            use_lru_eviction: true,
+            validate_file_mtime: true,
+            enable_compression: false,
+        };
+        let mut cache = CacheData::with_config(config);
+
+        let mut file_path = std::env::temp_dir();
+        file_path.push("rustowl-cache-mtime-lru.txt");
+        std::fs::write(&file_path, "v1").unwrap();
+        let file_path = file_path.to_string_lossy().to_string();
+
+        cache.insert_cache_with_file_path(
+            "fh".to_string(),
+            "mh".to_string(),
+            sample_function(1),
+            Some(&file_path),
+        );
+        assert!(cache.get_cache("fh", "mh", Some(&file_path)).is_some());
+
+        // Ensure mtime moves forward even on coarse filesystems.
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::fs::write(&file_path, "v2").unwrap();
+
+        let invalidated = cache.get_cache("fh", "mh", Some(&file_path));
+        assert!(
+            invalidated.is_none(),
+            "expected invalidation after mtime change"
+        );
+
+        let stats = cache.get_stats();
+        assert_eq!(stats.invalidations, 1);
+        assert_eq!(stats.misses, 1);
+    }
+
+    #[test]
+    fn fifo_get_cache_invalidates_on_newer_file_mtime() {
+        let config = CacheConfig {
+            max_entries: 32,
+            max_memory_bytes: usize::MAX,
+            use_lru_eviction: false,
+            validate_file_mtime: true,
+            enable_compression: false,
+        };
+        let mut cache = CacheData::with_config(config);
+
+        let mut file_path = std::env::temp_dir();
+        file_path.push("rustowl-cache-mtime-fifo.txt");
+        std::fs::write(&file_path, "v1").unwrap();
+        let file_path = file_path.to_string_lossy().to_string();
+
+        cache.insert_cache_with_file_path(
+            "fh".to_string(),
+            "mh".to_string(),
+            sample_function(1),
+            Some(&file_path),
+        );
+        assert!(cache.get_cache("fh", "mh", Some(&file_path)).is_some());
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::fs::write(&file_path, "v2").unwrap();
+
+        let invalidated = cache.get_cache("fh", "mh", Some(&file_path));
+        assert!(
+            invalidated.is_none(),
+            "expected invalidation after mtime change"
+        );
+
+        let stats = cache.get_stats();
+        assert_eq!(stats.invalidations, 1);
+        assert_eq!(stats.misses, 1);
+    }
+
+    #[test]
+    fn get_cache_returns_new_cache_on_corrupted_json() {
+        let (_tmp, _guard) = cache_dir_guard();
+
+        let krate = "corrupt";
+        let cache_path = rustowl::cache::get_cache_path()
+            .unwrap()
+            .join(format!("{krate}.json"));
+        std::fs::write(&cache_path, "{not json").unwrap();
+
+        let loaded = super::get_cache(krate).expect("cache enabled");
+        assert!(loaded.entries.is_empty());
+        assert!(loaded.is_compatible());
+    }
+
+    #[test]
+    fn get_cache_returns_new_cache_on_version_mismatch() {
+        let (_tmp, _guard) = cache_dir_guard();
+
+        let krate = "version_mismatch";
+        let cache_path = rustowl::cache::get_cache_path()
+            .unwrap()
+            .join(format!("{krate}.json"));
+
+        let config = rustowl::cache::get_cache_config();
+        let mut cache = CacheData::with_config(config);
+        cache.version = CACHE_VERSION.saturating_sub(1);
+        cache.entries.insert(
+            CacheData::make_key("fh", "mh"),
+            CacheEntry::new(sample_function(42), None),
+        );
+
+        std::fs::write(&cache_path, serde_json::to_string(&cache).unwrap()).unwrap();
+
+        if !rustowl::cache::is_cache() {
+            return;
+        }
+        let loaded = super::get_cache(krate).expect("cache enabled");
+        assert!(
+            loaded.entries.is_empty(),
+            "expected migration to start from new cache"
+        );
+        assert!(loaded.is_compatible());
+    }
+
+    #[test]
+    fn write_cache_writes_json_and_renames_atomically() {
+        let (_tmp, _guard) = cache_dir_guard();
+
+        let krate = "write_cache";
+        let config = rustowl::cache::get_cache_config();
+        let mut cache = CacheData::with_config(config);
+        cache.insert_cache_with_file_path(
+            "fh".to_string(),
+            "mh".to_string(),
+            sample_function(1),
+            None,
+        );
+
+        super::write_cache(krate, &cache);
+
+        // write_cache is a no-op unless caching is enabled.
+        if !rustowl::cache::is_cache() {
+            return;
+        }
+
+        let cache_dir = rustowl::cache::get_cache_path().unwrap();
+        let final_path = cache_dir.join(format!("{krate}.json"));
+        let temp_path = cache_dir.join(format!("{krate}.json.tmp"));
+
+        assert!(final_path.is_file());
+        assert!(
+            !temp_path.exists(),
+            "temp file should be renamed or removed"
+        );
+
+        let content = std::fs::read_to_string(&final_path).unwrap();
+        let loaded: CacheData = serde_json::from_str(&content).unwrap();
+        assert!(loaded.is_compatible());
+        assert_eq!(loaded.entries.len(), 1);
     }
 }

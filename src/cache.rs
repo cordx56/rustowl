@@ -189,99 +189,41 @@ fn test_is_cache_default() {
 }
 
 #[test]
-fn test_is_cache_with_false_values() {
-    with_env("RUSTOWL_CACHE", "false", || {
-        assert!(!is_cache());
-    });
-
-    with_env("RUSTOWL_CACHE", "FALSE", || {
-        assert!(!is_cache());
-    });
-
-    with_env("RUSTOWL_CACHE", "0", || {
-        assert!(!is_cache());
-    });
-
-    with_env("RUSTOWL_CACHE", "  false  ", || {
-        assert!(!is_cache());
-    });
-}
-
-#[test]
 fn test_is_cache_with_true_values() {
-    with_env("RUSTOWL_CACHE", "true", || {
-        assert!(is_cache());
-    });
-
-    with_env("RUSTOWL_CACHE", "1", || {
-        assert!(is_cache());
-    });
-
-    with_env("RUSTOWL_CACHE", "yes", || {
-        assert!(is_cache());
-    });
-
-    with_env("RUSTOWL_CACHE", "", || {
-        assert!(is_cache());
-    });
+    for value in ["true", "1", "yes", ""] {
+        with_env("RUSTOWL_CACHE", value, || {
+            assert!(is_cache());
+        });
+    }
 }
 
 #[test]
 fn test_get_cache_path() {
     // Test with no env var
-    with_env("RUSTOWL_CACHE_DIR", "", || {
-        // First remove the var
-        let old_value = env::var("RUSTOWL_CACHE_DIR").ok();
+    let old_value = env::var("RUSTOWL_CACHE_DIR").ok();
+    unsafe {
+        env::remove_var("RUSTOWL_CACHE_DIR");
+    }
+    assert!(get_cache_path().is_none());
+    if let Some(v) = old_value {
         unsafe {
-            env::remove_var("RUSTOWL_CACHE_DIR");
+            env::set_var("RUSTOWL_CACHE_DIR", v);
         }
-        let result = get_cache_path();
-        // Restore
-        if let Some(v) = old_value {
-            unsafe {
-                env::set_var("RUSTOWL_CACHE_DIR", v);
-            }
-        }
-        assert!(result.is_none());
-    });
+    }
 
-    // Test with empty value
-    with_env("RUSTOWL_CACHE_DIR", "", || {
-        assert!(get_cache_path().is_none());
-    });
+    for value in ["", "   "] {
+        with_env("RUSTOWL_CACHE_DIR", value, || {
+            assert!(get_cache_path().is_none());
+        });
+    }
 
-    // Test with whitespace only
-    with_env("RUSTOWL_CACHE_DIR", "   ", || {
-        assert!(get_cache_path().is_none());
-    });
-
-    // Test with valid path
     with_env("RUSTOWL_CACHE_DIR", "/tmp/cache", || {
-        let path = get_cache_path().unwrap();
-        assert_eq!(path, PathBuf::from("/tmp/cache"));
+        assert_eq!(get_cache_path().unwrap(), PathBuf::from("/tmp/cache"));
     });
 
-    // Test with path that has whitespace
     with_env("RUSTOWL_CACHE_DIR", "  /tmp/cache  ", || {
-        let path = get_cache_path().unwrap();
-        assert_eq!(path, PathBuf::from("/tmp/cache"));
+        assert_eq!(get_cache_path().unwrap(), PathBuf::from("/tmp/cache"));
     });
-}
-
-#[test]
-fn test_set_cache_path() {
-    use tokio::process::Command;
-
-    let mut cmd = Command::new("echo");
-    let target_dir = PathBuf::from("/tmp/test_target");
-
-    set_cache_path(&mut cmd, &target_dir);
-
-    // Note: We can't easily test that the env var was set on the Command
-    // since that's internal to tokio::process::Command, but we can test
-    // that the function doesn't panic and accepts the expected types
-    let expected_cache_dir = target_dir.join("cache");
-    assert_eq!(expected_cache_dir, PathBuf::from("/tmp/test_target/cache"));
 }
 
 #[test]

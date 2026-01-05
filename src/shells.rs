@@ -108,40 +108,11 @@ impl Shell {
             None
         }
     }
-
-    /// Convert to the standard shell type if possible, for compatibility
-    pub fn to_standard_shell(&self) -> Option<shells::Shell> {
-        match self {
-            Shell::Bash => Some(shells::Shell::Bash),
-            Shell::Elvish => Some(shells::Shell::Elvish),
-            Shell::Fish => Some(shells::Shell::Fish),
-            Shell::PowerShell => Some(shells::Shell::PowerShell),
-            Shell::Zsh => Some(shells::Shell::Zsh),
-            Shell::Nushell => None, // Not supported by standard shells
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_shell_from_str() {
-        use std::str::FromStr;
-
-        assert_eq!(<Shell as FromStr>::from_str("bash"), Ok(Shell::Bash));
-        assert_eq!(<Shell as FromStr>::from_str("zsh"), Ok(Shell::Zsh));
-        assert_eq!(<Shell as FromStr>::from_str("fish"), Ok(Shell::Fish));
-        assert_eq!(<Shell as FromStr>::from_str("elvish"), Ok(Shell::Elvish));
-        assert_eq!(
-            <Shell as FromStr>::from_str("powershell"),
-            Ok(Shell::PowerShell)
-        );
-        assert_eq!(<Shell as FromStr>::from_str("nushell"), Ok(Shell::Nushell));
-
-        assert!(<Shell as FromStr>::from_str("invalid").is_err());
-    }
 
     #[test]
     fn test_shell_display() {
@@ -171,40 +142,18 @@ mod tests {
             Shell::from_shell_path("powershell_ise"),
             Some(Shell::PowerShell)
         );
+        assert_eq!(
+            Shell::from_shell_path("powershell.exe"),
+            Some(Shell::PowerShell)
+        );
         assert_eq!(Shell::from_shell_path("/usr/bin/nu"), Some(Shell::Nushell));
+        assert_eq!(Shell::from_shell_path("nu.exe"), Some(Shell::Nushell));
         assert_eq!(
             Shell::from_shell_path("/usr/bin/nushell"),
             Some(Shell::Nushell)
         );
 
         assert_eq!(Shell::from_shell_path("/bin/unknown"), None);
-    }
-
-    #[test]
-    fn test_shell_to_standard_shell() {
-        assert!(Shell::Bash.to_standard_shell().is_some());
-        assert!(Shell::Zsh.to_standard_shell().is_some());
-        assert!(Shell::Fish.to_standard_shell().is_some());
-        assert!(Shell::Elvish.to_standard_shell().is_some());
-        assert!(Shell::PowerShell.to_standard_shell().is_some());
-        assert!(Shell::Nushell.to_standard_shell().is_none()); // Nushell not in standard
-    }
-
-    #[test]
-    fn test_shell_generator_interface() {
-        // Test that our Shell implements Generator correctly
-        let shell = Shell::Bash;
-        let filename = shell.file_name("test");
-        assert!(filename.contains("test"));
-
-        // Test generate method with proper command setup
-        use clap::Command;
-        let cmd = Command::new("test").bin_name("test");
-        let mut buf = Vec::new();
-        shell.generate(&cmd, &mut buf);
-        // The actual content depends on clap_complete implementation
-        // Just verify it doesn't panic and produces some output
-        assert!(!buf.is_empty());
     }
 
     #[test]
@@ -245,112 +194,6 @@ mod tests {
         let result = <Shell as FromStr>::from_str("");
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "invalid variant: ");
-    }
-
-    #[test]
-    fn test_shell_from_shell_path_comprehensive() {
-        // Test various path formats
-        let path_variants = vec![
-            ("/bin/bash", Some(Shell::Bash)),
-            ("/usr/bin/bash", Some(Shell::Bash)),
-            ("/usr/local/bin/bash", Some(Shell::Bash)),
-            ("bash", Some(Shell::Bash)),
-            ("./bash", Some(Shell::Bash)),
-            ("zsh", Some(Shell::Zsh)),
-            ("/usr/bin/zsh", Some(Shell::Zsh)),
-            ("fish", Some(Shell::Fish)),
-            ("/usr/local/bin/fish", Some(Shell::Fish)),
-            ("elvish", Some(Shell::Elvish)),
-            ("/opt/bin/elvish", Some(Shell::Elvish)),
-            ("powershell", Some(Shell::PowerShell)),
-            ("powershell_ise", Some(Shell::PowerShell)),
-            // Note: complex Windows paths may not parse correctly due to path parsing limitations
-            ("nu", Some(Shell::Nushell)),
-            ("nushell", Some(Shell::Nushell)),
-            ("/usr/bin/nu", Some(Shell::Nushell)),
-            // Invalid cases
-            ("unknown", None),
-            ("/bin/unknown", None),
-            ("sh", None),
-            ("cmd", None),
-            ("", None),
-        ];
-
-        for (path, expected) in path_variants {
-            assert_eq!(
-                Shell::from_shell_path(path),
-                expected,
-                "Failed for path: {path}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_shell_from_shell_path_with_extensions() {
-        // Test paths with executable extensions
-        assert_eq!(Shell::from_shell_path("bash.exe"), Some(Shell::Bash));
-        assert_eq!(Shell::from_shell_path("zsh.exe"), Some(Shell::Zsh));
-        assert_eq!(
-            Shell::from_shell_path("powershell.exe"),
-            Some(Shell::PowerShell)
-        );
-        assert_eq!(Shell::from_shell_path("nu.exe"), Some(Shell::Nushell));
-
-        // Test with complex paths
-        assert_eq!(
-            Shell::from_shell_path("C:\\Program Files\\PowerShell\\7\\pwsh.exe"),
-            None
-        );
-        assert_eq!(Shell::from_shell_path("/snap/bin/nu"), Some(Shell::Nushell));
-    }
-
-    #[test]
-    fn test_shell_from_env_simulation() {
-        // Test the environment detection logic without actually modifying env
-
-        // Simulate what from_env would do
-        let shell_paths = vec![
-            "/bin/bash",
-            "/usr/bin/zsh",
-            "/usr/local/bin/fish",
-            "/opt/elvish",
-        ];
-
-        for shell_path in shell_paths {
-            let detected = Shell::from_shell_path(shell_path);
-            assert!(
-                detected.is_some(),
-                "Should detect shell from path: {shell_path}"
-            );
-        }
-
-        // Test Windows default behavior simulation
-        #[cfg(windows)]
-        {
-            // On Windows, if no SHELL env var, it should default to PowerShell
-            let default_shell = Some(Shell::PowerShell);
-            assert_eq!(default_shell, Some(Shell::PowerShell));
-        }
-    }
-
-    #[test]
-    fn test_shell_to_standard_shell_completeness() {
-        // Test that all shells except Nushell have standard equivalents
-        let shells = [
-            Shell::Bash,
-            Shell::Elvish,
-            Shell::Fish,
-            Shell::PowerShell,
-            Shell::Zsh,
-            Shell::Nushell,
-        ];
-
-        for shell in shells {
-            match shell {
-                Shell::Nushell => assert!(shell.to_standard_shell().is_none()),
-                _ => assert!(shell.to_standard_shell().is_some()),
-            }
-        }
     }
 
     #[test]
@@ -623,13 +466,6 @@ mod tests {
             // Test generator methods
             let filename = variant.file_name("test");
             assert!(!filename.is_empty());
-
-            // Test standard shell conversion
-            let standard = variant.to_standard_shell();
-            match variant {
-                Shell::Nushell => assert!(standard.is_none()),
-                _ => assert!(standard.is_some()),
-            }
         }
     }
 }

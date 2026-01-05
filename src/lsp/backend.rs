@@ -1,12 +1,14 @@
-use super::analyze::*;
-use crate::{lsp::*, models::*, utils};
+use super::analyze::{Analyzer, AnalyzerEvent};
+use crate::lsp::{decoration, progress};
+use crate::models::{Crate, Loc};
+use crate::utils;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::{sync::RwLock, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 use tower_lsp_server::jsonrpc;
-use tower_lsp_server::ls_types::{self as lsp_types, *};
+use tower_lsp_server::ls_types;
 use tower_lsp_server::{Client, LanguageServer, LspService};
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -79,6 +81,7 @@ impl Backend {
         self.do_analyze().await;
         Ok(AnalyzeResponse {})
     }
+
     async fn do_analyze(&self) {
         self.shutdown_subprocesses().await;
         self.analyze_with_options(false, false).await;
@@ -136,13 +139,16 @@ impl Backend {
                             package_count,
                         } => {
                             if let Some(token) = &progress_token {
-                                let percentage = (package_index * 100 / package_count).min(100);
-                                token
-                                    .report(
-                                        Some(format!("{package} analyzed")),
-                                        Some(percentage as u32),
-                                    )
-                                    .await;
+                                let percentage: u32 = ((package_index * 100 / package_count)
+                                    .min(100))
+                                .try_into()
+                                .unwrap_or(100);
+                                let msg = format!(
+                                    "Checking {package} ({}/{})",
+                                    package_index.saturating_add(1),
+                                    package_count
+                                );
+                                token.report(Some(msg), Some(percentage));
                             }
                         }
                         AnalyzerEvent::Analyzed(ws) => {
@@ -161,7 +167,7 @@ impl Backend {
                 process_tokens.write().await.remove(&cancellation_token_key);
 
                 if let Some(progress_token) = progress_token {
-                    progress_token.finish().await;
+                    progress_token.finish();
                 }
             });
         }
@@ -169,6 +175,7 @@ impl Backend {
         let processes = self.processes.clone();
         let status = self.status.clone();
         let analyzed = self.analyzed.clone();
+
         tokio::spawn(async move {
             while { processes.write().await.join_next().await }.is_some() {}
             let mut status = status.write().await;
@@ -197,7 +204,7 @@ impl Backend {
         };
 
         // Fast path: LSP file paths should be UTF-8 and match our stored file keys.
-        // Fall back to the previous Path comparison if the direct lookup misses.
+        // Fall back to the Path comparison if the direct lookup misses.
         let mut matched_file = filepath
             .to_str()
             .and_then(|path_str| analyzed.0.get(path_str));
@@ -471,7 +478,10 @@ impl Backend {
 }
 
 impl LanguageServer for Backend {
-    async fn initialize(&self, params: InitializeParams) -> jsonrpc::Result<InitializeResult> {
+    async fn initialize(
+        &self,
+        params: ls_types::InitializeParams,
+    ) -> jsonrpc::Result<ls_types::InitializeResult> {
         let mut workspaces = Vec::new();
         if let Some(wss) = params.workspace_folders {
             workspaces.extend(
@@ -484,25 +494,25 @@ impl LanguageServer for Backend {
         }
         self.do_analyze().await;
 
-        let sync_options = lsp_types::TextDocumentSyncOptions {
+        let sync_options = ls_types::TextDocumentSyncOptions {
             open_close: Some(true),
-            save: Some(lsp_types::TextDocumentSyncSaveOptions::Supported(true)),
-            change: Some(lsp_types::TextDocumentSyncKind::INCREMENTAL),
+            save: Some(ls_types::TextDocumentSyncSaveOptions::Supported(true)),
+            change: Some(ls_types::TextDocumentSyncKind::INCREMENTAL),
             ..Default::default()
         };
-        let workspace_cap = lsp_types::WorkspaceServerCapabilities {
-            workspace_folders: Some(lsp_types::WorkspaceFoldersServerCapabilities {
+        let workspace_cap = ls_types::WorkspaceServerCapabilities {
+            workspace_folders: Some(ls_types::WorkspaceFoldersServerCapabilities {
                 supported: Some(true),
-                change_notifications: Some(lsp_types::OneOf::Left(true)),
+                change_notifications: Some(ls_types::OneOf::Left(true)),
             }),
             ..Default::default()
         };
-        let server_cap = lsp_types::ServerCapabilities {
-            text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Options(sync_options)),
+        let server_cap = ls_types::ServerCapabilities {
+            text_document_sync: Some(ls_types::TextDocumentSyncCapability::Options(sync_options)),
             workspace: Some(workspace_cap),
             ..Default::default()
         };
-        let init_res = lsp_types::InitializeResult {
+        let init_res = ls_types::InitializeResult {
             capabilities: server_cap,
             ..Default::default()
         };
@@ -528,7 +538,10 @@ impl LanguageServer for Backend {
         Ok(init_res)
     }
 
-    async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
+    async fn did_change_workspace_folders(
+        &self,
+        params: ls_types::DidChangeWorkspaceFoldersParams,
+    ) {
         for added in params.event.added {
             if let Some(path) = added.uri.to_file_path()
                 && self.add_analyze_target(&path).await
@@ -538,7 +551,7 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn did_open(&self, params: DidOpenTextDocumentParams) {
+    async fn did_open(&self, params: ls_types::DidOpenTextDocumentParams) {
         if let Some(path) = params.text_document.uri.to_file_path()
             && params.text_document.language_id == "rust"
         {
@@ -561,7 +574,7 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+    async fn did_change(&self, params: ls_types::DidChangeTextDocumentParams) {
         if let Some(path) = params.text_document.uri.to_file_path() {
             if params.content_changes.is_empty() {
                 self.open_docs.write().await.remove(path.as_ref());
@@ -621,291 +634,186 @@ impl LanguageServer for Backend {
     }
 }
 
-// These tests require tokio's IO driver which uses platform-specific syscalls
-// (kqueue on macOS, epoll on Linux) that Miri doesn't support.
-// See: https://github.com/rust-lang/miri/issues/602
-#[cfg(all(test, not(miri)))]
+#[cfg(test)]
 mod tests {
     use super::*;
+    use tower_lsp_server::ls_types::{
+        self, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
+    };
+
+    fn tmp_workspace() -> tempfile::TempDir {
+        tempfile::tempdir().expect("create tempdir")
+    }
+
+    async fn write_test_workspace(dir: &tempfile::TempDir, file_contents: &str) -> PathBuf {
+        let root = dir.path();
+        tokio::fs::create_dir_all(root.join("src"))
+            .await
+            .expect("create src");
+        tokio::fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"t\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .await
+        .expect("write Cargo.toml");
+        let lib = root.join("src").join("lib.rs");
+        tokio::fs::write(&lib, file_contents)
+            .await
+            .expect("write lib.rs");
+        lib
+    }
+
+    async fn init_backend(
+        rustc_thread: usize,
+    ) -> (
+        tower_lsp_server::LspService<Backend>,
+        tower_lsp_server::ClientSocket,
+    ) {
+        LspService::build(Backend::new(rustc_thread)).finish()
+    }
+
+    async fn initialize_with_workspace(
+        backend: &Backend,
+        workspace: &Path,
+    ) -> ls_types::InitializeResult {
+        let uri = ls_types::Uri::from_file_path(workspace).expect("workspace uri");
+        let params = ls_types::InitializeParams {
+            workspace_folders: Some(vec![ls_types::WorkspaceFolder {
+                uri,
+                name: "ws".to_string(),
+            }]),
+            capabilities: ls_types::ClientCapabilities {
+                window: Some(ls_types::WindowClientCapabilities {
+                    work_done_progress: Some(true),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        backend.initialize(params).await.expect("initialize")
+    }
+
     use crate::miri_async_test;
 
     #[test]
-    fn test_check_method() {
+    fn initialize_sets_work_done_progress_and_accepts_workspace_folder() {
         miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-            let cargo_toml = temp_dir.path().join("Cargo.toml");
-            tokio::fs::write(
-                &cargo_toml,
-                "[package]\nname = \"test\"\nversion = \"0.1.0\"",
-            )
-            .await
-            .unwrap();
+            let dir = tmp_workspace();
+            let _lib = write_test_workspace(&dir, "pub fn f() -> i32 { 1 }\n").await;
 
-            let result = Backend::check(&temp_dir.path(), 1).await;
+            let (service, _socket) = init_backend(1).await;
+            let backend = service.inner();
+            let init = initialize_with_workspace(backend, dir.path()).await;
 
-            assert!(matches!(result, true | false));
+            assert!(init.capabilities.text_document_sync.is_some());
+            assert!(*backend.work_done_progress.read().await);
+            assert!(!backend.analyzers.read().await.is_empty());
         });
     }
 
     #[test]
-    fn test_check_with_options() {
+    fn did_open_caches_doc_and_cursor_handles_empty_analysis() {
         miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-            let cargo_toml = temp_dir.path().join("Cargo.toml");
-            tokio::fs::write(
-                &cargo_toml,
-                "[package]\nname = \"test\"\nversion = \"0.1.0\"",
-            )
-            .await
-            .unwrap();
+            let dir = tmp_workspace();
+            let lib = write_test_workspace(&dir, "pub fn f() -> i32 { 1 }\n").await;
 
-            let result = Backend::check_with_options(&temp_dir.path(), true, true, 1).await;
+            let (service, _socket) = init_backend(1).await;
+            let backend = service.inner();
 
-            assert!(matches!(result, true | false));
-        });
-    }
+            let uri = ls_types::Uri::from_file_path(&lib).expect("lib uri");
+            backend
+                .did_open(DidOpenTextDocumentParams {
+                    text_document: ls_types::TextDocumentItem {
+                        uri: uri.clone(),
+                        language_id: "rust".to_string(),
+                        version: 1,
+                        text: "pub fn f() -> i32 { 1 }\n".to_string(),
+                    },
+                })
+                .await;
 
-    #[test]
-    fn test_check_invalid_path() {
-        miri_async_test!(async {
-            let result = Backend::check(Path::new("/nonexistent/path"), 1).await;
+            assert!(backend.open_docs.read().await.contains_key(&lib));
 
-            assert!(!result);
-        });
-    }
-
-    #[test]
-    fn test_check_with_options_invalid_path() {
-        miri_async_test!(async {
-            let result =
-                Backend::check_with_options(Path::new("/nonexistent/path"), false, false, 1).await;
-            assert!(!result);
-        });
-    }
-
-    #[test]
-    fn test_check_valid_cargo_no_src() {
-        miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-            let cargo_toml = temp_dir.path().join("Cargo.toml");
-            tokio::fs::write(
-                &cargo_toml,
-                "[package]\nname = \"test\"\nversion = \"0.1.0\"",
-            )
-            .await
-            .unwrap();
-
-            let result = Backend::check(&temp_dir.path(), 1).await;
-
-            assert!(matches!(result, true | false));
-        });
-    }
-
-    #[test]
-    fn test_check_with_different_options() {
-        miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-            let cargo_toml = temp_dir.path().join("Cargo.toml");
-            tokio::fs::write(
-                &cargo_toml,
-                "[package]\nname = \"test\"\nversion = \"0.1.0\"",
-            )
-            .await
-            .unwrap();
-
-            // Test all combinations of options
-            let result1 = Backend::check_with_options(&temp_dir.path(), false, false, 1).await;
-            let result2 = Backend::check_with_options(&temp_dir.path(), true, false, 1).await;
-            let result3 = Backend::check_with_options(&temp_dir.path(), false, true, 1).await;
-            let result4 = Backend::check_with_options(&temp_dir.path(), true, true, 1).await;
-
-            // All should return boolean values without panicking
-            assert!(matches!(result1, true | false));
-            assert!(matches!(result2, true | false));
-            assert!(matches!(result3, true | false));
-            assert!(matches!(result4, true | false));
-        });
-    }
-
-    #[test]
-    fn test_check_with_workspace() {
-        miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-
-            // Create workspace Cargo.toml
-            let workspace_cargo = temp_dir.path().join("Cargo.toml");
-            tokio::fs::write(&workspace_cargo,
-                "[workspace]\nmembers = [\"pkg1\", \"pkg2\"]\n[package]\nname = \"workspace\"\nversion = \"0.1.0\""
-            ).await.unwrap();
-
-            // Create member packages
-            let pkg1_dir = temp_dir.path().join("pkg1");
-            tokio::fs::create_dir(&pkg1_dir).await.unwrap();
-            let pkg1_cargo = pkg1_dir.join("Cargo.toml");
-            tokio::fs::write(
-                &pkg1_cargo,
-                "[package]\nname = \"pkg1\"\nversion = \"0.1.0\"",
-            )
-            .await
-            .unwrap();
-
-            let result = Backend::check(&temp_dir.path(), 1).await;
-            // Should handle workspace structure
-            assert!(matches!(result, true | false));
-        });
-    }
-
-    #[test]
-    fn test_check_malformed_cargo() {
-        miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-            let cargo_toml = temp_dir.path().join("Cargo.toml");
-
-            // Write malformed TOML
-            tokio::fs::write(
-                &cargo_toml,
-                "[package\nname = \"test\"\nversion = \"0.1.0\"",
-            )
-            .await
-            .unwrap();
-
-            let result = Backend::check(&temp_dir.path(), 1).await;
-            // Should handle malformed Cargo.toml gracefully
-            assert!(!result);
-        });
-    }
-
-    #[test]
-    fn test_check_empty_directory() {
-        miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-
-            let result = Backend::check(&temp_dir.path(), 1).await;
-            // Should fail with empty directory
-            assert!(!result);
-        });
-    }
-
-    #[test]
-    fn test_check_with_options_empty_directory() {
-        miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-
-            let result = Backend::check_with_options(&temp_dir.path(), true, true, 1).await;
-            // Should fail with empty directory regardless of options
-            assert!(!result);
-        });
-    }
-
-    #[test]
-    fn test_check_nested_cargo() {
-        miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-            let nested_dir = temp_dir.path().join("nested");
-            tokio::fs::create_dir(&nested_dir).await.unwrap();
-
-            let cargo_toml = nested_dir.join("Cargo.toml");
-            tokio::fs::write(
-                &cargo_toml,
-                "[package]\nname = \"nested\"\nversion = \"0.1.0\"",
-            )
-            .await
-            .unwrap();
-
-            let result = Backend::check(&nested_dir, 1).await;
-            // Should work with nested directory containing Cargo.toml
-            assert!(matches!(result, true | false));
-        });
-    }
-
-    #[test]
-    fn test_check_with_binary_target() {
-        miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-            let cargo_toml = temp_dir.path().join("Cargo.toml");
-
-            tokio::fs::write(&cargo_toml,
-                "[package]\nname = \"test\"\nversion = \"0.1.0\"\n[[bin]]\nname = \"main\"\npath = \"src/main.rs\""
-            ).await.unwrap();
-
-            let src_dir = temp_dir.path().join("src");
-            if let Err(e) = tokio::fs::create_dir(&src_dir).await {
-                if e.kind() == std::io::ErrorKind::QuotaExceeded {
-                    eprintln!("skipping: quota exceeded creating src dir");
-                    return;
-                }
-                panic!("failed to create src dir: {e}");
-            }
-            let main_rs = src_dir.join("main.rs");
-            tokio::fs::write(&main_rs, "fn main() { println!(\"Hello\"); }")
+            let decorations = backend
+                .cursor(decoration::CursorRequest {
+                    document: ls_types::TextDocumentIdentifier { uri },
+                    position: ls_types::Position {
+                        line: 0,
+                        character: 10,
+                    },
+                })
                 .await
-                .unwrap();
+                .expect("cursor");
 
-            let result = Backend::check(&temp_dir.path(), 1).await;
-            // Should handle binary targets
-            assert!(matches!(result, true | false));
+            assert_eq!(decorations.path.as_deref(), Some(lib.as_path()));
+            assert!(decorations.decorations.is_empty());
         });
     }
 
     #[test]
-    fn test_check_with_library_target() {
+    fn did_change_drops_open_doc_on_invalid_edit_and_resets_state() {
         miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-            let cargo_toml = temp_dir.path().join("Cargo.toml");
+            let dir = tmp_workspace();
+            let lib = write_test_workspace(&dir, "pub fn f() -> i32 { 1 }\n").await;
 
-            tokio::fs::write(&cargo_toml,
-                "[package]\nname = \"test\"\nversion = \"0.1.0\"\n[lib]\nname = \"testlib\"\npath = \"src/lib.rs\""
-            ).await.unwrap();
+            let (service, _socket) = init_backend(1).await;
+            let backend = service.inner();
 
-            let src_dir = temp_dir.path().join("src");
-            if let Err(e) = tokio::fs::create_dir(&src_dir).await {
-                if e.kind() == std::io::ErrorKind::QuotaExceeded {
-                    eprintln!("skipping: quota exceeded creating src dir");
-                    return;
-                }
-                panic!("failed to create src dir: {e}");
-            }
-            let lib_rs = src_dir.join("lib.rs");
-            tokio::fs::write(&lib_rs, "pub fn hello() { println!(\"Hello\"); }")
-                .await
-                .unwrap();
+            let uri = ls_types::Uri::from_file_path(&lib).expect("lib uri");
+            backend
+                .did_open(DidOpenTextDocumentParams {
+                    text_document: ls_types::TextDocumentItem {
+                        uri: uri.clone(),
+                        language_id: "rust".to_string(),
+                        version: 1,
+                        text: "pub fn f() -> i32 { 1 }\n".to_string(),
+                    },
+                })
+                .await;
 
-            let result = Backend::check(&temp_dir.path(), 1).await;
-            // Should handle library targets
-            assert!(matches!(result, true | false));
+            assert!(backend.open_docs.read().await.contains_key(&lib));
+
+            // A clearly invalid edit should cause the backend to drop the cache.
+            // The simplest portable way is "start > end".
+            backend
+                .did_change(DidChangeTextDocumentParams {
+                    text_document: ls_types::VersionedTextDocumentIdentifier {
+                        uri: uri.clone(),
+                        version: 2,
+                    },
+                    content_changes: vec![ls_types::TextDocumentContentChangeEvent {
+                        range: Some(ls_types::Range {
+                            start: ls_types::Position {
+                                line: 0,
+                                character: 2,
+                            },
+                            end: ls_types::Position {
+                                line: 0,
+                                character: 1,
+                            },
+                        }),
+                        range_length: None,
+                        text: "x".to_string(),
+                    }],
+                })
+                .await;
+
+            assert!(!backend.open_docs.read().await.contains_key(&lib));
+            assert!(backend.analyzed.read().await.is_none());
         });
     }
 
     #[test]
-    fn test_check_with_mixed_targets() {
+    fn check_report_handles_invalid_paths() {
         miri_async_test!(async {
-            let temp_dir = tempfile::tempdir().unwrap();
-            let cargo_toml = temp_dir.path().join("Cargo.toml");
-
-            tokio::fs::write(&cargo_toml,
-                "[package]\nname = \"test\"\nversion = \"0.1.0\"\n[lib]\nname = \"testlib\"\npath = \"src/lib.rs\"\n[[bin]]\nname = \"main\"\npath = \"src/main.rs\""
-            ).await.unwrap();
-
-            let src_dir = temp_dir.path().join("src");
-            if let Err(e) = tokio::fs::create_dir(&src_dir).await {
-                if e.kind() == std::io::ErrorKind::QuotaExceeded {
-                    eprintln!("skipping: quota exceeded creating src dir");
-                    return;
-                }
-                panic!("failed to create src dir: {e}");
-            }
-            let lib_rs = src_dir.join("lib.rs");
-            let main_rs = src_dir.join("main.rs");
-            tokio::fs::write(&lib_rs, "pub fn hello() { println!(\"Hello\"); }")
-                .await
-                .unwrap();
-            tokio::fs::write(&main_rs, "fn main() { println!(\"Hello\"); }")
-                .await
-                .unwrap();
-
-            let result = Backend::check(&temp_dir.path(), 1).await;
-            // Should handle mixed targets
-            assert!(matches!(result, true | false));
+            let report =
+                Backend::check_report_with_options("/this/path/does/not/exist", false, false, 1)
+                    .await;
+            assert!(!report.ok);
+            assert_eq!(report.checked_targets, 0);
+            assert!(report.total_targets.is_none());
         });
     }
 }

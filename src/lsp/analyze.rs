@@ -1,4 +1,7 @@
-use crate::{cache::*, error::*, models::*, toolchain};
+use crate::cache::{is_cache, set_cache_path};
+use crate::error::Result;
+use crate::models::Workspace;
+use crate::toolchain;
 use anyhow::bail;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -34,7 +37,7 @@ pub enum AnalyzerEvent {
     Analyzed(Workspace),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Analyzer {
     path: PathBuf,
     metadata: Option<cargo_metadata::Metadata>,
@@ -295,6 +298,12 @@ impl Analyzer {
 
         toolchain::set_rustc_env(&mut command, &sysroot);
 
+        // When running under `cargo llvm-cov`, ensure the rustowlc subprocess writes its
+        // coverage somewhere cargo-llvm-cov will pick up.
+        if let Ok(profile_file) = std::env::var("LLVM_PROFILE_FILE") {
+            command.env("LLVM_PROFILE_FILE", profile_file);
+        }
+
         if !tracing::enabled!(tracing::Level::INFO) {
             command.stderr(Stdio::null());
         }
@@ -367,5 +376,71 @@ impl AnalyzeEventIter {
                 None
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::miri_async_test;
+
+    #[test]
+    fn new_accepts_single_rust_file_and_has_no_workspace_path() {
+        miri_async_test!(async {
+            let dir = tempfile::tempdir().unwrap();
+            let target = dir.path().join("main.rs");
+            std::fs::write(&target, "fn main() {}\n").unwrap();
+
+            let analyzer = Analyzer::new(&target, 1).await.unwrap();
+            assert_eq!(analyzer.target_path(), target.as_path());
+            assert_eq!(analyzer.workspace_path(), None);
+        });
+    }
+
+    #[test]
+    fn new_rejects_invalid_paths() {
+        miri_async_test!(async {
+            let dir = tempfile::tempdir().unwrap();
+            let target = dir.path().join("not_a_rust_project");
+            std::fs::create_dir_all(&target).unwrap();
+
+            let err = Analyzer::new(&target, 1).await.unwrap_err();
+            assert!(err.to_string().contains("Invalid analysis target"));
+        });
+    }
+
+    #[test]
+    fn analyze_single_file_yields_analyzed_event() {
+        miri_async_test!(async {
+            let dir = tempfile::tempdir().unwrap();
+            let target = dir.path().join("lib.rs");
+            std::fs::write(&target, "pub fn f() -> i32 { 1 }\n").unwrap();
+
+            let analyzer = Analyzer::new(&target, 1).await.unwrap();
+            let mut iter = analyzer.analyze(false, false).await;
+
+            // Wait for an `Analyzed` event; otherwise fail with some context.
+            let mut saw_crate_checked = false;
+            for _ in 0..50 {
+                match iter.next_event().await {
+                    Some(AnalyzerEvent::CrateChecked { .. }) => {
+                        saw_crate_checked = true;
+                    }
+                    Some(AnalyzerEvent::Analyzed(ws)) => {
+                        // Workspace emitted by rustowlc should be serializable and non-empty.
+                        // We at least expect it to include this file name somewhere.
+                        let json = serde_json::to_string(&ws).unwrap();
+                        assert!(json.contains("lib.rs"));
+                        return;
+                    }
+                    None => break,
+                }
+            }
+
+            panic!(
+                "did not receive AnalyzerEvent::Analyzed (saw_crate_checked={})",
+                saw_crate_checked
+            );
+        });
     }
 }

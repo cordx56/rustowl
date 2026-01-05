@@ -4,7 +4,8 @@ use rustc_borrowck::consumers::{PoloniusLocationTable, PoloniusOutput};
 use rustc_index::Idx;
 use rustc_middle::mir::Local;
 use rustowl::models::{FoldIndexMap as HashMap, FoldIndexSet as HashSet};
-use rustowl::{models::*, utils};
+use rustowl::models::{MirBasicBlock, Range};
+use rustowl::utils;
 
 pub fn get_accurate_live(
     datafrog: &PoloniusOutput,

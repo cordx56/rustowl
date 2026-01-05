@@ -4,12 +4,14 @@
 
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
-use rustowl::*;
+use rustowl::{
+    Backend,
+    cli::{Cli, Commands, ToolchainCommands},
+    toolchain, utils,
+};
 use std::env;
 use tower_lsp_server::{LspService, Server};
 use tracing_subscriber::filter::LevelFilter;
-
-use crate::cli::{Cli, Commands, ToolchainCommands};
 
 fn log_level_from_args(args: &Cli) -> LevelFilter {
     args.verbosity.tracing_level_filter()
@@ -196,330 +198,33 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use clap::Parser;
+    use rustowl::miri_async_test;
 
-    // Test CLI argument parsing
-    #[test]
-    fn test_cli_parsing_no_command() {
-        let args = vec!["rustowl"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert!(cli.command.is_none());
-        assert!(!cli.version);
-        assert_eq!(cli.verbosity, clap_verbosity_flag::Verbosity::new(0, 0));
-    }
+    // Command handling in this binary calls `std::process::exit`, which makes it
+    // hard to test directly. Clap parsing is covered in `src/cli.rs`.
 
-    #[test]
-    fn test_cli_parsing_version_flag() {
-        let args = vec!["rustowl", "-V"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert!(cli.command.is_none());
-        assert!(cli.version);
-
-        let args = vec!["rustowl", "--version"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert!(cli.command.is_none());
-        assert!(cli.version);
-    }
-
-    #[test]
-    fn test_cli_parsing_quiet_flags() {
-        let args = vec!["rustowl", "-q"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert_eq!(
-            cli.verbosity,
-            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 1)
-        );
-
-        let args = vec!["rustowl", "-qq"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert_eq!(
-            cli.verbosity,
-            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 2)
-        );
-    }
-
-    #[test]
-    fn test_cli_parsing_verbosity_flags() {
-        let args = vec!["rustowl", "-v"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert_eq!(
-            cli.verbosity,
-            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(1, 0)
-        );
-
-        let args = vec!["rustowl", "-vvv"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert_eq!(
-            cli.verbosity,
-            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(3, 0)
-        );
-    }
-
-    #[test]
-    fn test_cli_parsing_stdio_flag() {
-        let args = vec!["rustowl", "--stdio"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert!(cli.stdio);
-    }
-
-    #[test]
-    fn test_cli_parsing_check_command() {
-        let args = vec!["rustowl", "check"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert!(matches!(cli.command, Some(Commands::Check(_))));
-    }
-
-    #[test]
-    fn test_cli_parsing_check_command_with_path() {
-        let args = vec!["rustowl", "check", "/some/path"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        match cli.command {
-            Some(Commands::Check(opts)) => {
-                assert_eq!(opts.path, Some(std::path::PathBuf::from("/some/path")));
-            }
-            _ => panic!("Expected Check command"),
-        }
-    }
-
-    #[test]
-    fn test_cli_parsing_check_command_with_flags() {
-        let args = vec!["rustowl", "check", "--all-targets", "--all-features"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        match cli.command {
-            Some(Commands::Check(opts)) => {
-                assert!(opts.all_targets);
-                assert!(opts.all_features);
-            }
-            _ => panic!("Expected Check command"),
-        }
-    }
-
-    #[test]
-    fn test_cli_parsing_clean_command() {
-        let args = vec!["rustowl", "clean"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert!(matches!(cli.command, Some(Commands::Clean)));
-    }
-
-    #[test]
-    fn test_cli_parsing_toolchain_install() {
-        let args = vec!["rustowl", "toolchain", "install"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        match cli.command {
-            Some(Commands::Toolchain(opts)) => {
-                assert!(matches!(
-                    opts.command,
-                    Some(ToolchainCommands::Install { .. })
-                ));
-            }
-            _ => panic!("Expected Toolchain command"),
-        }
-    }
-
-    #[test]
-    fn test_cli_parsing_toolchain_install_with_path() {
-        let args = vec!["rustowl", "toolchain", "install", "--path", "/custom/path"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        match cli.command {
-            Some(Commands::Toolchain(opts)) => match opts.command {
-                Some(ToolchainCommands::Install { path, .. }) => {
-                    assert_eq!(path, Some(std::path::PathBuf::from("/custom/path")));
-                }
-                _ => panic!("Expected Install command"),
-            },
-            _ => panic!("Expected Toolchain command"),
-        }
-    }
-
-    #[test]
-    fn test_cli_parsing_toolchain_install_skip_rustowl() {
-        let args = vec![
-            "rustowl",
-            "toolchain",
-            "install",
-            "--skip-rustowl-toolchain",
-        ];
-        let cli = Cli::try_parse_from(args).unwrap();
-        match cli.command {
-            Some(Commands::Toolchain(opts)) => match opts.command {
-                Some(ToolchainCommands::Install {
-                    skip_rustowl_toolchain,
-                    ..
-                }) => {
-                    assert!(skip_rustowl_toolchain);
-                }
-                _ => panic!("Expected Install command"),
-            },
-            _ => panic!("Expected Toolchain command"),
-        }
-    }
-
-    #[test]
-    fn test_cli_parsing_toolchain_uninstall() {
-        let args = vec!["rustowl", "toolchain", "uninstall"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        match cli.command {
-            Some(Commands::Toolchain(opts)) => {
-                assert!(matches!(opts.command, Some(ToolchainCommands::Uninstall)));
-            }
-            _ => panic!("Expected Toolchain command"),
-        }
-    }
-
-    #[test]
-    fn test_cli_parsing_completions() {
-        let args = vec!["rustowl", "completions", "bash"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        match cli.command {
-            Some(Commands::Completions(opts)) => {
-                // Just verify that shell parsing works - opts should be accessible
-                let _shell = opts.shell;
-            }
-            _ => panic!("Expected Completions command"),
-        }
-    }
-
-    // Test display_version function
     #[test]
     fn test_display_version_function() {
-        display_version();
+        super::display_version();
     }
 
-    // Test handle_no_command with version flag (detailed)
-    #[cfg_attr(not(miri), tokio::test)]
-    #[cfg_attr(miri, test)]
-    #[cfg_attr(miri, ignore)]
-    async fn test_handle_no_command_version() {
-        let cli = Cli {
-            command: None,
-            version: true,
-            verbosity: clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 0),
-            stdio: false,
-            rustc_threads: None,
-        };
-
-        handle_no_command(cli, false, 1).await;
+    #[test]
+    fn log_level_from_args_uses_cli_verbosity() {
+        let args = rustowl::cli::Cli::parse_from(["rustowl", "-vv"]);
+        let level = super::log_level_from_args(&args);
+        assert_eq!(level, args.verbosity.tracing_level_filter());
     }
 
-    // Test handle_no_command with short version flag
-    #[cfg_attr(not(miri), tokio::test)]
-    #[cfg_attr(miri, test)]
-    #[cfg_attr(miri, ignore)]
-    async fn test_handle_no_command_short_version() {
-        let cli = Cli {
-            command: None,
-            version: true,
-            verbosity: clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 0),
-            stdio: false,
-            rustc_threads: None,
-        };
+    #[test]
+    fn handle_no_command_prints_version_for_long_flag() {
+        miri_async_test!(async {
+            let args = rustowl::cli::Cli::parse_from(["rustowl", "--version"]);
 
-        handle_no_command(cli, true, 1).await;
-    }
+            let output = gag::BufferRedirect::stdout().unwrap();
+            super::handle_no_command(args, false, 1).await;
 
-    // Test handle_command for clean command
-    #[cfg_attr(not(miri), tokio::test)]
-    #[cfg_attr(miri, test)]
-    #[cfg_attr(miri, ignore)]
-    async fn test_handle_command_clean() {
-        let command = Commands::Clean;
-        // This should not panic
-        handle_command(command, 1).await;
-    }
-
-    // Test handle_command for toolchain uninstall
-    #[cfg_attr(not(miri), tokio::test)]
-    #[cfg_attr(miri, test)]
-    #[cfg_attr(miri, ignore)]
-    async fn test_handle_command_toolchain_uninstall() {
-        use crate::cli::*;
-        let command = Commands::Toolchain(ToolchainArgs {
-            command: Some(ToolchainCommands::Uninstall),
+            drop(output);
         });
-        // This should not panic
-        handle_command(command, 1).await;
-    }
-
-    // Test handle_command for completions
-    #[cfg_attr(not(miri), tokio::test)]
-    #[cfg_attr(miri, test)]
-    #[cfg_attr(miri, ignore)]
-    async fn test_handle_command_completions() {
-        use crate::cli::*;
-        use crate::shells::Shell;
-        let command = Commands::Completions(Completions { shell: Shell::Bash });
-        // This should not panic
-        handle_command(command, 1).await;
-    }
-
-    // Test invalid CLI arguments
-    #[test]
-    fn test_cli_parsing_invalid_command() {
-        let args = vec!["rustowl", "invalid-command"];
-        let result = Cli::try_parse_from(args);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_cli_parsing_invalid_flag() {
-        let args = vec!["rustowl", "--invalid-flag"];
-        let result = Cli::try_parse_from(args);
-        assert!(result.is_err());
-    }
-
-    // Test edge cases in CLI parsing
-    #[test]
-    fn test_cli_parsing_empty_args() {
-        let args = vec!["rustowl"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert!(cli.command.is_none());
-        assert!(!cli.version);
-        assert!(!cli.stdio);
-        assert_eq!(
-            cli.verbosity,
-            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 0)
-        );
-    }
-
-    #[test]
-    fn test_cli_parsing_multiple_quiet_flags() {
-        let args = vec!["rustowl", "-q", "-q", "-q"];
-        let cli = Cli::try_parse_from(args).unwrap();
-        assert_eq!(
-            cli.verbosity,
-            clap_verbosity_flag::Verbosity::<clap_verbosity_flag::WarnLevel>::new(0, 3)
-        );
-    }
-
-    // Test command factory for completions
-    #[test]
-    fn test_command_factory() {
-        let cmd = Cli::command();
-        // Verify that the command structure is valid
-        assert!(!cmd.get_name().is_empty());
-        // Just verify that get_about returns something
-        assert!(cmd.get_about().is_some() || cmd.get_about().is_none());
-    }
-
-    // Test shell completion generation (basic test)
-    #[test]
-    fn test_completion_generation_setup() {
-        // Test that completion generation can be set up without panicking
-        let shell = clap_complete::Shell::Bash;
-        let mut cmd = Cli::command();
-        let mut output = Vec::<u8>::new();
-
-        // This should not panic
-        generate(shell, &mut cmd, "rustowl", &mut output);
-        assert!(!output.is_empty());
-    }
-
-    // Test current directory fallback in check command
-    #[test]
-    fn test_current_dir_fallback() {
-        // Test that we can get current directory or fallback
-        let path = env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        assert!(path.exists() || path.as_os_str() == ".");
     }
 }

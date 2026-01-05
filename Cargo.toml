@@ -88,6 +88,7 @@ uuid = { version = "1", features = ["fast-rng", "v4"] }
 
 [dev-dependencies]
 divan = "0.1"
+gag = "1"
 rand = { version = "0.9", features = ["small_rng"] }
 
 [build-dependencies]

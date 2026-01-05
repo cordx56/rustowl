@@ -10,8 +10,10 @@ use rustc_middle::{
     ty::{TyCtxt, TypeFoldable, TypeFolder},
 };
 use rustc_span::source_map::SourceMap;
-use rustowl::models::*;
-use rustowl::models::{FoldIndexMap as HashMap, FoldIndexSet as HashSet};
+use rustowl::models::{
+    FnLocal, FoldIndexMap as HashMap, FoldIndexSet as HashSet, MirBasicBlock, MirRval,
+    MirStatement, MirTerminator, Range, StatementVec,
+};
 
 /// RegionEraser to erase region variables from MIR body
 /// This is required to hash MIR body

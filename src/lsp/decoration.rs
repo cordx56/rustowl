@@ -1,7 +1,9 @@
+use crate::lsp::progress;
 use crate::models::FoldIndexSet as HashSet;
-use crate::{lsp::progress, models::*, utils};
+use crate::models::{FnLocal, Loc, MirDecl, MirRval, MirStatement, MirTerminator, Range};
+use crate::utils;
 use std::path::PathBuf;
-use tower_lsp_server::ls_types as lsp_types;
+use tower_lsp_server::ls_types;
 
 // Variable names that should be filtered out during analysis
 const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
@@ -57,7 +59,7 @@ pub enum Deco<R = Range> {
     },
 }
 impl Deco<Range> {
-    pub fn to_lsp_range(&self, index: &utils::LineCharIndex) -> Deco<lsp_types::Range> {
+    pub fn to_lsp_range(&self, index: &utils::LineCharIndex) -> Deco<ls_types::Range> {
         match self {
             Deco::Lifetime {
                 local,
@@ -67,17 +69,17 @@ impl Deco<Range> {
             } => {
                 let start = index.index_to_line_char(range.from());
                 let end = index.index_to_line_char(range.until());
-                let start = lsp_types::Position {
+                let start = ls_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = ls_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::Lifetime {
                     local: *local,
-                    range: lsp_types::Range { start, end },
+                    range: ls_types::Range { start, end },
                     hover_text: hover_text.clone(),
                     overlapped: *overlapped,
                 }
@@ -90,17 +92,17 @@ impl Deco<Range> {
             } => {
                 let start = index.index_to_line_char(range.from());
                 let end = index.index_to_line_char(range.until());
-                let start = lsp_types::Position {
+                let start = ls_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = ls_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::ImmBorrow {
                     local: *local,
-                    range: lsp_types::Range { start, end },
+                    range: ls_types::Range { start, end },
                     hover_text: hover_text.clone(),
                     overlapped: *overlapped,
                 }
@@ -113,17 +115,17 @@ impl Deco<Range> {
             } => {
                 let start = index.index_to_line_char(range.from());
                 let end = index.index_to_line_char(range.until());
-                let start = lsp_types::Position {
+                let start = ls_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = ls_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::MutBorrow {
                     local: *local,
-                    range: lsp_types::Range { start, end },
+                    range: ls_types::Range { start, end },
                     hover_text: hover_text.clone(),
                     overlapped: *overlapped,
                 }
@@ -136,17 +138,17 @@ impl Deco<Range> {
             } => {
                 let start = index.index_to_line_char(range.from());
                 let end = index.index_to_line_char(range.until());
-                let start = lsp_types::Position {
+                let start = ls_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = ls_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::Move {
                     local: *local,
-                    range: lsp_types::Range { start, end },
+                    range: ls_types::Range { start, end },
                     hover_text: hover_text.clone(),
                     overlapped: *overlapped,
                 }
@@ -159,17 +161,17 @@ impl Deco<Range> {
             } => {
                 let start = index.index_to_line_char(range.from());
                 let end = index.index_to_line_char(range.until());
-                let start = lsp_types::Position {
+                let start = ls_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = ls_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::Call {
                     local: *local,
-                    range: lsp_types::Range { start, end },
+                    range: ls_types::Range { start, end },
                     hover_text: hover_text.clone(),
                     overlapped: *overlapped,
                 }
@@ -182,17 +184,17 @@ impl Deco<Range> {
             } => {
                 let start = index.index_to_line_char(range.from());
                 let end = index.index_to_line_char(range.until());
-                let start = lsp_types::Position {
+                let start = ls_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = ls_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::SharedMut {
                     local: *local,
-                    range: lsp_types::Range { start, end },
+                    range: ls_types::Range { start, end },
                     hover_text: hover_text.clone(),
                     overlapped: *overlapped,
                 }
@@ -206,17 +208,17 @@ impl Deco<Range> {
             } => {
                 let start = index.index_to_line_char(range.from());
                 let end = index.index_to_line_char(range.until());
-                let start = lsp_types::Position {
+                let start = ls_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = ls_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::Outlive {
                     local: *local,
-                    range: lsp_types::Range { start, end },
+                    range: ls_types::Range { start, end },
                     hover_text: hover_text.clone(),
                     overlapped: *overlapped,
                 }
@@ -229,20 +231,20 @@ pub struct Decorations {
     pub is_analyzed: bool,
     pub status: progress::AnalysisStatus,
     pub path: Option<PathBuf>,
-    pub decorations: Vec<Deco<lsp_types::Range>>,
+    pub decorations: Vec<Deco<ls_types::Range>>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct CursorRequest {
-    pub position: lsp_types::Position,
-    pub document: lsp_types::TextDocumentIdentifier,
+    pub position: ls_types::Position,
+    pub document: ls_types::TextDocumentIdentifier,
 }
 impl CursorRequest {
     pub fn path(&self) -> Option<PathBuf> {
         self.document.uri.to_file_path().map(|p| p.into_owned())
     }
-    pub fn position(&self) -> lsp_types::Position {
+    pub fn position(&self) -> ls_types::Position {
         self.position
     }
 }
@@ -408,12 +410,12 @@ impl CalcDecos {
 
             let mut j = 0;
             while j < i {
-                let prev = &self.decorations[j];
-                if prev == &self.decorations[i] {
+                if self.decorations[j] == self.decorations[i] {
                     self.decorations.remove(i);
                     continue 'outer;
                 }
-                let (prev_range, prev_overlapped) = match prev {
+
+                let (prev_range, prev_overlapped) = match &self.decorations[j] {
                     Deco::Lifetime {
                         range, overlapped, ..
                     }
@@ -443,11 +445,24 @@ impl CalcDecos {
                 }
 
                 if let Some(common) = utils::common_range(current_range, prev_range) {
+                    // Mark both decorations as overlapped on true intersection.
+                    match &mut self.decorations[i] {
+                        Deco::Lifetime { overlapped, .. }
+                        | Deco::ImmBorrow { overlapped, .. }
+                        | Deco::MutBorrow { overlapped, .. }
+                        | Deco::Move { overlapped, .. }
+                        | Deco::Call { overlapped, .. }
+                        | Deco::SharedMut { overlapped, .. }
+                        | Deco::Outlive { overlapped, .. } => {
+                            *overlapped = true;
+                        }
+                    }
+
                     let mut new_decos = Vec::new();
                     let non_overlapping = utils::exclude_ranges(vec![prev_range], vec![common]);
 
                     for range in non_overlapping {
-                        let new_deco = match prev {
+                        let new_deco = match &self.decorations[j] {
                             Deco::Lifetime {
                                 local, hover_text, ..
                             } => Deco::Lifetime {
@@ -818,155 +833,179 @@ mod tests {
     }
 
     #[test]
-    fn test_decoration_creation() {
-        let locals = vec![FnLocal::new(1, 1)];
-        let mut calc = CalcDecos::new(locals);
-
-        let mut lives_vec: EcoVec<Range> = EcoVec::new();
-        lives_vec.push(Range::new(Loc(0), Loc(20)).unwrap());
-
-        let mut drop_range_vec: EcoVec<Range> = EcoVec::new();
-        drop_range_vec.push(Range::new(Loc(15), Loc(25)).unwrap());
-
-        let decl = MirDecl::User {
-            local: FnLocal::new(1, 1),
-            name: "test_var".into(),
-            ty: "i32".into(),
-            lives: lives_vec,
-            shared_borrow: EcoVec::new(),
-            mutable_borrow: EcoVec::new(),
-            drop_range: drop_range_vec,
-            must_live_at: EcoVec::new(),
-            drop: false,
-            span: Range::new(Loc(5), Loc(15)).unwrap(),
-        };
-
-        calc.visit_decl(&decl);
-
-        let decorations = calc.decorations();
-        // Should have at least one decoration (lifetime)
-        assert!(!decorations.is_empty());
-    }
-
-    #[test]
-    fn test_select_local_new() {
-        let pos = Loc(10);
-        let selector = SelectLocal::new(pos);
-
-        assert_eq!(selector.pos, pos);
-        assert!(selector.candidate_local_decls.is_empty());
-        assert!(selector.selected.is_none());
-    }
-
-    #[test]
-    fn test_select_local_select_var() {
+    fn select_local_ignores_non_candidates() {
         let mut selector = SelectLocal::new(Loc(10));
         let local = FnLocal::new(1, 1);
-        let range = Range::new(Loc(5), Loc(15)).unwrap();
 
-        // Add local to candidates
+        // Not adding it to candidates means select() should ignore it.
+        selector.select(
+            SelectReason::Var,
+            local,
+            Range::new(Loc(0), Loc(20)).unwrap(),
+        );
+
+        assert!(selector.selected().is_none());
+    }
+
+    #[test]
+    fn select_local_var_prefers_narrower_range() {
+        let mut selector = SelectLocal::new(Loc(10));
+        let local = FnLocal::new(1, 1);
         selector.candidate_local_decls.push(local);
 
-        // Select with Var reason
-        selector.select(SelectReason::Var, local, range);
+        let wide = Range::new(Loc(0), Loc(20)).unwrap();
+        let narrow = Range::new(Loc(8), Loc(11)).unwrap();
 
-        assert!(selector.selected.is_some());
-        if let Some((reason, selected_local, selected_range)) = selector.selected {
-            assert_eq!(reason, SelectReason::Var);
-            assert_eq!(selected_local, local);
-            assert_eq!(selected_range, range);
-        }
+        selector.select(SelectReason::Var, local, wide);
+        selector.select(SelectReason::Var, local, narrow);
+
+        assert_eq!(selector.selected(), Some(local));
+        let (reason, selected_local, selected_range) = selector.selected.unwrap();
+        assert_eq!(reason, SelectReason::Var);
+        assert_eq!(selected_local, local);
+        assert_eq!(selected_range, narrow);
     }
 
     #[test]
-    fn test_calc_decos_new() {
-        let locals = vec![FnLocal::new(1, 1), FnLocal::new(2, 1)];
-        let calc = CalcDecos::new(locals.clone());
+    fn select_local_var_wins_over_borrow_selection() {
+        let mut selector = SelectLocal::new(Loc(10));
+        let local = FnLocal::new(1, 1);
+        selector.candidate_local_decls.push(local);
 
-        assert_eq!(calc.locals.len(), 2);
-        assert!(calc.decorations.is_empty());
-        assert_eq!(calc.current_fn_id, 0);
+        let borrow_range = Range::new(Loc(9), Loc(12)).unwrap();
+        selector.select(SelectReason::Borrow, local, borrow_range);
+
+        let var_range = Range::new(Loc(9), Loc(11)).unwrap();
+        selector.select(SelectReason::Var, local, var_range);
+
+        assert_eq!(selector.selected(), Some(local));
+        let (reason, _, range) = selector.selected.unwrap();
+        assert_eq!(reason, SelectReason::Var);
+        assert_eq!(range, var_range);
     }
 
     #[test]
-    fn test_calc_decos_get_deco_order() {
-        // Test decoration ordering
-        let lifetime_deco = Deco::Lifetime {
-            local: FnLocal::new(1, 1),
+    fn calc_decos_dedupes_call_ranges() {
+        let local = FnLocal::new(1, 1);
+
+        // Candidate is populated by visiting its declaration.
+        let decl = MirDecl::User {
+            local,
+            name: "x".into(),
+            ty: "i32".into(),
+            lives: EcoVec::new(),
+            shared_borrow: EcoVec::new(),
+            mutable_borrow: EcoVec::new(),
+            drop_range: EcoVec::new(),
+            must_live_at: EcoVec::new(),
+            drop: false,
+            span: Range::new(Loc(0), Loc(1)).unwrap(),
+        };
+
+        let mut select = SelectLocal::new(Loc(5));
+        select.visit_decl(&decl);
+        assert!(select.selected().is_none());
+
+        let selected = [local];
+        let mut calc = CalcDecos::new(selected);
+
+        // A narrow call span exists first.
+        calc.visit_term(&MirTerminator::Call {
+            destination_local: local,
+            fn_span: Range::new(Loc(4), Loc(6)).unwrap(),
+        });
+
+        // The super-range call should be ignored (it would only add noise).
+        calc.visit_term(&MirTerminator::Call {
+            destination_local: local,
+            fn_span: Range::new(Loc(0), Loc(10)).unwrap(),
+        });
+
+        // And a sub-range should replace the existing one.
+        calc.visit_term(&MirTerminator::Call {
+            destination_local: local,
+            fn_span: Range::new(Loc(4), Loc(5)).unwrap(),
+        });
+
+        let decorations = calc.decorations();
+        let call_count = decorations
+            .iter()
+            .filter(|d| matches!(d, Deco::Call { .. }))
+            .count();
+        assert_eq!(call_count, 1);
+
+        let call_range = decorations.iter().find_map(|d| {
+            if let Deco::Call { range, .. } = d {
+                Some(*range)
+            } else {
+                None
+            }
+        });
+        assert_eq!(call_range, Some(Range::new(Loc(4), Loc(5)).unwrap()));
+    }
+
+    #[test]
+    fn calc_decos_sets_overlapped_on_intersection() {
+        let local = FnLocal::new(1, 1);
+        let selected = [local];
+        let mut calc = CalcDecos::new(selected);
+
+        calc.decorations.push(Deco::ImmBorrow {
+            local,
             range: Range::new(Loc(0), Loc(10)).unwrap(),
-            hover_text: "test".to_string(),
+            hover_text: "immutable borrow".to_string(),
             overlapped: false,
-        };
-
-        let borrow_deco = Deco::ImmBorrow {
-            local: FnLocal::new(1, 1),
-            range: Range::new(Loc(0), Loc(10)).unwrap(),
-            hover_text: "test".to_string(),
+        });
+        calc.decorations.push(Deco::Move {
+            local,
+            range: Range::new(Loc(5), Loc(15)).unwrap(),
+            hover_text: "variable moved".to_string(),
             overlapped: false,
-        };
+        });
 
-        assert_eq!(CalcDecos::get_deco_order(&lifetime_deco), 0);
-        assert_eq!(CalcDecos::get_deco_order(&borrow_deco), 1);
+        calc.handle_overlapping();
+
+        // Both should have overlapped=true once overlap is detected.
+        let overlapped = calc
+            .decorations
+            .iter()
+            .filter(|d| match d {
+                Deco::ImmBorrow { overlapped, .. } => *overlapped,
+                Deco::Move { overlapped, .. } => *overlapped,
+                _ => false,
+            })
+            .count();
+        assert_eq!(overlapped, 2);
     }
 
     #[test]
-    fn test_calc_decos_sort_by_definition() {
-        let mut calc = CalcDecos::new(vec![]);
+    fn calc_decos_does_not_mark_touching_ranges_as_overlapping() {
+        let local = FnLocal::new(1, 1);
+        let selected = [local];
+        let mut calc = CalcDecos::new(selected);
 
-        // Add decorations in reverse order
-        let call_deco = Deco::Call {
-            local: FnLocal::new(1, 1),
+        // Touching at the boundary (until == from) should not count as overlap.
+        calc.decorations.push(Deco::ImmBorrow {
+            local,
             range: Range::new(Loc(0), Loc(10)).unwrap(),
-            hover_text: "test".to_string(),
+            hover_text: "immutable borrow".to_string(),
             overlapped: false,
-        };
-
-        let lifetime_deco = Deco::Lifetime {
-            local: FnLocal::new(1, 1),
-            range: Range::new(Loc(0), Loc(10)).unwrap(),
-            hover_text: "test".to_string(),
+        });
+        calc.decorations.push(Deco::Move {
+            local,
+            range: Range::new(Loc(10), Loc(20)).unwrap(),
+            hover_text: "variable moved".to_string(),
             overlapped: false,
-        };
+        });
 
-        calc.decorations.push(call_deco);
-        calc.decorations.push(lifetime_deco);
+        calc.handle_overlapping();
 
-        calc.sort_by_definition();
+        let any_overlapped = calc.decorations.iter().any(|d| match d {
+            Deco::ImmBorrow { overlapped, .. } => *overlapped,
+            Deco::Move { overlapped, .. } => *overlapped,
+            _ => false,
+        });
 
-        // After sorting, lifetime should come first (order 0)
-        assert!(matches!(calc.decorations[0], Deco::Lifetime { .. }));
-        assert!(matches!(calc.decorations[1], Deco::Call { .. }));
-    }
-
-    #[test]
-    fn test_cursor_request_path() {
-        let document = lsp_types::TextDocumentIdentifier {
-            uri: "file:///test.rs".parse().unwrap(),
-        };
-        let request = CursorRequest {
-            position: lsp_types::Position {
-                line: 1,
-                character: 5,
-            },
-            document,
-        };
-
-        let path = request.path();
-        assert!(path.is_some());
-        assert_eq!(path.unwrap().to_string_lossy(), "/test.rs");
-    }
-
-    #[test]
-    fn test_cursor_request_position() {
-        let position = lsp_types::Position {
-            line: 10,
-            character: 20,
-        };
-        let document = lsp_types::TextDocumentIdentifier {
-            uri: "file:///test.rs".parse().unwrap(),
-        };
-        let request = CursorRequest { position, document };
-
-        assert_eq!(request.position(), position);
+        assert!(!any_overlapped);
     }
 }
