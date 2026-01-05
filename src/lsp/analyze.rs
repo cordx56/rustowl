@@ -1,5 +1,4 @@
 use crate::cache::{is_cache, set_cache_path};
-use crate::error::Result;
 use crate::models::Workspace;
 use crate::toolchain;
 use anyhow::bail;
@@ -45,7 +44,7 @@ pub struct Analyzer {
 }
 
 impl Analyzer {
-    pub async fn new(path: impl AsRef<Path>, rustc_threads: usize) -> Result<Self> {
+    pub async fn new(path: impl AsRef<Path>, rustc_threads: usize) -> crate::error::Result<Self> {
         let path = path.as_ref().to_path_buf();
 
         let mut cargo_cmd = toolchain::setup_cargo_command(rustc_threads).await;
