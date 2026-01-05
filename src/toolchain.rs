@@ -764,7 +764,7 @@ async fn download_zip_and_extract(
         while let Some(entry) = zip.next_with_entry().await.map_err(|e| {
             tracing::error!("failed reading zip entry: {e:?}");
         })? {
-            let filename = entry.reader().entry().filename().as_str().map_err(|_| ())?;
+            let filename = entry.entry().filename().as_str().map_err(|_| ())?;
             let out_path = safe_join_zip_path(&dest, filename)?;
 
             if filename.ends_with('/') {
@@ -787,7 +787,7 @@ async fn download_zip_and_extract(
                 tracing::error!("failed creating file {}: {e}", out_path.display());
             })?;
 
-            let mut entry_reader = entry.reader().compat();
+            let mut entry_reader = entry.reader_mut().compat();
             let mut buf = [0u8; 32 * 1024];
             let mut written_for_entry = 0u64;
 
