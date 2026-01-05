@@ -17,7 +17,6 @@ use tokio::io::{AsyncReadExt as _, AsyncWriteExt};
 use tokio::io::BufReader;
 
 #[cfg(target_os = "windows")]
-use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::io::SyncIoBridge;
 
 pub const TOOLCHAIN: &str = env!("RUSTOWL_TOOLCHAIN");
@@ -789,7 +788,7 @@ async fn download_zip_and_extract(
                 tracing::error!("failed creating file {}: {e}", out_path.display());
             })?;
 
-            let (mut entry_reader, entry) = entry.reader().compat();
+            let mut entry_reader = entry.reader().compat();
             let mut buf = [0u8; 32 * 1024];
             let mut written_for_entry = 0u64;
 
