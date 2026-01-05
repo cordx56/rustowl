@@ -16,7 +16,6 @@ use tokio::io::{AsyncReadExt as _, AsyncWriteExt};
 #[cfg(target_os = "windows")]
 use tokio::io::BufReader;
 
-#[cfg(target_os = "windows")]
 use tokio_util::io::SyncIoBridge;
 
 pub const TOOLCHAIN: &str = env!("RUSTOWL_TOOLCHAIN");
