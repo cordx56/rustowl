@@ -11,12 +11,7 @@ use tar::{Archive, EntryType};
 
 use tokio::fs::OpenOptions;
 use tokio::fs::{create_dir_all, read_to_string, remove_dir_all, rename};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-#[cfg(target_os = "windows")]
-use tokio::io::BufReader;
-
-use tokio_util::io::SyncIoBridge;
+use tokio::io::AsyncWriteExt;
 
 pub const TOOLCHAIN: &str = env!("RUSTOWL_TOOLCHAIN");
 pub const HOST_TUPLE: &str = env!("HOST_TUPLE");
@@ -254,39 +249,9 @@ mod unit_tests {
     }
 }
 
-async fn resumable_download_pipe(
+async fn download_with_resume(
     url: &str,
     spool_path: &Path,
-    caps: DownloadCaps,
-    progress: Option<indicatif::ProgressBar>,
-) -> Result<
-    (
-        tokio::io::DuplexStream,
-        tokio::task::JoinHandle<Result<(), ()>>,
-    ),
-    (),
-> {
-    // One-directional usage: downloader writes to `writer_end`, extractor reads from `reader_end`.
-    let (mut writer_end, reader_end) = tokio::io::duplex(128 * 1024);
-
-    let url = url.to_owned();
-    let spool_path = spool_path.to_path_buf();
-
-    let task = tokio::spawn(async move {
-        let result =
-            stream_into_pipe_with_resume(&url, &spool_path, &mut writer_end, caps, progress).await;
-        // Ensure the reader sees EOF even on errors.
-        let _ = writer_end.shutdown().await;
-        result
-    });
-
-    Ok((reader_end, task))
-}
-
-async fn stream_into_pipe_with_resume(
-    url: &str,
-    spool_path: &Path,
-    writer: &mut (impl tokio::io::AsyncWrite + Unpin),
     caps: DownloadCaps,
     progress: Option<indicatif::ProgressBar>,
 ) -> Result<(), ()> {
@@ -308,7 +273,7 @@ async fn stream_into_pipe_with_resume(
         spool_path.display()
     );
 
-    // If we have a partial spool, validate Range support before replaying.
+    // If we have a partial spool, validate Range support before resuming.
     let mut resp = if existing > 0 {
         let r = HTTP_CLIENT
             .get(url)
@@ -321,92 +286,16 @@ async fn stream_into_pipe_with_resume(
             })?;
 
         match r.status() {
-            reqwest::StatusCode::PARTIAL_CONTENT => {
-                // Replay already-downloaded bytes so extraction starts immediately.
-                let f = tokio::fs::File::open(spool_path).await.map_err(|e| {
-                    tracing::error!("failed to open spool file {}: {e}", spool_path.display());
-                })?;
-
-                match tokio::io::copy(&mut f.take(existing), writer).await {
-                    Ok(copied) if copied == existing => {
-                        if let Some(pb) = &progress {
-                            pb.set_position(existing);
-                        }
-                        r
-                    }
-                    Ok(copied) => {
-                        tracing::error!(
-                            "spool replay mismatch: expected {existing}, got {copied}; restarting"
-                        );
-                        existing = 0;
-                        let _ = tokio::fs::remove_file(spool_path).await;
-                        HTTP_CLIENT
-                            .get(url)
-                            .send()
-                            .await
-                            .and_then(|v| v.error_for_status())
-                            .map_err(|e| {
-                                tracing::error!("failed to download runtime archive");
-                                tracing::error!("{e:?}");
-                            })?
-                    }
-                    Err(e) => {
-                        tracing::error!("failed to replay cached bytes ({e}); restarting");
-                        existing = 0;
-                        let _ = tokio::fs::remove_file(spool_path).await;
-                        HTTP_CLIENT
-                            .get(url)
-                            .send()
-                            .await
-                            .and_then(|v| v.error_for_status())
-                            .map_err(|e| {
-                                tracing::error!("failed to download runtime archive");
-                                tracing::error!("{e:?}");
-                            })?
-                    }
-                }
-            }
+            reqwest::StatusCode::PARTIAL_CONTENT => r,
             // Some servers respond 416 when the local file is already complete.
             reqwest::StatusCode::RANGE_NOT_SATISFIABLE => {
-                tracing::debug!("range not satisfiable; replaying spool and finishing");
-                let f = tokio::fs::File::open(spool_path).await.map_err(|e| {
-                    tracing::error!("failed to open spool file {}: {e}", spool_path.display());
-                })?;
-
-                match tokio::io::copy(&mut f.take(existing), writer).await {
-                    Ok(copied) if copied == existing => {
-                        if let Some(pb) = &progress {
-                            pb.set_position(existing);
-                        }
-                        return Ok(());
-                    }
-                    Ok(copied) => {
-                        tracing::error!(
-                            "spool replay mismatch: expected {existing}, got {copied}; restarting"
-                        );
-                        let _ = tokio::fs::remove_file(spool_path).await;
-                        existing = 0;
-                        // Continue as if no spool exists.
-                    }
-                    Err(e) => {
-                        tracing::error!("failed to replay cached bytes ({e}); restarting");
-                        let _ = tokio::fs::remove_file(spool_path).await;
-                        existing = 0;
-                        // Continue as if no spool exists.
-                    }
+                tracing::debug!("range not satisfiable; treating spool as complete");
+                if let Some(pb) = &progress {
+                    pb.set_position(existing);
                 }
-
-                HTTP_CLIENT
-                    .get(url)
-                    .send()
-                    .await
-                    .and_then(|v| v.error_for_status())
-                    .map_err(|e| {
-                        tracing::error!("failed to download runtime archive");
-                        tracing::error!("{e:?}");
-                    })?
+                return Ok(());
             }
-            // Server ignored range; start fresh (but only safe before extraction sees bytes).
+            // Server ignored range; start fresh.
             reqwest::StatusCode::OK => {
                 tracing::debug!("server did not honor range; restarting download");
                 existing = 0;
@@ -421,6 +310,7 @@ async fn stream_into_pipe_with_resume(
                         tracing::error!("{e:?}");
                     })?
             }
+
             other => {
                 tracing::error!("unexpected HTTP status for range request: {other}");
                 return Err(());
@@ -468,7 +358,6 @@ async fn stream_into_pipe_with_resume(
             url,
             &mut resp,
             &mut file,
-            writer,
             &mut downloaded,
             caps,
             progress.as_ref(),
@@ -505,6 +394,23 @@ async fn stream_into_pipe_with_resume(
                             resp = v;
                             break;
                         }
+                        Ok(v) if v.status() == reqwest::StatusCode::OK => {
+                            tracing::debug!(
+                                "server ignored resume range; restarting download from 0"
+                            );
+                            downloaded = 0;
+                            let _ = tokio::fs::remove_file(spool_path).await;
+                            resp = HTTP_CLIENT
+                                .get(url)
+                                .send()
+                                .await
+                                .and_then(|v| v.error_for_status())
+                                .map_err(|e| {
+                                    tracing::error!("failed to download runtime archive");
+                                    tracing::error!("{e:?}");
+                                })?;
+                            break;
+                        }
                         Ok(v) => {
                             tracing::error!("server did not honor resume range: {}", v.status());
                             return Err(());
@@ -528,14 +434,22 @@ async fn stream_response_body(
     url: &str,
     resp: &mut reqwest::Response,
     file: &mut tokio::fs::File,
-    writer: &mut (impl tokio::io::AsyncWrite + Unpin),
     downloaded: &mut u64,
     caps: DownloadCaps,
     progress: Option<&indicatif::ProgressBar>,
 ) -> Result<(), ()> {
-    while let Some(chunk) = resp.chunk().await.map_err(|e| {
-        tracing::error!("failed to read download chunk: {e:?}");
-    })? {
+    loop {
+        let chunk = match resp.chunk().await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(e) => {
+                // Transient HTTP/2 resets happen in the wild (e.g. CDN/proxy).
+                // Treat as retryable so the caller can resume via Range.
+                tracing::debug!("failed to read download chunk: {e:?}");
+                return Err(());
+            }
+        };
+
         *downloaded = downloaded.saturating_add(chunk.len() as u64);
         if *downloaded > caps.max_download {
             tracing::error!("refusing to download {url}: exceeded size cap");
@@ -544,9 +458,6 @@ async fn stream_response_body(
 
         file.write_all(&chunk).await.map_err(|e| {
             tracing::error!("failed writing download chunk: {e}");
-        })?;
-        writer.write_all(&chunk).await.map_err(|e| {
-            tracing::error!("failed piping download chunk: {e}");
         })?;
 
         if let Some(pb) = progress {
@@ -661,37 +572,24 @@ async fn download_tarball_and_extract(
 
     let archive_path = spool_dir.join(format!("{}.tar.gz", hash_url_for_filename(url)));
 
-    let (reader, download_task) =
-        resumable_download_pipe(url, &archive_path, DownloadCaps::DEFAULT, progress.clone())
-            .await?;
-
-    let dest = dest.to_path_buf();
-    let unpack_task = tokio::task::spawn_blocking(move || {
-        let reader = SyncIoBridge::new(reader);
-        unpack_tarball_gz(reader, &dest)
-    });
-
-    let (download_res, unpack_res) = tokio::join!(download_task, unpack_task);
-
-    download_res
-        .map_err(|e| {
-            tracing::error!("failed to join download task: {e}");
-        })?
-        .map_err(|_| {
-            tracing::error!("download failed");
-        })?;
+    download_with_resume(url, &archive_path, DownloadCaps::DEFAULT, progress.clone()).await?;
 
     if let Some(pb) = &progress {
-        pb.set_message("Extracting".to_string());
+        pb.set_message("Extracting...".to_string());
     }
 
-    unpack_res
-        .map_err(|e| {
-            tracing::error!("failed to join unpack task: {e}");
-        })?
-        .map_err(|_| {
-            tracing::error!("failed to unpack tarball");
-        })?;
+    let dest = dest.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let file = std::fs::File::open(&archive_path).map_err(|_| ())?;
+        unpack_tarball_gz(file, &dest)
+    })
+    .await
+    .map_err(|e| {
+        tracing::error!("failed to join unpack task: {e}");
+    })?
+    .map_err(|_| {
+        tracing::error!("failed to unpack tarball");
+    })?;
 
     if let Some(pb) = progress {
         pb.finish_with_message("Installed");
@@ -743,103 +641,98 @@ async fn download_zip_and_extract(
 
     let archive_path = spool_dir.join(format!("{}.zip", hash_url_for_filename(url)));
 
-    let (reader, download_task) =
-        resumable_download_pipe(url, &archive_path, DownloadCaps::DEFAULT, progress.clone())
-            .await?;
+    download_with_resume(url, &archive_path, DownloadCaps::DEFAULT, progress.clone()).await?;
 
-    // Zip stream reader is async, so extract on async task.
+    if let Some(pb) = &progress {
+        pb.set_message("Extracting...".to_string());
+    }
+
+    let archive_path = archive_path.to_path_buf();
     let dest = dest.to_path_buf();
-    let unpack_task = tokio::spawn(async move {
-        let reader = BufReader::new(reader);
-        let mut zip = async_zip::base::read::stream::ZipFileReader::with_tokio(reader);
+    tokio::task::spawn_blocking(move || {
+        use std::io::{Read as _, Write as _};
 
         // basic DoS protection
         const MAX_ENTRY_UNCOMPRESSED: u64 = DOWNLOAD_CAP_BYTES;
         const MAX_TOTAL_UNCOMPRESSED: u64 = DOWNLOAD_CAP_BYTES;
+
+        let file = std::fs::File::open(&archive_path).map_err(|e| {
+            tracing::error!("failed to open zip {}: {e}", archive_path.display());
+        })?;
+        let reader = std::io::BufReader::new(file);
+
+        let mut zip = zip::ZipArchive::new(reader).map_err(|e| {
+            tracing::error!("failed to read zip archive: {e}");
+        })?;
+
         let mut total_uncompressed = 0u64;
 
-        while let Some(entry) = zip.next_with_entry().await.map_err(|e| {
-            tracing::error!("failed reading zip entry: {e:?}");
-        })? {
-            let filename = entry.reader().entry().filename().as_str().map_err(|_| ())?;
-            let out_path = safe_join_zip_path(&dest, filename)?;
+        for i in 0..zip.len() {
+            let mut entry = zip.by_index(i).map_err(|e| {
+                tracing::error!("failed reading zip entry: {e}");
+            })?;
 
-            if filename.ends_with('/') {
-                tokio::fs::create_dir_all(&out_path).await.map_err(|e| {
+            let name = entry.name().to_string();
+            let out_path = safe_join_zip_path(&dest, &name)?;
+
+            if name.ends_with('/') {
+                std::fs::create_dir_all(&out_path).map_err(|e| {
                     tracing::error!("failed creating dir {}: {e}", out_path.display());
-                })?;
-                zip = entry.skip().await.map_err(|e| {
-                    tracing::error!("failed skipping zip dir entry: {e:?}");
                 })?;
                 continue;
             }
 
             if let Some(parent) = out_path.parent() {
-                tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                std::fs::create_dir_all(parent).map_err(|e| {
                     tracing::error!("failed creating parent dir {}: {e}", parent.display());
                 })?;
             }
 
-            let mut file = tokio::fs::File::create(&out_path).await.map_err(|e| {
+            // Guard against maliciously large entries.
+            let mut written_for_entry = 0u64;
+            let mut out = std::fs::File::create(&out_path).map_err(|e| {
                 tracing::error!("failed creating file {}: {e}", out_path.display());
             })?;
 
             let mut buf = [0u8; 32 * 1024];
-            let mut entry_ref = entry.reader_mut();
-            let mut written_for_entry = 0u64;
-
             loop {
-                let n = entry_ref.read(&mut buf).await.map_err(|e| {
+                let n = entry.read(&mut buf).map_err(|e| {
                     tracing::error!("failed reading zip data: {e}");
                 })?;
                 if n == 0 {
                     break;
                 }
+
                 written_for_entry = written_for_entry.saturating_add(n as u64);
                 if written_for_entry > MAX_ENTRY_UNCOMPRESSED {
                     tracing::error!("zip entry exceeds size cap");
                     return Err(());
                 }
+
                 total_uncompressed = total_uncompressed.saturating_add(n as u64);
                 if total_uncompressed > MAX_TOTAL_UNCOMPRESSED {
                     tracing::error!("zip total exceeds size cap");
                     return Err(());
                 }
 
-                file.write_all(&buf[..n]).await.map_err(|e| {
+                out.write_all(&buf[..n]).map_err(|e| {
                     tracing::error!("failed writing zip data: {e}");
                 })?;
             }
 
-            zip = entry.done().await.map_err(|e| {
-                tracing::error!("failed finishing zip entry: {e:?}");
-            })?;
+            // Ensure we fully consume any remaining compressed data and land on a sane boundary.
+            let _ = entry.seek(std::io::SeekFrom::Current(0));
         }
 
         Ok::<(), ()>(())
-    });
-
-    let (download_res, unpack_res) = tokio::join!(download_task, unpack_task);
-
-    download_res
-        .map_err(|e| {
-            tracing::error!("failed to join download task: {e}");
-        })?
-        .map_err(|_| {
-            tracing::error!("download failed");
-        })?;
-
-    if let Some(pb) = &progress {
-        pb.set_message("Extracting".to_string());
-    }
-
-    unpack_res
-        .map_err(|e| {
-            tracing::error!("failed to join unpack task: {e}");
-        })?
-        .map_err(|_| {
-            tracing::error!("failed to unpack zip");
-        })?;
+    })
+    .await
+    .map_err(|e| {
+        tracing::error!("failed to join unpack task: {e}");
+    })?
+    .map_err(|_| {
+        tracing::error!("failed to unpack zip");
+    })?;
 
     if let Some(pb) = progress {
         pb.finish_with_message("Installed");
