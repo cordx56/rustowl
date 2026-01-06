@@ -719,9 +719,6 @@ async fn download_zip_and_extract(
                     tracing::error!("failed writing zip data: {e}");
                 })?;
             }
-
-            // Ensure we fully consume any remaining compressed data and land on a sane boundary.
-            let _ = entry.seek(std::io::SeekFrom::Current(0));
         }
 
         Ok::<(), ()>(())
