@@ -85,6 +85,9 @@ jobs:
             target: x86_64-pc-windows-msvc
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
