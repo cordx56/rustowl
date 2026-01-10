@@ -835,9 +835,6 @@ mod tests {
 
         std::fs::write(&cache_path, serde_json::to_string(&cache).unwrap()).unwrap();
 
-        if !rustowl::cache::is_cache() {
-            return;
-        }
         let loaded = super::get_cache(krate).expect("cache enabled");
         assert!(
             loaded.entries.is_empty(),
