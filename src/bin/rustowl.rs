@@ -216,15 +216,12 @@ mod tests {
         assert_eq!(level, args.verbosity.tracing_level_filter());
     }
 
-    #[test]
-    fn handle_no_command_prints_version_for_long_flag() {
-        miri_async_test!(async {
-            let args = rustowl::cli::Cli::parse_from(["rustowl", "--version"]);
+    miri_async_test!(handle_no_command_prints_version_for_long_flag, async {
+        let args = rustowl::cli::Cli::parse_from(["rustowl", "--version"]);
 
-            let output = gag::BufferRedirect::stdout().unwrap();
-            super::handle_no_command(args, false, 1).await;
+        let output = gag::BufferRedirect::stdout().unwrap();
+        super::handle_no_command(args, false, 1).await;
 
-            drop(output);
-        });
-    }
+        drop(output);
+    });
 }

@@ -35,12 +35,16 @@ path = "src/lib.rs"
 
     // Prefer the instrumented rustowlc that `cargo llvm-cov` builds under `target/llvm-cov-target`.
     // Fall back to the normal `target/debug` binary for non-coverage runs.
-    let instrumented_rustowlc_path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("target/llvm-cov-target/debug/rustowlc");
+    let exe = std::env::consts::EXE_SUFFIX;
+
+    // Prefer the instrumented rustowlc that `cargo llvm-cov` builds under `target/llvm-cov-target`.
+    // Fall back to the normal `target/debug` binary for non-coverage runs.
+    let instrumented_rustowlc_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(format!("target/llvm-cov-target/debug/rustowlc{exe}"));
     let rustowlc_path = if instrumented_rustowlc_path.is_file() {
         instrumented_rustowlc_path
     } else {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("target/debug/rustowlc")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("target/debug/rustowlc{exe}"))
     };
     assert!(
         rustowlc_path.is_file(),

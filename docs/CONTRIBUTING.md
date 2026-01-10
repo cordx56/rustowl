@@ -116,14 +116,11 @@ Miri doesn't support `#[tokio::test]` directly. RustOwl provides the `miri_async
 ```rust
 use crate::miri_async_test;
 
-#[test]
-fn test_async_operation() {
-    miri_async_test!(async {
-        // Your async test code here
-        let result = some_async_function().await;
-        assert!(result.is_ok());
-    });
-}
+miri_async_test!(test_async_operation, async {
+    // Your async test code here
+    let result = some_async_function().await;
+    assert!(result.is_ok());
+});
 ```
 
 The macro creates a tokio runtime with `enable_all()` and runs the async block. See the [Miri issue](https://github.com/rust-lang/miri/issues/602#issuecomment-884019764) for background.
@@ -137,24 +134,20 @@ The macro creates a tokio runtime with `enable_all()` and runs the async block. 
 mod tests {
     use crate::miri_async_test;
 
-    #[test]
-    fn test_with_io() {
-        miri_async_test!(async {
-            // Test code using tokio::fs, networking, etc.
-        });
-    }
+    miri_async_test!(test_with_io, async {
+        // Test code using tokio::fs, networking, etc.
+    });
 }
 ```
 
-For individual tests that cannot run under Miri but don't need the IO driver, use conditional compilation:
+For individual tests that cannot run under Miri, prefer `miri_async_test!` (it automatically applies `#[cfg_attr(miri, ignore)]`):
 
 ```rust
-#[cfg_attr(not(miri), tokio::test)]
-#[cfg_attr(miri, test)]
-#[cfg_attr(miri, ignore)]
-async fn test_requiring_external_io() {
+use crate::miri_async_test;
+
+miri_async_test!(test_requiring_external_io, async {
     // Test code
-}
+});
 ```
 
 ### Security and Memory Safety Testing

@@ -161,13 +161,18 @@ pub fn initialize_logging(level: LevelFilter) {
 /// See: <https://github.com/rust-lang/miri/issues/602#issuecomment-884019764>
 #[macro_export]
 macro_rules! miri_async_test {
-    ($body:expr) => {{
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on($body)
-    }};
+    ($name:ident, $body:expr) => {
+        #[cfg_attr(miri, test)]
+        #[cfg_attr(miri, ignore)]
+        #[cfg_attr(not(miri), test)]
+        fn $name() {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on($body)
+        }
+    };
 }
 
 // Miri tests finding UB (Undefined Behaviour)

@@ -1173,37 +1173,34 @@ mod tests {
 
     use crate::miri_async_test;
 
-    #[test]
-    fn setup_cargo_command_encodes_threads_and_sysroot() {
-        miri_async_test!(async {
-            let sysroot = get_sysroot().await;
-            let cmd = setup_cargo_command(4).await;
+    miri_async_test!(setup_cargo_command_encodes_threads_and_sysroot, async {
+        let sysroot = get_sysroot().await;
+        let cmd = setup_cargo_command(4).await;
 
-            let envs: BTreeMap<String, String> = cmd
-                .as_std()
-                .get_envs()
-                .filter_map(|(key, value)| {
-                    Some((
-                        key.to_string_lossy().to_string(),
-                        value?.to_string_lossy().to_string(),
-                    ))
-                })
-                .collect();
+        let envs: BTreeMap<String, String> = cmd
+            .as_std()
+            .get_envs()
+            .filter_map(|(key, value)| {
+                Some((
+                    key.to_string_lossy().to_string(),
+                    value?.to_string_lossy().to_string(),
+                ))
+            })
+            .collect();
 
-            assert_eq!(
-                envs.get("RUSTC_WORKSPACE_WRAPPER").map(String::as_str),
-                envs.get("RUSTC").map(String::as_str)
-            );
+        assert_eq!(
+            envs.get("RUSTC_WORKSPACE_WRAPPER").map(String::as_str),
+            envs.get("RUSTC").map(String::as_str)
+        );
 
-            let encoded = envs
-                .get("CARGO_ENCODED_RUSTFLAGS")
-                .expect("CARGO_ENCODED_RUSTFLAGS set by setup_cargo_command");
-            assert!(encoded.contains("-Z\u{1f}threads=4\u{1f}"));
-            assert!(encoded.contains(&format!("--sysroot={}", sysroot.display())));
+        let encoded = envs
+            .get("CARGO_ENCODED_RUSTFLAGS")
+            .expect("CARGO_ENCODED_RUSTFLAGS set by setup_cargo_command");
+        assert!(encoded.contains("-Z\u{1f}threads=4\u{1f}"));
+        assert!(encoded.contains(&format!("--sysroot={}", sysroot.display())));
 
-            assert_eq!(envs.get("RUSTC_BOOTSTRAP").map(String::as_str), Some("1"));
-        });
-    }
+        assert_eq!(envs.get("RUSTC_BOOTSTRAP").map(String::as_str), Some("1"));
+    });
 
     #[test]
     fn setup_cargo_command_preserves_user_rustflags_in_encoded_string() {

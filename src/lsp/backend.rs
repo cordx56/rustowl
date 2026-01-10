@@ -697,9 +697,9 @@ mod tests {
 
     use crate::miri_async_test;
 
-    #[test]
-    fn initialize_sets_work_done_progress_and_accepts_workspace_folder() {
-        miri_async_test!(async {
+    miri_async_test!(
+        initialize_sets_work_done_progress_and_accepts_workspace_folder,
+        async {
             let dir = tmp_workspace();
             let _lib = write_test_workspace(&dir, "pub fn f() -> i32 { 1 }\n").await;
 
@@ -710,12 +710,12 @@ mod tests {
             assert!(init.capabilities.text_document_sync.is_some());
             assert!(*backend.work_done_progress.read().await);
             assert!(!backend.analyzers.read().await.is_empty());
-        });
-    }
+        }
+    );
 
-    #[test]
-    fn did_open_caches_doc_and_cursor_handles_empty_analysis() {
-        miri_async_test!(async {
+    miri_async_test!(
+        did_open_caches_doc_and_cursor_handles_empty_analysis,
+        async {
             let dir = tmp_workspace();
             let lib = write_test_workspace(&dir, "pub fn f() -> i32 { 1 }\n").await;
 
@@ -749,12 +749,12 @@ mod tests {
 
             assert_eq!(decorations.path.as_deref(), Some(lib.as_path()));
             assert!(decorations.decorations.is_empty());
-        });
-    }
+        }
+    );
 
-    #[test]
-    fn did_change_drops_open_doc_on_invalid_edit_and_resets_state() {
-        miri_async_test!(async {
+    miri_async_test!(
+        did_change_drops_open_doc_on_invalid_edit_and_resets_state,
+        async {
             let dir = tmp_workspace();
             let lib = write_test_workspace(&dir, "pub fn f() -> i32 { 1 }\n").await;
 
@@ -802,18 +802,14 @@ mod tests {
 
             assert!(!backend.open_docs.read().await.contains_key(&lib));
             assert!(backend.analyzed.read().await.is_none());
-        });
-    }
+        }
+    );
 
-    #[test]
-    fn check_report_handles_invalid_paths() {
-        miri_async_test!(async {
-            let report =
-                Backend::check_report_with_options("/this/path/does/not/exist", false, false, 1)
-                    .await;
-            assert!(!report.ok);
-            assert_eq!(report.checked_targets, 0);
-            assert!(report.total_targets.is_none());
-        });
-    }
+    miri_async_test!(check_report_handles_invalid_paths, async {
+        let report =
+            Backend::check_report_with_options("/this/path/does/not/exist", false, false, 1).await;
+        assert!(!report.ok);
+        assert_eq!(report.checked_targets, 0);
+        assert!(report.total_targets.is_none());
+    });
 }
