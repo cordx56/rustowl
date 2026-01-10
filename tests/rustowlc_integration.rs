@@ -202,8 +202,9 @@ path = "src/lib.rs"
             || output_contents.contains("rustowlc_integ"),
         "expected crate name in output"
     );
+    // Windows emits backslashes in paths; accept either separator.
     assert!(
-        output_contents.contains("src/lib.rs"),
+        output_contents.contains("src/lib.rs") || output_contents.contains("src\\lib.rs"),
         "expected output to mention src/lib.rs; output was:\n{output_contents}"
     );
 }
