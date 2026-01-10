@@ -162,9 +162,8 @@ pub fn initialize_logging(level: LevelFilter) {
 #[macro_export]
 macro_rules! miri_async_test {
     ($name:ident, $body:expr) => {
-        #[cfg_attr(miri, test)]
+        #[test]
         #[cfg_attr(miri, ignore)]
-        #[cfg_attr(not(miri), test)]
         fn $name() {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()

@@ -184,6 +184,7 @@ mod unit_tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn unpack_tarball_gz_skips_symlinks() {
         use flate2::Compression;
         use flate2::write::GzEncoder;
