@@ -23,20 +23,12 @@ jobs:
           - language: javascript-typescript
             build-mode: none
           - language: rust
-            build-mode: autobuild
+            build-mode: none
     steps:
       - name: Checkout repository
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - name: Get Rust version
-        shell: bash
-        run: |
-          echo RUSTUP_TOOLCHAIN=$(cat ./scripts/build/channel) >> $GITHUB_ENV
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
       - name: Initialize CodeQL
         uses: github/codeql-action/init@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4.31.9
         with:
