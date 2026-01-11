@@ -94,11 +94,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@a0fb4417e3fd78cb4372c9a930052558595ed50e # v2.65.14
+        uses: taiki-e/install-action@3522286d40783523f9c7880e33f785905b4c20d0 # v2.66.1
         with:
           tool: cargo-nextest
       - name: Cache dependencies
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - name: Install MSVC on windows
+        if: matrix.os == 'windows-11-arm'
+        uses: TheMrMilchmann/setup-msvc-dev@79dac248aac9d0059f86eae9d8b5bfab4e95e97c # v4.0.0
       - name: Run tests with nextest
         run: ./scripts/build/toolchain cargo nextest run
       - name: Run doc tests
@@ -142,4 +145,4 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - uses: EmbarkStudios/cargo-deny-action@76cd80eb775d7bbbd2d80292136d74d39e1b4918 # v2.0.14
+      - uses: EmbarkStudios/cargo-deny-action@3fd3802e88374d3fe9159b834c7714ec57d6c979 # v2.0.15
