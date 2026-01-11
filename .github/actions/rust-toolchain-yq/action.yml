@@ -16,26 +16,47 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Install yq (Ubuntu)
-      if: runner.os == 'Linux'
+    - name: Install yq (mikefarah)
       shell: bash
       run: |
-        sudo apt-get update
-        sudo apt-get install -y yq
+        set -euo pipefail
 
-    - name: Install yq (macOS)
-      if: runner.os == 'macOS'
-      shell: bash
-      run: |
-        brew update
-        brew install yq
+        version="v4.50.1"
 
-    - name: Install yq (Windows)
-      if: runner.os == 'Windows'
-      shell: bash
-      run: |
-        choco install -y yq
+        os="${RUNNER_OS}"     # Linux|macOS|Windows
+        arch="${RUNNER_ARCH}" # X64|ARM64
 
+        case "${os}" in
+          Linux) platform="linux"; ext="" ;;
+          macOS) platform="darwin"; ext="" ;;
+          Windows) platform="windows"; ext=".exe" ;;
+          *) echo "Unsupported runner OS: ${os}" >&2; exit 1 ;;
+        esac
+
+        case "${arch}" in
+          X64) cpu="amd64" ;;
+          ARM64) cpu="arm64" ;;
+          *) echo "Unsupported runner arch: ${arch}" >&2; exit 1 ;;
+        esac
+
+        url="https://github.com/mikefarah/yq/releases/download/${version}/yq_${platform}_${cpu}${ext}"
+
+        install_dir="${RUNNER_TEMP}/yq"
+        mkdir -p "${install_dir}"
+        bin="${install_dir}/yq${ext}"
+
+        echo "Downloading ${url}" >&2
+
+        if [[ "${os}" == "Windows" ]]; then
+          powershell -NoProfile -Command "Invoke-WebRequest -Uri '${url}' -OutFile '${bin}'"
+        else
+          curl -fsSL "${url}" -o "${bin}"
+        fi
+
+        chmod +x "${bin}" || true
+        echo "${install_dir}" >> "${GITHUB_PATH}"
+
+        yq --version
     - name: Get toolchain from rust-toolchain.toml
       id: get_toolchain
       shell: bash
@@ -46,7 +67,6 @@ runs:
           exit 1
         fi
         echo "toolchain=${toolchain}" >> "${GITHUB_OUTPUT}"
-
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
       with:
