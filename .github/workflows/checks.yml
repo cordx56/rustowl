@@ -8,6 +8,9 @@ permissions:
   contents: read
 env:
   CARGO_TERM_COLOR: always
+defaults:
+  run:
+    shell: bash
 jobs:
   lint:
     name: Lint (${{ matrix.target }})
