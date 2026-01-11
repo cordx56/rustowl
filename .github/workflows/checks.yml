@@ -98,7 +98,7 @@ jobs:
         run: ./scripts/build/toolchain echo "Successfully installed runtime dependencies"
         shell: bash
       - name: Run tests with nextest
-        run: ./scripts/build/toolchain cargo nextest run
+        run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
       - name: Run doc tests
         run: ./scripts/build/toolchain cargo test --doc
       - name: Build release
