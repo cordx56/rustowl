@@ -1,0 +1,55 @@
+name: "Rust toolchain (from rust-toolchain.toml)"
+description: "Installs yq, reads rust-toolchain.toml, and installs that Rust toolchain via dtolnay/rust-toolchain."
+inputs:
+  targets:
+    description: "Comma-separated Rust target triples to install"
+    required: false
+    default: ""
+  components:
+    description: "Comma-separated Rust components to install"
+    required: false
+    default: ""
+outputs:
+  toolchain:
+    description: "Resolved toolchain channel"
+    value: ${{ steps.get_toolchain.outputs.toolchain }}
+runs:
+  using: "composite"
+  steps:
+    - name: Install yq (Ubuntu)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y yq
+
+    - name: Install yq (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew update
+        brew install yq
+
+    - name: Install yq (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        choco install -y yq
+
+    - name: Get toolchain from rust-toolchain.toml
+      id: get_toolchain
+      shell: bash
+      run: |
+        toolchain="$(yq -r '.toolchain.channel' rust-toolchain.toml)"
+        if [[ -z "${toolchain}" || "${toolchain}" == "null" ]]; then
+          echo "Could not determine toolchain from rust-toolchain.toml" >&2
+          exit 1
+        fi
+        echo "toolchain=${toolchain}" >> "${GITHUB_OUTPUT}"
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
+      with:
+        toolchain: ${{ steps.get_toolchain.outputs.toolchain }}
+        targets: ${{ inputs.targets }}
+        components: ${{ inputs.components }}
