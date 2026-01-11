@@ -35,7 +35,8 @@ host_tuple() {
 		# On Windows CI (MSYS2/Git-Bash), `uname -m` often reports the MSYS
 		# environment (e.g. x86_64) even on Windows ARM64. Prefer Windows-provided
 		# env vars when available.
-		arch_hint="${PROCESSOR_ARCHITECTURE:-${MSYSTEM_CARCH:-}}"
+		# Prefer signals from GitHub Actions runner / WOW env.
+		arch_hint="${RUNNER_ARCH:-${PROCESSOR_ARCHITEW6432:-${PROCESSOR_ARCHITECTURE:-${MSYSTEM_CARCH:-}}}}"
 		case "${arch_hint}" in
 		ARM64 | arm64 | aarch64)
 			TOOLCHAIN_ARCH="aarch64"
