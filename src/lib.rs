@@ -160,7 +160,7 @@ pub fn initialize_logging(level: LevelFilter) {
 ///
 /// See: <https://github.com/rust-lang/miri/issues/602#issuecomment-884019764>
 #[macro_export]
-macro_rules! miri_async_test {
+macro_rules! async_test {
     ($name:ident, $body:expr) => {
         #[test]
         #[cfg_attr(miri, ignore)]

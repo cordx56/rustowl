@@ -199,7 +199,7 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use clap::Parser;
-    use rustowl::miri_async_test;
+    use rustowl::async_test;
 
     // Command handling in this binary calls `std::process::exit`, which makes it
     // hard to test directly. Clap parsing is covered in `src/cli.rs`.
@@ -216,7 +216,7 @@ mod tests {
         assert_eq!(level, args.verbosity.tracing_level_filter());
     }
 
-    miri_async_test!(handle_no_command_prints_version_for_long_flag, async {
+    async_test!(handle_no_command_prints_version_for_long_flag, async {
         let args = rustowl::cli::Cli::parse_from(["rustowl", "--version"]);
 
         let output = gag::BufferRedirect::stdout().unwrap();

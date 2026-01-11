@@ -111,12 +111,12 @@ This script performs:
 
 ### Writing Miri-Compatible Async Tests
 
-Miri doesn't support `#[tokio::test]` directly. RustOwl provides the `miri_async_test!` macro for writing async tests that work with both regular test runs and Miri:
+Miri doesn't support `#[tokio::test]` directly. RustOwl provides the `async_test!` macro for writing async tests that work with both regular test runs and Miri:
 
 ```rust
-use crate::miri_async_test;
+use crate::async_test;
 
-miri_async_test!(test_async_operation, async {
+async_test!(test_async_operation, async {
     // Your async test code here
     let result = some_async_function().await;
     assert!(result.is_ok());
@@ -126,26 +126,26 @@ miri_async_test!(test_async_operation, async {
 The macro creates a tokio runtime with `enable_all()` and runs the async block. See the [Miri issue](https://github.com/rust-lang/miri/issues/602#issuecomment-884019764) for background.
 
 > [!IMPORTANT]
-> The `miri_async_test!` macro enables tokio's IO driver, which uses platform-specific syscalls (`kqueue` on macOS, `epoll` on Linux) that Miri doesn't support. For tests that require the IO driver (e.g., LSP backend tests, networking, file system operations via `tokio::fs`), exclude the entire test module from Miri:
+> The `async_test!` macro enables tokio's IO driver, which uses platform-specific syscalls (`kqueue` on macOS, `epoll` on Linux) that Miri doesn't support. For tests that require the IO driver (e.g., LSP backend tests, networking, file system operations via `tokio::fs`), exclude the entire test module from Miri:
 
 ```rust
 // Tests requiring tokio IO driver - excluded from Miri
 #[cfg(all(test, not(miri)))]
 mod tests {
-    use crate::miri_async_test;
+    use crate::async_test;
 
-    miri_async_test!(test_with_io, async {
+    async_test!(test_with_io, async {
         // Test code using tokio::fs, networking, etc.
     });
 }
 ```
 
-For individual tests that cannot run under Miri, prefer `miri_async_test!` (it automatically applies `#[cfg_attr(miri, ignore)]`):
+For individual tests that cannot run under Miri, prefer `async_test!` (it automatically applies `#[cfg_attr(miri, ignore)]`):
 
 ```rust
-use crate::miri_async_test;
+use crate::async_test;
 
-miri_async_test!(test_requiring_external_io, async {
+async_test!(test_requiring_external_io, async {
     // Test code
 });
 ```

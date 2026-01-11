@@ -695,9 +695,9 @@ mod tests {
         backend.initialize(params).await.expect("initialize")
     }
 
-    use crate::miri_async_test;
+    use crate::async_test;
 
-    miri_async_test!(
+    async_test!(
         initialize_sets_work_done_progress_and_accepts_workspace_folder,
         async {
             let dir = tmp_workspace();
@@ -713,7 +713,7 @@ mod tests {
         }
     );
 
-    miri_async_test!(
+    async_test!(
         did_open_caches_doc_and_cursor_handles_empty_analysis,
         async {
             let dir = tmp_workspace();
@@ -752,7 +752,7 @@ mod tests {
         }
     );
 
-    miri_async_test!(
+    async_test!(
         did_change_drops_open_doc_on_invalid_edit_and_resets_state,
         async {
             let dir = tmp_workspace();
@@ -805,7 +805,7 @@ mod tests {
         }
     );
 
-    miri_async_test!(check_report_handles_invalid_paths, async {
+    async_test!(check_report_handles_invalid_paths, async {
         let report =
             Backend::check_report_with_options("/this/path/does/not/exist", false, false, 1).await;
         assert!(!report.ok);

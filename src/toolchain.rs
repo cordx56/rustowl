@@ -1172,9 +1172,9 @@ mod tests {
         }
     }
 
-    use crate::miri_async_test;
+    use crate::async_test;
 
-    miri_async_test!(setup_cargo_command_encodes_threads_and_sysroot, async {
+    async_test!(setup_cargo_command_encodes_threads_and_sysroot, async {
         let sysroot = get_sysroot().await;
         let cmd = setup_cargo_command(4).await;
 

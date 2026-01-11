@@ -381,9 +381,9 @@ impl AnalyzeEventIter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::miri_async_test;
+    use crate::async_test;
 
-    miri_async_test!(
+    async_test!(
         new_accepts_single_rust_file_and_has_no_workspace_path,
         async {
             let dir = tempfile::tempdir().unwrap();
@@ -396,7 +396,7 @@ mod tests {
         }
     );
 
-    miri_async_test!(new_rejects_invalid_paths, async {
+    async_test!(new_rejects_invalid_paths, async {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("not_a_rust_project");
         std::fs::create_dir_all(&target).unwrap();
@@ -405,7 +405,7 @@ mod tests {
         assert!(err.to_string().contains("Invalid analysis target"));
     });
 
-    miri_async_test!(analyze_single_file_yields_analyzed_event, async {
+    async_test!(analyze_single_file_yields_analyzed_event, async {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("lib.rs");
         std::fs::write(&target, "pub fn f() -> i32 { 1 }\n").unwrap();
