@@ -99,11 +99,6 @@ jobs:
           tool: cargo-nextest
       - name: Cache dependencies
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
-      - name: Install MSVC on windows
-        if: matrix.os == 'windows-11-arm'
-        uses: TheMrMilchmann/setup-msvc-dev@79dac248aac9d0059f86eae9d8b5bfab4e95e97c # v4.0.0
-        with:
-          arch: amd64_arm64
       - name: Run tests with nextest
         run: ./scripts/build/toolchain cargo nextest run
       - name: Run doc tests
