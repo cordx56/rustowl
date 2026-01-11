@@ -102,6 +102,8 @@ jobs:
       - name: Install MSVC on windows
         if: matrix.os == 'windows-11-arm'
         uses: TheMrMilchmann/setup-msvc-dev@79dac248aac9d0059f86eae9d8b5bfab4e95e97c # v4.0.0
+        with:
+          arch: amd64_arm64
       - name: Run tests with nextest
         run: ./scripts/build/toolchain cargo nextest run
       - name: Run doc tests
