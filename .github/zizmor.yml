@@ -12,3 +12,6 @@ rules:
   template-injection:
     ignore:
       - build.yml
+  github-env:
+    ignore:
+      - action.yml
