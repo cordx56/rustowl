@@ -98,15 +98,15 @@ jobs:
         run: ./scripts/build/toolchain echo "Successfully installed runtime dependencies"
         shell: bash
       - name: Run tests with nextest
-        run: cargo nextest run
+        run: ./scripts/build/toolchain cargo nextest run
       - name: Run doc tests
-        run: cargo test --doc
+        run: ./scripts/build/toolchain cargo test --doc
       - name: Build release
         if: matrix.os != 'windows-11-arm'
-        run: cargo build --release
+        run: ./scripts/build/toolchain cargo build --release
       - name: Build Release (Windows ARM)
         if: matrix.os == 'windows-11-arm'
-        run: cargo build --release --profile arm-windows-release
+        run: ./scripts/build/toolchain cargo build --release --profile arm-windows-release
       - name: Install binary
         run: cargo install --path .
       - name: Test rustowl check
