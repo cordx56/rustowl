@@ -53,15 +53,22 @@ runs:
           curl -fsSL "${url}" -o "${bin}"
         fi
 
-        chmod +x "${bin}" || true
+        if [[ "${os}" != "Windows" ]]; then
+          chmod +x "${bin}"
+        fi
+
         echo "${install_dir}" >> "${GITHUB_PATH}"
 
-        yq --version
+        "${bin}" --version
     - name: Get toolchain from rust-toolchain.toml
       id: get_toolchain
       shell: bash
       run: |
-        toolchain="$(yq -r '.toolchain.channel' rust-toolchain.toml)"
+        ext=""
+        if [[ "${RUNNER_OS}" == "Windows" ]]; then
+          ext=".exe"
+        fi
+        toolchain="$(${RUNNER_TEMP}/yq/yq${ext} -r '.toolchain.channel' rust-toolchain.toml)"
         if [[ -z "${toolchain}" || "${toolchain}" == "null" ]]; then
           echo "Could not determine toolchain from rust-toolchain.toml" >&2
           exit 1
