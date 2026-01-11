@@ -32,10 +32,13 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
+      - name: Get toolchain
+        run: |
+          echo "RUSTUP_TOOLCHAIN=$(yq -r '.toolchain.channel' rust-toolchain.toml)" >> $GITHUB_ENV
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
         with:
-          toolchain: nightly
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
           targets: ${{ matrix.target }}
           components: clippy,llvm-tools,rust-src,rustc-dev
       - name: Cache dependencies
@@ -52,10 +55,13 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
+      - name: Get toolchain
+        run: |
+          echo "RUSTUP_TOOLCHAIN=$(yq -r '.toolchain.channel' rust-toolchain.toml)" >> $GITHUB_ENV
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
         with:
-          toolchain: nightly
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
           components: rustfmt
       - name: Check formatting
         run: cargo fmt --check --all
@@ -82,6 +88,15 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
+      - name: Get toolchain
+        run: |
+          echo "RUSTUP_TOOLCHAIN=$(yq -r '.toolchain.channel' rust-toolchain.toml)" >> $GITHUB_ENV
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
+        with:
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+          components: llvm-tools,rust-src,rustc-dev
       - name: Install cargo-nextest
         uses: taiki-e/install-action@3522286d40783523f9c7880e33f785905b4c20d0 # v2.66.1
         with:
