@@ -35,6 +35,8 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
+      - name: Install yq
+        uses: dcarbone/install-yq-action@4075b4dca348d74bd83f2bf82d30f25d7c54539b # v1.3.1
       - name: Get toolchain
         run: |
           echo "RUSTUP_TOOLCHAIN=$(yq -r '.toolchain.channel' rust-toolchain.toml)" >> $GITHUB_ENV
@@ -58,6 +60,8 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
+      - name: Install yq
+        uses: dcarbone/install-yq-action@4075b4dca348d74bd83f2bf82d30f25d7c54539b # v1.3.1
       - name: Get toolchain
         run: |
           echo "RUSTUP_TOOLCHAIN=$(yq -r '.toolchain.channel' rust-toolchain.toml)" >> $GITHUB_ENV
@@ -91,6 +95,8 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
+      - name: Install yq
+        uses: dcarbone/install-yq-action@4075b4dca348d74bd83f2bf82d30f25d7c54539b # v1.3.1
       - name: Get toolchain
         run: |
           echo "RUSTUP_TOOLCHAIN=$(yq -r '.toolchain.channel' rust-toolchain.toml)" >> $GITHUB_ENV
