@@ -1,0 +1,95 @@
+[package]
+name = "rustowl"
+version = "1.0.0-rc.1"
+edition.workspace = true
+description = "Visualize Ownership and Lifetimes in Rust"
+documentation.workspace = true
+readme = "../../README.md"
+repository.workspace = true
+license.workspace = true
+keywords = ["lifetime", "lsp", "ownership", "visualization"]
+categories = ["development-tools", "visualization"]
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/rustowl-{ target }{ archive-suffix }"
+pkg-fmt = "tgz"
+disabled-strategies = ["quick-install", "compile"]
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[[bench]]
+harness = false
+name = "rustowl_bench_simple"
+
+[[bench]]
+harness = false
+name = "line_col_bench"
+
+[[bench]]
+harness = false
+name = "cargo_output_parse_bench"
+
+[[bench]]
+harness = false
+name = "decos_bench"
+
+[dependencies]
+anyhow.workspace = true
+cargo_metadata.workspace = true
+clap = { workspace = true, features = ["cargo"] }
+clap_complete.workspace = true
+clap_complete_nushell.workspace = true
+clap-verbosity-flag.workspace = true
+ecow.workspace = true
+flate2.workspace = true
+foldhash.workspace = true
+indexmap.workspace = true
+indicatif.workspace = true
+memchr.workspace = true
+num_cpus.workspace = true
+process_alive.workspace = true
+rayon.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tar.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tower-lsp-server.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+divan.workspace = true
+gag.workspace = true
+rand.workspace = true
+
+[build-dependencies]
+clap.workspace = true
+clap_complete.workspace = true
+clap_complete_nushell.workspace = true
+clap_mangen.workspace = true
+clap-verbosity-flag.workspace = true
+jiff.workspace = true
+regex.workspace = true
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemalloc-sys.workspace = true
+tikv-jemallocator.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+zip.workspace = true
+
+[features]
+# Bench-only helpers used by `cargo bench` targets.
+# Off by default to avoid exposing internal APIs.
+bench = []
