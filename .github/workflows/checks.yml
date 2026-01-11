@@ -35,15 +35,15 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - name: Install yq
-        uses: dcarbone/install-yq-action@4075b4dca348d74bd83f2bf82d30f25d7c54539b # v1.3.1
       - name: Get toolchain
-        run: |
-          echo "RUSTUP_TOOLCHAIN=$(yq -r '.toolchain.channel' rust-toolchain.toml)" >> $GITHUB_ENV
+        uses: mikefarah/yq@065b200af9851db0d5132f50bc10b1406ea5c0a8 # v4.50.1
+        id: get_toolchain
+        with:
+          cmd: yq -r '.toolchain.channel' rust-toolchain.toml
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
         with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          toolchain: ${{ steps.get_toolchain.outputs.result }}
           targets: ${{ matrix.target }}
           components: clippy,llvm-tools,rust-src,rustc-dev
       - name: Cache dependencies
@@ -60,15 +60,15 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - name: Install yq
-        uses: dcarbone/install-yq-action@4075b4dca348d74bd83f2bf82d30f25d7c54539b # v1.3.1
       - name: Get toolchain
-        run: |
-          echo "RUSTUP_TOOLCHAIN=$(yq -r '.toolchain.channel' rust-toolchain.toml)" >> $GITHUB_ENV
+        uses: mikefarah/yq@065b200af9851db0d5132f50bc10b1406ea5c0a8 # v4.50.1
+        id: get_toolchain
+        with:
+          cmd: yq -r '.toolchain.channel' rust-toolchain.toml
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
         with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          toolchain: ${{ steps.get_toolchain.outputs.result }}
           components: rustfmt
       - name: Check formatting
         run: cargo fmt --check --all
@@ -95,15 +95,15 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - name: Install yq
-        uses: dcarbone/install-yq-action@4075b4dca348d74bd83f2bf82d30f25d7c54539b # v1.3.1
       - name: Get toolchain
-        run: |
-          echo "RUSTUP_TOOLCHAIN=$(yq -r '.toolchain.channel' rust-toolchain.toml)" >> $GITHUB_ENV
+        uses: mikefarah/yq@065b200af9851db0d5132f50bc10b1406ea5c0a8 # v4.50.1
+        id: get_toolchain
+        with:
+          cmd: yq -r '.toolchain.channel' rust-toolchain.toml
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
         with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          toolchain: ${{ steps.get_toolchain.outputs.result }}
           targets: ${{ matrix.target }}
           components: llvm-tools,rust-src,rustc-dev
       - name: Install cargo-nextest
