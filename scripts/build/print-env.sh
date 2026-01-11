@@ -41,7 +41,7 @@ host_tuple() {
 		ARM64 | arm64 | aarch64)
 			TOOLCHAIN_ARCH="aarch64"
 			;;
-		AMD64 | amd64 | x86_64)
+		AMD64 | X64 | amd64 | x86_64)
 			TOOLCHAIN_ARCH="x86_64"
 			;;
 		"")
