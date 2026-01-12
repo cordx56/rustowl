@@ -2,6 +2,7 @@
 resolver = "3"
 members = ["crates/*"]
 default-members = ["crates/rustowl"]
+exclude = ["perf-tests/dummy-package"]
 
 [workspace.package]
 edition = "2024"
