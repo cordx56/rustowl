@@ -97,18 +97,42 @@ jobs:
       - name: Install runtime deps
         run: ./scripts/build/toolchain echo "Successfully installed runtime dependencies"
         shell: bash
+      # `./scripts/build/toolchain` bootstraps a custom rustc sysroot + sets
+      # `RUSTC_BOOTSTRAP=rustowlc`. That setup is needed for building rustowlc,
+      # but it can break linking on windows-msvc when compiling third-party
+      # crates (missing std symbols like `std::io::stdio::stderr::INSTANCE`).
+      #
+      # Run tests/builds with the normal toolchain on Windows x86_64 MSVC.
       - name: Run tests with nextest
+        if: matrix.target != 'x86_64-pc-windows-msvc'
         run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
+      - name: Run tests with nextest (Windows x86_64)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: cargo nextest run --no-fail-fast
       - name: Run doc tests
+        if: matrix.target != 'x86_64-pc-windows-msvc'
         run: ./scripts/build/toolchain cargo test --doc
+      - name: Run doc tests (Windows x86_64)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: cargo test --doc
       - name: Build release
-        if: matrix.os != 'windows-11-arm'
+        if: matrix.os != 'windows-11-arm' && matrix.target != 'x86_64-pc-windows-msvc'
         run: ./scripts/build/toolchain cargo build --release
+      - name: Build release (Windows x86_64)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: cargo build --release
       - name: Build Release (Windows ARM)
         if: matrix.os == 'windows-11-arm'
         run: ./scripts/build/toolchain cargo build --profile arm-windows-release
       - name: Install binary
+        if: matrix.os != 'windows-11-arm' && matrix.target != 'x86_64-pc-windows-msvc'
         run: ./scripts/build/toolchain cargo install --path crates/rustowl
+      - name: Install binary (Windows x86_64)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: cargo install --path crates/rustowl
+      - name: Install binary (Windows ARM)
+        if: matrix.os == 'windows-11-arm'
+        run: ./scripts/build/toolchain cargo install --path crates/rustowl --profile arm-windows-release
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
   vscode:
