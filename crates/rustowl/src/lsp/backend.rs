@@ -709,6 +709,7 @@ mod tests {
 
             assert!(init.capabilities.text_document_sync.is_some());
             assert!(*backend.work_done_progress.read().await);
+
             assert!(!backend.analyzers.read().await.is_empty());
         }
     );

@@ -859,11 +859,6 @@ mod tests {
 
         super::write_cache(krate, &cache);
 
-        // write_cache is a no-op unless caching is enabled.
-        if !rustowl::cache::is_cache() {
-            return;
-        }
-
         let cache_dir = rustowl::cache::get_cache_path().unwrap();
         let final_path = cache_dir.join(format!("{krate}.json"));
         let temp_path = cache_dir.join(format!("{krate}.json.tmp"));

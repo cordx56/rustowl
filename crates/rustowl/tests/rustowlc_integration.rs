@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::process::Command;
 
 #[test]
@@ -33,18 +32,39 @@ path = "src/lib.rs"
     )
     .unwrap();
 
-    // Prefer the instrumented rustowlc that `cargo llvm-cov` builds under `target/llvm-cov-target`.
-    // Fall back to the normal `target/debug` binary for non-coverage runs.
+    // Prefer the instrumented rustowlc that `cargo llvm-cov` builds under
+    // `target/llvm-cov-target`. Fall back to whatever `toolchain` resolves.
     let exe = std::env::consts::EXE_SUFFIX;
 
-    // Prefer the instrumented rustowlc that `cargo llvm-cov` builds under `target/llvm-cov-target`.
-    // Fall back to the normal `target/debug` binary for non-coverage runs.
-    let instrumented_rustowlc_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("target/llvm-cov-target/debug/rustowlc{exe}"));
-    let rustowlc_path = if instrumented_rustowlc_path.is_file() {
-        instrumented_rustowlc_path
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir
+        .ancestors()
+        .nth(2)
+        .map(|p| p.to_path_buf())
+        .unwrap_or(manifest_dir.clone());
+
+    // `cargo llvm-cov` does *not* propagate `CARGO_TARGET_DIR` into the test process.
+    // So if we want the instrumented `rustowlc`, we must probe the well-known location first.
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| workspace_root.join("target"));
+    let instrumented_target_dir = workspace_root.join("target/llvm-cov-target");
+
+    let rustowlc_path = instrumented_target_dir.join(format!("debug/rustowlc{exe}"));
+    let rustowlc_path = if rustowlc_path.is_file() {
+        rustowlc_path
     } else {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("target/debug/rustowlc{exe}"))
+        let rustowlc_path = instrumented_target_dir.join(format!("release/rustowlc{exe}"));
+        if rustowlc_path.is_file() {
+            rustowlc_path
+        } else {
+            let rustowlc_path = target_dir.join(format!("debug/rustowlc{exe}"));
+            if rustowlc_path.is_file() {
+                rustowlc_path
+            } else {
+                target_dir.join(format!("release/rustowlc{exe}"))
+            }
+        }
     };
     assert!(
         rustowlc_path.is_file(),
@@ -73,9 +93,15 @@ path = "src/lib.rs"
         .stdout;
     let sysroot = String::from_utf8_lossy(&sysroot).trim().to_string();
 
-    let llvm_profile_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/llvm-cov-target");
+    // If we're running under `cargo llvm-cov`, `CARGO_TARGET_DIR` points at the instrumented
+    // target directory we want to write `.profraw` files into.
+    let llvm_profile_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| workspace_root.join("target/llvm-cov-target"));
     std::fs::create_dir_all(&llvm_profile_dir).unwrap();
-    let llvm_profile_file = llvm_profile_dir.join("rustowlc-integration-%p-%m.profraw");
+
+    // Use `%p` to avoid collisions across processes. `%m` is the binary name.
+    let llvm_profile_file = llvm_profile_dir.join("rustowlc-integration-%m-%p.profraw");
 
     // Use an absolute path outside of the temp crate to avoid any target-dir sandboxing.
     let output_path = std::env::temp_dir().join(format!(
@@ -127,48 +153,6 @@ path = "src/lib.rs"
         .current_dir(crate_dir);
 
     let output = cmd.output().expect("run cargo check");
-
-    if !output_path.is_file() {
-        // Helpful diagnostics: show exactly how cargo invokes rustc.
-        let mut verbose_cmd = Command::new("cargo");
-        verbose_cmd
-            .arg("check")
-            .arg("--lib")
-            .arg("-v")
-            .env(
-                "RUSTC",
-                std::process::Command::new("rustc")
-                    .arg("--print")
-                    .arg("rustc")
-                    .output()
-                    .ok()
-                    .and_then(|o| String::from_utf8(o.stdout).ok())
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| "rustc".to_string()),
-            )
-            .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc_path)
-            .env("CARGO_INCREMENTAL", "0")
-            .env("RUSTOWL_OUTPUT_PATH", &output_path)
-            .env("LLVM_PROFILE_FILE", &llvm_profile_file)
-            .env("LD_LIBRARY_PATH", format!("{}/lib", sysroot))
-            .env_remove("RUSTC_WRAPPER")
-            .env_remove("SCCACHE")
-            .env_remove("CARGO_BUILD_RUSTC_WRAPPER")
-            .env_remove("CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER")
-            .env("CARGO_BUILD_RUSTC_WRAPPER", "")
-            .current_dir(crate_dir);
-
-        let verbose = verbose_cmd.output().expect("run cargo check -v");
-        eprintln!(
-            "cargo -v stdout:\n{}",
-            String::from_utf8_lossy(&verbose.stdout)
-        );
-        eprintln!(
-            "cargo -v stderr:\n{}",
-            String::from_utf8_lossy(&verbose.stderr)
-        );
-    }
 
     assert!(
         output.status.success(),

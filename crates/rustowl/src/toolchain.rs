@@ -1007,18 +1007,50 @@ pub async fn get_executable_path(name: &str) -> String {
         return current_exec.to_string_lossy().to_string();
     }
 
-    // When running benches/tests, the binary might live in `target/{debug,release}`
-    // while the current executable is in `target/{debug,release}/deps`.
+    // When running benches/tests inside a cargo workspace, the binary might live under the
+    // workspace root `target/{debug,release}` while the current executable is in
+    // `target/{debug,release}/deps`.
+    let mut candidate_roots = Vec::new();
     if let Ok(cwd) = env::current_dir() {
-        let candidate = cwd.join("target").join("debug").join(&exec_name);
+        candidate_roots.push(cwd);
+    }
+    if let Ok(dir) = env::var("CARGO_MANIFEST_DIR") {
+        let dir = PathBuf::from(dir);
+        candidate_roots.push(dir.clone());
+        // Prefer the workspace root when the crate lives under `crates/<name>`.
+        if let Some(root) = dir.ancestors().nth(2) {
+            candidate_roots.push(root.to_path_buf());
+        }
+    }
+
+    // Respect cargo's configured target dir (used by cargo-llvm-cov).
+    // Note: `CARGO_TARGET_DIR` already points to the *target directory* (not the workspace root).
+    let cargo_target_dir = env::var("CARGO_TARGET_DIR").ok().map(PathBuf::from);
+
+    for root in candidate_roots {
+        let candidate = root.join("target").join("debug").join(&exec_name);
         if candidate.is_file() {
-            tracing::debug!("{name} is selected in target/debug");
+            tracing::debug!("{name} is selected in {}", candidate.display());
             return candidate.to_string_lossy().to_string();
         }
 
-        let candidate = cwd.join("target").join("release").join(&exec_name);
+        let candidate = root.join("target").join("release").join(&exec_name);
         if candidate.is_file() {
-            tracing::debug!("{name} is selected in target/release");
+            tracing::debug!("{name} is selected in {}", candidate.display());
+            return candidate.to_string_lossy().to_string();
+        }
+    }
+
+    if let Some(dir) = cargo_target_dir {
+        let candidate = dir.join("debug").join(&exec_name);
+        if candidate.is_file() {
+            tracing::debug!("{name} is selected in {}", candidate.display());
+            return candidate.to_string_lossy().to_string();
+        }
+
+        let candidate = dir.join("release").join(&exec_name);
+        if candidate.is_file() {
+            tracing::debug!("{name} is selected in {}", candidate.display());
             return candidate.to_string_lossy().to_string();
         }
     }
