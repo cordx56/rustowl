@@ -17,11 +17,11 @@ fn log_level_from_args(args: &Cli) -> LevelFilter {
     args.verbosity.tracing_level_filter()
 }
 
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
+#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
 use tikv_jemallocator::Jemalloc;
 
 // Use jemalloc by default, but fall back to system allocator for Miri
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
+#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 

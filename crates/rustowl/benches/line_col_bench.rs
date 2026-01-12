@@ -6,14 +6,14 @@ use rustowl::utils::{NormalizedByteCharIndex, index_to_line_char, line_char_to_i
 use std::cell::RefCell;
 use std::sync::Arc;
 
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
+#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
 use tikv_jemallocator::Jemalloc;
 
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
+#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
 #[global_allocator]
 static ALLOC: AllocProfiler<Jemalloc> = AllocProfiler::new(Jemalloc);
 
-#[cfg(any(target_env = "msvc", miri))]
+#[cfg(any(target_os = "windows", miri))]
 #[global_allocator]
 static ALLOC: AllocProfiler = AllocProfiler::system();
 

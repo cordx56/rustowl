@@ -82,7 +82,7 @@ clap-verbosity-flag.workspace = true
 jiff.workspace = true
 regex.workspace = true
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 tikv-jemalloc-sys.workspace = true
 tikv-jemallocator.workspace = true
 
