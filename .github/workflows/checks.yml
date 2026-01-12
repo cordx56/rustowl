@@ -108,7 +108,7 @@ jobs:
         if: matrix.os == 'windows-11-arm'
         run: ./scripts/build/toolchain cargo build --release --profile arm-windows-release
       - name: Install binary
-        run: cargo install --path .
+        run: ./scripts/build/toolchain cargo install --path crates/rustowl
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
   vscode:
