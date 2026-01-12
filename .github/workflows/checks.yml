@@ -106,7 +106,7 @@ jobs:
         run: ./scripts/build/toolchain cargo build --release
       - name: Build Release (Windows ARM)
         if: matrix.os == 'windows-11-arm'
-        run: ./scripts/build/toolchain cargo build --release --profile arm-windows-release
+        run: ./scripts/build/toolchain cargo build --profile arm-windows-release
       - name: Install binary
         run: ./scripts/build/toolchain cargo install --path crates/rustowl
       - name: Test rustowl check
