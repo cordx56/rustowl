@@ -114,7 +114,7 @@
 ### 🐞 Bug Fixes
 
 - support gsed (macOS)
-- version.sh removed and use ./scripts/bump.sh
+- version.sh removed and use `cargo xtask bump`
 - specify pkg-fmt for binstall
 - restore current newest version
 

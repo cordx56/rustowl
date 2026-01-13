@@ -1,0 +1,140 @@
+name: Build RustOwl
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      run_id:
+        description: Run ID of this workflow
+        value: ${{ github.run_id }}
+jobs:
+  rustowl:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      # Using fat LTO causes failure to link on Windows ARM
+      - name: Set build profile
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-11-arm" ]]; then
+            echo "build_profile=arm-windows-release" >> $GITHUB_ENV
+          else
+            echo "build_profile=release" >> $GITHUB_ENV
+          fi
+      # uname on Windows on ARM returns "x86_64"
+      - name: Set ARCH flag for Windows on ARM
+        if: matrix.os == 'windows-11-arm'
+        run: echo "TOOLCHAIN_ARCH=aarch64" >> $GITHUB_ENV
+      - name: setup env
+        run: |
+          toolchain="$(cargo xtask toolchain sh -lc 'echo $RUSTOWL_TOOLCHAIN')"
+          echo "toolchain=$toolchain" >> $GITHUB_ENV
+
+          ([[ "${{ matrix.target }}" == *msvc* ]] && echo "exec_ext=.exe" || echo "exec_ext=") >> $GITHUB_ENV
+          ([[ "${{ matrix.target }}" == *windows* ]] && echo "is_windows=true" || echo "is_windows=false") >> $GITHUB_ENV
+          ([[ "${{ matrix.target }}" == *linux* ]] && echo "is_linux=true" || echo "is_linux=false") >> $GITHUB_ENV
+      - name: Install zig
+        if: ${{ env.is_linux == 'true' }}
+        uses: mlugg/setup-zig@e7d1537c378b83b8049f65dda471d87a2f7b2df2 # v2.2.0
+        with:
+          version: 0.13.0
+      - name: Build
+        run: |
+          if [[ "${{ env.is_linux }}" == "true" ]]; then
+            cargo xtask toolchain cargo install --locked cargo-zigbuild
+            cargo xtask toolchain cargo zigbuild --target ${{ matrix.target }}.2.17 --profile=${{ env.build_profile }}
+          else
+            cargo xtask toolchain cargo build --target ${{ matrix.target }} --profile=${{ env.build_profile }}
+          fi
+      - name: Check the functionality
+        run: |
+          ./target/${{ matrix.target }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
+      - name: Set archive name
+        run: |
+          if [[ "${{ env.is_windows }}" == "true" ]]; then
+            echo "archive_name=rustowl-${{ matrix.target }}.zip" >> $GITHUB_ENV
+          else
+            echo "archive_name=rustowl-${{ matrix.target }}.tar.gz" >> $GITHUB_ENV
+          fi
+      - name: Setup archive artifacts
+        run: |
+          rm -rf rustowl && mkdir -p rustowl/sysroot/${{ env.toolchain }}/bin
+
+          cp target/${{ matrix.target }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./rustowl/
+          cp target/${{ matrix.target }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/sysroot/${{ env.toolchain }}/bin
+
+          cp README.md ./rustowl
+          cp LICENSE ./rustowl
+
+          find target -type d | grep -E 'rustowl-build-time-out$' | xargs -I % cp -r % ./
+          cp -r rustowl-build-time-out/completions ./rustowl
+          cp -r rustowl-build-time-out/man ./rustowl
+
+          rm -rf ${{ env.archive_name }}
+
+          if [[ "${{ env.is_windows }}" == "true" ]]; then
+            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath ".\${{ env.archive_name }}" -CompressionLevel Optimal'
+          else
+            cd rustowl
+            tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ completions/ man/ rustowl${{ env.exec_ext }}
+            cd ..
+          fi
+
+          cp ./rustowl/rustowl${{ env.exec_ext }} ./rustowl-${{ matrix.target }}${{ env.exec_ext }}
+      - name: Upload
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: rustowl-runtime-${{ matrix.target }}
+          path: |
+            rustowl-${{ matrix.target }}${{ env.exec_ext }}
+            ${{ env.archive_name }}
+  vscode:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 20
+      - name: Setup PNPM And Install dependencies
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
+        with:
+          package_json_file: ./vscode/package.json
+          run_install: |
+            - cwd: ./vscode
+      - name: Create VSIX
+        run: pnpm build
+        working-directory: ./vscode
+      - name: Upload
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: rustowl-vscode
+          path: vscode/**/*.vsix

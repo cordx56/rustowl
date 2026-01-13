@@ -1,0 +1,787 @@
+//! Utility functions for range manipulation and MIR analysis.
+//!
+//! This module provides core algorithms for working with source code ranges,
+//! merging overlapping ranges, and providing visitor patterns for MIR traversal.
+
+use crate::models::{
+    Function, Loc, MirDecl, MirStatement, MirTerminator, Range, RangeVec, range_vec_into_vec,
+};
+
+/// Determines if one range completely contains another range.
+///
+/// A range `r1` is a super range of `r2` if `r1` completely encompasses `r2`.
+/// This means `r1` starts before or at the same position as `r2` and ends
+/// after or at the same position as `r2`, with at least one strict inequality.
+pub fn is_super_range(r1: Range, r2: Range) -> bool {
+    (r1.from() < r2.from() && r2.until() <= r1.until())
+        || (r1.from() <= r2.from() && r2.until() < r1.until())
+}
+
+/// Finds the overlapping portion of two ranges.
+///
+/// Returns the intersection of two ranges if they overlap, or `None` if
+/// they don't intersect.
+pub fn common_range(r1: Range, r2: Range) -> Option<Range> {
+    if r2.from() < r1.from() {
+        return common_range(r2, r1);
+    }
+    if r1.until() < r2.from() {
+        return None;
+    }
+    let from = r2.from();
+    let until = r1.until().min(r2.until());
+    Range::new(from, until)
+}
+
+/// Finds all pairwise intersections among a collection of ranges.
+///
+/// Returns a vector of ranges representing all overlapping regions
+/// between pairs of input ranges, with overlapping regions merged.
+pub fn common_ranges(ranges: &[Range]) -> Vec<Range> {
+    let mut common_ranges = Vec::new();
+    for i in 0..ranges.len() {
+        for j in i + 1..ranges.len() {
+            if let Some(common) = common_range(ranges[i], ranges[j]) {
+                common_ranges.push(common);
+            }
+        }
+    }
+    eliminated_ranges(common_ranges)
+}
+
+/// Merges two ranges into their superset if they overlap or are adjacent.
+///
+/// Returns a single range that encompasses both input ranges if they
+/// overlap or are directly adjacent. Returns `None` if they are disjoint.
+pub fn merge_ranges(r1: Range, r2: Range) -> Option<Range> {
+    if common_range(r1, r2).is_some() || r1.until() == r2.from() || r2.until() == r1.from() {
+        let from = r1.from().min(r2.from());
+        let until = r1.until().max(r2.until());
+        Range::new(from, until)
+    } else {
+        None
+    }
+}
+
+/// Eliminates overlapping and adjacent ranges by merging them.
+pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
+    if ranges.len() <= 1 {
+        return ranges;
+    }
+    // Sort by start, then end
+    ranges.sort_by_key(|r| (r.from().0, r.until().0));
+    let mut merged: Vec<Range> = Vec::with_capacity(ranges.len());
+    let mut current = ranges[0];
+    for r in ranges.into_iter().skip(1) {
+        if r.from().0 <= current.until().0 || r.from().0 == current.until().0 {
+            // Overlapping or adjacent
+            if r.until().0 > current.until().0 {
+                current = Range::new(current.from(), r.until()).unwrap();
+            }
+        } else {
+            merged.push(current);
+            current = r;
+        }
+    }
+    merged.push(current);
+    merged
+}
+
+/// Version of [`eliminated_ranges`] that works with `RangeVec`.
+pub fn eliminated_ranges_small(ranges: RangeVec) -> Vec<Range> {
+    eliminated_ranges(range_vec_into_vec(ranges))
+}
+
+/// Subtracts exclude ranges from a set of ranges.
+///
+/// For each range in `from`, removes any portions that overlap with
+/// ranges in `excludes`. If a range is partially excluded, it may be
+/// split into multiple smaller ranges.
+pub fn exclude_ranges(from: Vec<Range>, excludes: Vec<Range>) -> Vec<Range> {
+    let mut from = from;
+    let mut i = 0;
+    'outer: while i < from.len() {
+        let mut j = 0;
+        while j < excludes.len() {
+            if let Some(common) = common_range(from[i], excludes[j]) {
+                if let Some(r) = Range::new(from[i].from(), common.from() - 1) {
+                    from.push(r);
+                }
+                if let Some(r) = Range::new(common.until() + 1, from[i].until()) {
+                    from.push(r);
+                }
+                from.remove(i);
+                continue 'outer;
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    eliminated_ranges(from)
+}
+
+/// Version of [`exclude_ranges`] that works with `RangeVec`.
+pub fn exclude_ranges_small(from: RangeVec, excludes: Vec<Range>) -> Vec<Range> {
+    exclude_ranges(range_vec_into_vec(from), excludes)
+}
+
+/// Visitor trait for traversing MIR (Mid-level IR) structures.
+///
+/// Provides a flexible pattern for implementing analysis passes over
+/// MIR functions by visiting different components in a structured way.
+pub trait MirVisitor {
+    /// Called when visiting a function.
+    fn visit_func(&mut self, _func: &Function) {}
+    /// Called when visiting a variable declaration.
+    fn visit_decl(&mut self, _decl: &MirDecl) {}
+    /// Called when visiting a statement.
+    fn visit_stmt(&mut self, _stmt: &MirStatement) {}
+    /// Called when visiting a terminator.
+    fn visit_term(&mut self, _term: &MirTerminator) {}
+}
+
+/// Traverses a MIR function using the visitor pattern.
+///
+/// Calls the appropriate visitor methods for each component of the function
+/// in a structured order: function, declarations, statements, terminators.
+pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
+    visitor.visit_func(func);
+    for decl in &func.decls {
+        visitor.visit_decl(decl);
+    }
+    for bb in &func.basic_blocks {
+        for stmt in &bb.statements {
+            visitor.visit_stmt(stmt);
+        }
+        if let Some(term) = &bb.terminator {
+            visitor.visit_term(term);
+        }
+    }
+}
+
+/// Precomputed mapping from *normalized* byte offsets to `Loc`.
+///
+/// `rustc` byte positions behave as if `\r` bytes do not exist in the source.
+/// `Loc` is a *logical character index* where `\r` is ignored too.
+#[derive(Debug, Clone)]
+pub struct NormalizedByteCharIndex {
+    kind: NormalizedByteCharIndexKind,
+}
+
+#[derive(Debug, Clone)]
+enum NormalizedByteCharIndexKind {
+    /// ASCII without CR: logical char index == byte index.
+    AsciiNoCr { len_bytes: u32 },
+    /// General case: `ends[i]` is the normalized byte offset at the end of char i.
+    General { ends: Vec<u32>, len_bytes: u32 },
+}
+
+impl NormalizedByteCharIndex {
+    pub fn new(source: &str) -> Self {
+        if source.is_ascii() && !source.as_bytes().contains(&b'\r') {
+            return Self {
+                kind: NormalizedByteCharIndexKind::AsciiNoCr {
+                    len_bytes: source.len().min(u32::MAX as usize) as u32,
+                },
+            };
+        }
+
+        let mut ends = Vec::with_capacity(source.len().min(1024));
+        let mut normalized = 0u32;
+
+        for ch in source.chars() {
+            if ch == '\r' {
+                continue;
+            }
+            normalized = normalized.saturating_add(ch.len_utf8().min(u32::MAX as usize) as u32);
+            ends.push(normalized);
+        }
+
+        Self {
+            kind: NormalizedByteCharIndexKind::General {
+                ends,
+                len_bytes: normalized,
+            },
+        }
+    }
+
+    /// Convert a normalized byte offset (CR bytes excluded) to a logical `Loc`.
+    pub fn loc_from_normalized_byte_pos(&self, byte_pos: u32) -> crate::models::Loc {
+        match &self.kind {
+            NormalizedByteCharIndexKind::AsciiNoCr { len_bytes } => {
+                crate::models::Loc(byte_pos.min(*len_bytes))
+            }
+            NormalizedByteCharIndexKind::General { ends, len_bytes } => {
+                let clamped = byte_pos.min(*len_bytes);
+                let n = ends.partition_point(|&end| end <= clamped);
+                crate::models::Loc(n.min(u32::MAX as usize) as u32)
+            }
+        }
+    }
+
+    /// Equivalent to `Loc::new(source, byte_pos, offset)`, but uses this index.
+    pub fn loc_from_byte_pos(&self, byte_pos: u32, offset: u32) -> crate::models::Loc {
+        self.loc_from_normalized_byte_pos(byte_pos.saturating_sub(offset))
+    }
+
+    pub fn normalized_len_bytes(&self) -> u32 {
+        match &self.kind {
+            NormalizedByteCharIndexKind::AsciiNoCr { len_bytes } => *len_bytes,
+            NormalizedByteCharIndexKind::General { len_bytes, .. } => *len_bytes,
+        }
+    }
+
+    pub fn eof(&self) -> crate::models::Loc {
+        match &self.kind {
+            NormalizedByteCharIndexKind::AsciiNoCr { len_bytes } => crate::models::Loc(*len_bytes),
+            NormalizedByteCharIndexKind::General { ends, .. } => {
+                crate::models::Loc(ends.len().min(u32::MAX as usize) as u32)
+            }
+        }
+    }
+}
+
+/// Precomputed line/column mapping for a source string.
+///
+/// `Loc` is a *logical character index* where `\r` is ignored. Building this
+/// index once and reusing it avoids repeatedly scanning the whole file when
+/// converting many ranges (e.g. LSP decorations).
+#[derive(Debug, Clone)]
+pub struct LineCharIndex {
+    // For each line i, the logical char-index at the start of that line.
+    // Always non-empty (line 0 starts at index 0).
+    line_starts: Vec<u32>,
+    eof: u32,
+}
+
+impl LineCharIndex {
+    pub fn new(source: &str) -> Self {
+        // ASCII without CR means logical char-index == byte index.
+        // We still store logical char-indexes, which match bytes in this case.
+        if source.is_ascii() && !source.as_bytes().contains(&b'\r') {
+            let mut line_starts = Vec::with_capacity(128);
+            line_starts.push(0);
+            for (i, b) in source.as_bytes().iter().enumerate() {
+                if *b == b'\n' {
+                    // newline is a logical character (included), next line starts after it
+                    let next = (i + 1) as u32;
+                    line_starts.push(next);
+                }
+            }
+            return Self {
+                line_starts,
+                eof: source.len() as u32,
+            };
+        }
+
+        // Fallback: scan chars once, skipping CR.
+        let mut line_starts = Vec::with_capacity(128);
+        line_starts.push(0);
+
+        let mut logical_idx = 0u32;
+        for ch in source.chars() {
+            if ch == '\r' {
+                continue;
+            }
+            logical_idx = logical_idx.saturating_add(1);
+            // newline is a logical character; next line starts after it
+            if ch == '\n' {
+                line_starts.push(logical_idx);
+            }
+        }
+
+        Self {
+            line_starts,
+            eof: logical_idx,
+        }
+    }
+
+    pub fn index_to_line_char(&self, idx: Loc) -> (u32, u32) {
+        let target = idx.0;
+        // Find the last line start <= target.
+        let line = match self.line_starts.binary_search(&target) {
+            Ok(i) => i,
+            Err(0) => 0,
+            Err(i) => i - 1,
+        };
+
+        let line_start = self.line_starts[line];
+        let col = target.saturating_sub(line_start);
+        (line as u32, col)
+    }
+
+    pub fn line_char_to_index(&self, line: u32, character: u32) -> u32 {
+        let Some(&line_start) = self.line_starts.get(line as usize) else {
+            // Best-effort: out-of-range line maps to EOF.
+            return self.eof;
+        };
+
+        let target = line_start.saturating_add(character);
+
+        // Best effort
+        let next_line_start = self
+            .line_starts
+            .get(line as usize + 1)
+            .copied()
+            .unwrap_or(self.eof);
+        if target >= next_line_start {
+            return self.eof;
+        }
+
+        target
+    }
+
+    pub fn eof(&self) -> u32 {
+        self.eof
+    }
+}
+
+/// Returns the byte offsets at the start of each line.
+///
+/// The returned vector always starts with `0` for line 0.
+pub fn line_start_bytes(source: &str) -> Vec<u32> {
+    use memchr::memchr_iter;
+
+    let mut starts = Vec::with_capacity(128);
+    starts.push(0);
+    for nl in memchr_iter(b'\n', source.as_bytes()) {
+        let next = (nl + 1).min(u32::MAX as usize) as u32;
+        starts.push(next);
+    }
+    starts
+}
+
+fn utf16_col_to_byte_offset(line: &str, character: u32) -> usize {
+    if character == 0 {
+        return 0;
+    }
+
+    let mut units = 0u32;
+    for (byte_idx, ch) in line.char_indices() {
+        if units >= character {
+            return byte_idx;
+        }
+        units = units.saturating_add(ch.len_utf16() as u32);
+    }
+    line.len()
+}
+
+/// Convert an LSP (line, UTF-16 column) position to a byte offset.
+///
+/// This is best-effort: if the position is out of range it clamps to EOF.
+pub fn line_utf16_to_byte_offset(
+    source: &str,
+    line_start_bytes: &[u32],
+    line: u32,
+    character: u32,
+) -> usize {
+    let Some(&start) = line_start_bytes.get(line as usize) else {
+        return source.len();
+    };
+    let start = start as usize;
+
+    let end = line_start_bytes
+        .get(line as usize + 1)
+        .map(|v| *v as usize)
+        .unwrap_or(source.len());
+
+    let end = end.min(source.len());
+    let start = start.min(end);
+
+    let within_line = utf16_col_to_byte_offset(&source[start..end], character);
+    start + within_line
+}
+
+/// Converts a character index to line and column numbers.
+///
+/// Given a source string and character index, returns the corresponding
+/// line and column position. Handles CR characters consistently with
+/// the Rust compiler by ignoring them.
+///
+/// For repeated conversions on the same `source` (e.g. mapping many
+/// decorations), prefer building a `LineCharIndex` once.
+pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
+    use memchr::memchr_iter;
+
+    let target = idx.0;
+    let mut line = 0u32;
+    let mut col = 0u32;
+    let mut logical_idx = 0u32; // counts chars excluding CR
+    let mut seg_start = 0usize;
+
+    // Scan newline boundaries quickly, counting chars inside each segment.
+    for nl in memchr_iter(b'\n', s.as_bytes()) {
+        for ch in s[seg_start..=nl].chars() {
+            if ch == '\r' {
+                continue;
+            }
+            if logical_idx == target {
+                return (line, col);
+            }
+            if ch == '\n' {
+                line += 1;
+                col = 0;
+            } else {
+                col += 1;
+            }
+            logical_idx += 1;
+        }
+        seg_start = nl + 1;
+        if logical_idx > target {
+            break;
+        }
+    }
+
+    if logical_idx <= target {
+        for ch in s[seg_start..].chars() {
+            if ch == '\r' {
+                continue;
+            }
+            if logical_idx == target {
+                return (line, col);
+            }
+            if ch == '\n' {
+                line += 1;
+                col = 0;
+            } else {
+                col += 1;
+            }
+            logical_idx += 1;
+        }
+    }
+
+    (line, col)
+}
+
+/// Converts line and column numbers to a character index.
+///
+/// Given a source string, line number, and column number, returns the
+/// corresponding character index. Handles CR characters consistently
+/// with the Rust compiler by ignoring them.
+///
+/// For repeated conversions on the same `source` (e.g. mapping many
+/// cursor positions), prefer building a `LineCharIndex` once.
+pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
+    use memchr::memchr_iter;
+
+    let mut consumed = 0u32; // logical chars excluding CR
+    let mut seg_start = 0usize;
+
+    for nl in memchr_iter(b'\n', s.as_bytes()) {
+        if line == 0 {
+            break;
+        }
+        for ch in s[seg_start..=nl].chars() {
+            if ch == '\r' {
+                continue;
+            }
+            consumed += 1;
+        }
+        seg_start = nl + 1;
+        line -= 1;
+    }
+
+    if line > 0 {
+        for ch in s[seg_start..].chars() {
+            if ch == '\r' {
+                continue;
+            }
+            consumed += 1;
+        }
+        return consumed; // best effort if line exceeds file
+    }
+
+    let mut col_count = 0u32;
+    for ch in s[seg_start..].chars() {
+        if ch == '\r' {
+            continue;
+        }
+        if col_count == char {
+            return consumed;
+        }
+        consumed += 1;
+        col_count += 1;
+    }
+    consumed
+}
+
+pub fn get_default_parallel_count() -> usize {
+    num_cpus::get_physical()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::*;
+
+    #[test]
+    fn test_is_super_range() {
+        let r1 = Range::new(Loc(0), Loc(10)).unwrap();
+        let r2 = Range::new(Loc(2), Loc(8)).unwrap();
+        let r3 = Range::new(Loc(5), Loc(15)).unwrap();
+
+        assert!(is_super_range(r1, r2)); // r1 contains r2
+        assert!(!is_super_range(r2, r1)); // r2 doesn't contain r1
+        assert!(!is_super_range(r1, r3)); // r1 doesn't fully contain r3
+        assert!(!is_super_range(r3, r1)); // r3 doesn't contain r1
+    }
+
+    #[test]
+    fn test_common_range() {
+        let r1 = Range::new(Loc(0), Loc(10)).unwrap();
+        let r2 = Range::new(Loc(5), Loc(15)).unwrap();
+        let r3 = Range::new(Loc(20), Loc(30)).unwrap();
+
+        // Overlapping ranges
+        let common = common_range(r1, r2).unwrap();
+        assert_eq!(common.from(), Loc(5));
+        assert_eq!(common.until(), Loc(10));
+
+        // Non-overlapping ranges
+        assert!(common_range(r1, r3).is_none());
+
+        // Order shouldn't matter
+        let common2 = common_range(r2, r1).unwrap();
+        assert_eq!(common, common2);
+    }
+
+    #[test]
+    fn test_merge_ranges() {
+        let r1 = Range::new(Loc(0), Loc(10)).unwrap();
+        let r2 = Range::new(Loc(5), Loc(15)).unwrap();
+        let r3 = Range::new(Loc(10), Loc(20)).unwrap(); // Adjacent
+        let r4 = Range::new(Loc(25), Loc(30)).unwrap(); // Disjoint
+
+        // Overlapping ranges should merge
+        let merged = merge_ranges(r1, r2).unwrap();
+        assert_eq!(merged.from(), Loc(0));
+        assert_eq!(merged.until(), Loc(15));
+
+        // Adjacent ranges should merge
+        let merged = merge_ranges(r1, r3).unwrap();
+        assert_eq!(merged.from(), Loc(0));
+        assert_eq!(merged.until(), Loc(20));
+
+        // Disjoint ranges shouldn't merge
+        assert!(merge_ranges(r1, r4).is_none());
+    }
+
+    #[test]
+    fn test_eliminated_ranges() {
+        let ranges = vec![
+            Range::new(Loc(0), Loc(10)).unwrap(),
+            Range::new(Loc(5), Loc(15)).unwrap(),
+            Range::new(Loc(12), Loc(20)).unwrap(),
+            Range::new(Loc(25), Loc(30)).unwrap(),
+        ];
+
+        let eliminated = eliminated_ranges(ranges);
+        assert_eq!(eliminated.len(), 2);
+
+        // Should have merged the overlapping ranges
+        assert!(
+            eliminated
+                .iter()
+                .any(|r| r.from() == Loc(0) && r.until() == Loc(20))
+        );
+        assert!(
+            eliminated
+                .iter()
+                .any(|r| r.from() == Loc(25) && r.until() == Loc(30))
+        );
+    }
+
+    #[test]
+    fn test_exclude_ranges() {
+        let from = vec![Range::new(Loc(0), Loc(20)).unwrap()];
+        let excludes = vec![Range::new(Loc(5), Loc(15)).unwrap()];
+
+        let result = exclude_ranges(from, excludes);
+
+        // Should split the original range around the exclusion
+        assert_eq!(result.len(), 2);
+        assert!(
+            result
+                .iter()
+                .any(|r| r.from() == Loc(0) && r.until() == Loc(4))
+        );
+        assert!(
+            result
+                .iter()
+                .any(|r| r.from() == Loc(16) && r.until() == Loc(20))
+        );
+    }
+
+    #[test]
+    fn test_index_to_line_char_edge_cases() {
+        let source = "line1\nline2\nline3";
+
+        // Test position at line start
+        let (line, col) = index_to_line_char(source, Loc(6)); // Start of "line2"
+        assert_eq!(line, 1);
+        assert_eq!(col, 0);
+
+        // Test position at line end (before newline)
+        let (line, col) = index_to_line_char(source, Loc(11)); // End of "line2" (including newline)
+        assert_eq!(line, 1);
+        assert_eq!(col, 5);
+
+        // Test position at EOF
+        let (line, col) = index_to_line_char(source, Loc(source.len() as u32));
+        assert_eq!(line, 2);
+        assert_eq!(col, 5); // "line3" has 5 characters
+    }
+
+    #[test]
+    fn test_line_char_to_index_roundtrip() {
+        let source = "line1\nline2\nline3";
+
+        // Test round trip conversion
+        let original_index = 8u32; // Position in "line2"
+        let (line, col) = index_to_line_char(source, Loc(original_index));
+        let converted_index = line_char_to_index(source, line, col);
+        assert_eq!(converted_index, original_index);
+
+        // Test line/char at EOF
+        let eof_index = source.len() as u32;
+        let (line, col) = index_to_line_char(source, Loc(eof_index));
+        let converted_index = line_char_to_index(source, line, col);
+        assert_eq!(converted_index as usize, source.len());
+    }
+
+    #[test]
+    fn test_line_char_to_index() {
+        let source = "hello\nworld\ntest";
+
+        assert_eq!(line_char_to_index(source, 0, 0), 0); // 'h'
+        assert_eq!(line_char_to_index(source, 1, 0), 6); // 'w'  
+        assert_eq!(line_char_to_index(source, 2, 0), 12); // 't'
+    }
+
+    #[test]
+    fn test_excluded_ranges_small() {
+        use crate::models::range_vec_from_vec;
+
+        let from = range_vec_from_vec(vec![Range::new(Loc(0), Loc(20)).unwrap()]);
+        let excludes = vec![Range::new(Loc(5), Loc(15)).unwrap()];
+
+        let result = exclude_ranges_small(from, excludes);
+
+        // Should split the original range around the exclusion
+        assert_eq!(result.len(), 2);
+        assert!(
+            result
+                .iter()
+                .any(|r| r.from() == Loc(0) && r.until() == Loc(4))
+        );
+        assert!(
+            result
+                .iter()
+                .any(|r| r.from() == Loc(16) && r.until() == Loc(20))
+        );
+    }
+
+    #[test]
+    fn test_mir_visitor_pattern() {
+        struct TestVisitor {
+            func_count: usize,
+            decl_count: usize,
+            stmt_count: usize,
+            term_count: usize,
+        }
+
+        impl MirVisitor for TestVisitor {
+            fn visit_func(&mut self, _func: &Function) {
+                self.func_count += 1;
+            }
+
+            fn visit_decl(&mut self, _decl: &MirDecl) {
+                self.decl_count += 1;
+            }
+
+            fn visit_stmt(&mut self, _stmt: &MirStatement) {
+                self.stmt_count += 1;
+            }
+
+            fn visit_term(&mut self, _term: &MirTerminator) {
+                self.term_count += 1;
+            }
+        }
+
+        let mut func = Function::new(1);
+
+        // Add some declarations
+        func.decls.push(MirDecl::Other {
+            local: FnLocal::new(1, 1),
+            ty: "i32".to_string().into(),
+            lives: crate::models::RangeVec::new(),
+            shared_borrow: crate::models::RangeVec::new(),
+            mutable_borrow: crate::models::RangeVec::new(),
+            drop: false,
+            drop_range: crate::models::RangeVec::new(),
+            must_live_at: crate::models::RangeVec::new(),
+        });
+
+        // Add a basic block with statements and terminator
+        let mut bb = MirBasicBlock::new();
+        bb.statements.push(MirStatement::Other {
+            range: Range::new(Loc(0), Loc(5)).unwrap(),
+        });
+        bb.statements.push(MirStatement::Other {
+            range: Range::new(Loc(5), Loc(10)).unwrap(),
+        });
+        bb.terminator = Some(MirTerminator::Other {
+            range: Range::new(Loc(10), Loc(15)).unwrap(),
+        });
+
+        func.basic_blocks.push(bb);
+
+        let mut visitor = TestVisitor {
+            func_count: 0,
+            decl_count: 0,
+            stmt_count: 0,
+            term_count: 0,
+        };
+
+        mir_visit(&func, &mut visitor);
+
+        assert_eq!(visitor.func_count, 1);
+        assert_eq!(visitor.decl_count, 1);
+        assert_eq!(visitor.stmt_count, 2);
+        assert_eq!(visitor.term_count, 1);
+    }
+
+    #[test]
+    fn test_index_line_char_with_carriage_returns() {
+        // Test that CR characters are handled correctly (ignored like the compiler)
+        let source_with_cr = "hello\r\nworld\r\ntest";
+        let source_without_cr = "hello\nworld\ntest";
+
+        // Both should give the same line/char results
+        let loc = Loc(8); // Should be 'r' in "world"
+        let (line_cr, char_cr) = index_to_line_char(source_with_cr, loc);
+        let (line_no_cr, char_no_cr) = index_to_line_char(source_without_cr, loc);
+
+        assert_eq!(line_cr, line_no_cr);
+        assert_eq!(char_cr, char_no_cr);
+
+        // Test conversion back
+        let back_cr = line_char_to_index(source_with_cr, line_cr, char_cr);
+        let back_no_cr = line_char_to_index(source_without_cr, line_no_cr, char_no_cr);
+
+        assert_eq!(back_cr, back_no_cr);
+    }
+
+    #[test]
+    fn test_line_char_to_index_edge_cases() {
+        let source = "a\nb\nc";
+
+        // Test beyond end of string
+        let result = line_char_to_index(source, 10, 0);
+        assert_eq!(result, source.chars().count() as u32);
+
+        // Test beyond end of line
+        let result = line_char_to_index(source, 0, 10);
+        assert_eq!(result, source.chars().count() as u32);
+    }
+}

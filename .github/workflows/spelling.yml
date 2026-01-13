@@ -1,23 +1,21 @@
 name: Spelling
-
 permissions:
   contents: read
-
 on:
   pull_request:
   push:
     branches:
       - main
-
 env:
   CLICOLOR: 1
-
 jobs:
   spelling:
     name: Spell Check with Typos
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Actions Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - name: Spell Check Repo
-        uses: crate-ci/typos@v1.42.0
+        uses: crate-ci/typos@bb4666ad77b539a6b4ce4eda7ebb6de553704021 # v1.42.0

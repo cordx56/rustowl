@@ -1,0 +1,2 @@
+style = "conventional"
+ignore_author_re = "(dependabot|renovate)"
