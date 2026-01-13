@@ -94,10 +94,10 @@ We provide a comprehensive development checks script that validates code quality
 
 ```bash
 # Run all development checks
-./scripts/dev-checks.sh
+cargo xtask dev-checks
 
 # Run checks and automatically fix issues where possible
-./scripts/dev-checks.sh --fix
+cargo xtask dev-checks --fix
 ```
 
 This script performs:
@@ -156,15 +156,13 @@ Run comprehensive security analysis before submitting:
 
 ```bash
 # Run all available security tests
-./scripts/security.sh
-
-# Check which security tools are available
-./scripts/security.sh --check
+cargo xtask security
 
 # Run specific test categories
-./scripts/security.sh --no-miri        # Skip Miri tests
-./scripts/security.sh --no-valgrind    # Skip Valgrind tests
-./scripts/security.sh --no-audit       # Skip cargo-audit
+cargo xtask security --no-miri        # Skip Miri tests
+cargo xtask security --no-valgrind    # Skip Valgrind tests
+cargo xtask security --no-audit       # Skip cargo-audit
+cargo xtask security --no-machete     # Skip cargo-machete
 ```
 
 The security script includes:
@@ -180,26 +178,25 @@ The security script includes:
 Validate that your changes don't introduce performance regressions:
 
 ```bash
-# Run performance benchmarks
-./scripts/bench.sh
+# Run performance benchmarks (Divan)
+cargo xtask bench
 
 # Create a baseline for comparison
-./scripts/bench.sh --save my-baseline
+cargo xtask bench --save my-baseline
 
 # Compare against a baseline with custom threshold
-./scripts/bench.sh --load my-baseline --threshold 3%
+cargo xtask bench --load my-baseline --threshold 3
 
-# Clean build and open HTML report
-./scripts/bench.sh --clean --open
+# Clean build before benchmarking
+cargo xtask bench --clean
 ```
 
 Performance testing features:
 
-- Criterion benchmark integration
+- Divan benchmark integration
 - Baseline creation and comparison
 - Configurable regression thresholds (default: 5%)
-- Automatic test package detection
-- HTML report generation
+- Strict parsing (errors if output format changes)
 
 ### Binary Size Monitoring
 
@@ -207,13 +204,13 @@ Check for binary size regressions:
 
 ```bash
 # Analyze current binary sizes
-./scripts/size-check.sh
+cargo xtask size-check
 
 # Compare against a saved baseline
-./scripts/size-check.sh --load previous-baseline
+cargo xtask size-check compare
 
 # Save current sizes as baseline
-./scripts/size-check.sh --save new-baseline
+cargo xtask size-check baseline
 ```
 
 ### Manual Checks
@@ -240,43 +237,42 @@ If the automated scripts are not available, ensure:
 
    ```bash
    # Create performance baseline
-   ./scripts/bench.sh --save before-changes
+   cargo xtask bench --save before-changes
    ```
 
 1. **During development**:
 
    ```bash
    # Run quick checks frequently
-   ./scripts/dev-checks.sh --fix
+   cargo xtask dev-checks --fix
    ```
 
 1. **Before committing**:
 
    ```bash
    # Run comprehensive validation
-   ./scripts/dev-checks.sh
-   ./scripts/security.sh
-   ./scripts/bench.sh --load before-changes
-   ./scripts/size-check.sh
+   cargo xtask dev-checks
+   cargo xtask security
+   cargo xtask bench --load before-changes
+   cargo xtask size-check
    ```
 
 ### Integration with CI
 
-Our scripts are designed to match CI workflows:
+Our `cargo xtask` commands are designed to match CI workflows:
 
-- **`security.sh`** ↔ **`.github/workflows/security.yml`**
-- **`bench.sh`** ↔ **`.github/workflows/bench-performance.yml`**
-- **`dev-checks.sh`** ↔ **`.github/workflows/checks.yml`**
+- **`cargo xtask security`** ↔ **`.github/workflows/security.yml`**
+- **`cargo xtask bench`** ↔ *(local-only by default)*
+- **`cargo xtask dev-checks`** ↔ **`.github/workflows/checks.yml`**
 
 This ensures local testing provides the same results as CI.
 
 ## Troubleshooting
 
-### Script Permissions
+### `cargo xtask`
 
-```bash
-chmod +x scripts/*.sh
-```
+If `cargo xtask` is not found, ensure you are on the workspace root and have Rust installed.
+
 
 ### Missing Tools
 
@@ -302,7 +298,5 @@ brew install gnuplot
 
 - Check workflow logs for specific error messages
 - Verify `rust-toolchain.toml` compatibility
-- Ensure scripts have execution permissions
-- Test locally with the same script used in CI
+- Test locally with the same `cargo xtask` command used in CI
 
-For more detailed information about the scripts, see [`scripts/README.md`](../scripts/README.md).

@@ -82,9 +82,21 @@ fn get_toolchain() -> String {
     } else if let Ok(v) = env::var("TOOLCHAIN_CHANNEL") {
         format!("{v}-{}", get_host_tuple())
     } else {
-        let v = std::fs::read_to_string("./scripts/build/channel")
+        // Fallback: parse channel from rust-toolchain.toml.
+        let v = std::fs::read_to_string("./rust-toolchain.toml")
             .expect("there are no toolchain specifier");
-        format!("{}-{}", v.trim(), get_host_tuple())
+        let channel = v
+            .lines()
+            .find_map(|line| {
+                let line = line.trim();
+                let rest = line.strip_prefix("channel")?.trim_start();
+                let rest = rest.strip_prefix('=')?.trim();
+                rest.strip_prefix('"')
+                    .and_then(|s| s.strip_suffix('"'))
+                    .map(|s| s.to_string())
+            })
+            .expect("failed to parse toolchain channel");
+        format!("{}-{}", channel.trim(), get_host_tuple())
     }
 }
 fn get_channel() -> String {

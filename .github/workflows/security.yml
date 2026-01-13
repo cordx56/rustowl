@@ -29,32 +29,15 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - name: Get toolchain from channel file
-        run: |
-          echo "channel=$(awk -F'"' '/channel/ { print $2 }' rust-toolchain.toml)" >> $GITHUB_ENV
-      - name: Install Rust toolchain (from rust-toolchain.toml)
-        uses: dtolnay/rust-toolchain@0b1efabc08b657293548b77fb76cc02d26091c7e
+      - name: Install Rust toolchain
+        uses: ./.github/actions/rust-toolchain-yq
         with:
+          targets: ${{ matrix.target }}
           components: miri,rust-src,llvm-tools-preview,rustc-dev
-          toolchain: ${{ env.channel }}
-      - name: Install system dependencies (Linux)
-        if: matrix.runner_os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y valgrind
-      - name: Make scripts executable (Unix)
-        if: runner.os != 'Windows'
-        run: chmod +x scripts/*.sh
       - name: Run comprehensive security checks
-        shell: bash
         run: |
-          cargo install cargo-nextest
-          # The security script will auto-detect CI environment and install missing tools
-          # Exit with proper code to fail CI if security tests fail
-          if ! ./scripts/security.sh; then
-            echo "::error::Security tests failed"
-            exit 1
-          fi
+          # cargo-deny is run in checks.yml; keep security.yml focused.
+          cargo xtask security --no-deny
       - name: Create security summary and cleanup
         if: failure()
         shell: bash
@@ -62,13 +45,13 @@ jobs:
           # Only create summary and cleanup on failure
           echo "Security tests failed, creating summary..."
 
-          # The security script should have created its own summary
-          if [ -f "security-logs/security_summary_*.md" ]; then
-            echo "Security script summary found:"
+          # The security command should have created its own summary.
+          if compgen -G "security-logs/security_summary_*.md" > /dev/null; then
+            echo "Security summary found:"
             ls -la security-logs/security_summary_*.md
             echo "::error::Security test failures detected. Check the summary for details."
           else
-            echo "Warning: Security script summary not found, creating fallback summary"
+            echo "Warning: security summary not found, creating fallback summary"
             mkdir -p security-logs
             echo "# Security Testing Summary (Failure)" > security-logs/failure-summary.txt
             echo "Generated: $(date)" >> security-logs/failure-summary.txt

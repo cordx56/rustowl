@@ -30,7 +30,29 @@ fn main() {
 }
 
 const DUMMY_PACKAGE: &str = "./perf-tests/dummy-package";
-const BINARY_PATH: &str = "./target/release/rustowl";
+
+fn rustowl_bin_path() -> std::path::PathBuf {
+    // `cargo bench -p rustowl` runs the bench binary with CWD set
+    // to `crates/rustowl`, but `cargo build -p rustowl` writes the binary
+    // to the workspace root `target/`.
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let candidates = [
+        manifest_dir.join("../../target/release/rustowl"),
+        manifest_dir.join("../../target/release/rustowl.exe"),
+        manifest_dir.join("target/release/rustowl"),
+        manifest_dir.join("target/release/rustowl.exe"),
+    ];
+
+    for path in candidates {
+        if path.is_file() {
+            return path;
+        }
+    }
+
+    // Fall back to whatever is on PATH; this keeps the benchmark usable
+    // even if run outside the workspace layout.
+    std::path::PathBuf::from("rustowl")
+}
 
 #[divan::bench_group(name = "rustowl_check", sample_count = 20)]
 mod rustowl_check {
@@ -39,7 +61,7 @@ mod rustowl_check {
     #[divan::bench]
     fn default(bencher: Bencher) {
         bencher.bench(|| {
-            let output = Command::new(BINARY_PATH)
+            let output = Command::new(rustowl_bin_path())
                 .args(["check", DUMMY_PACKAGE])
                 .output()
                 .expect("Failed to run rustowl check");
@@ -50,7 +72,7 @@ mod rustowl_check {
     #[divan::bench]
     fn all_targets(bencher: Bencher) {
         bencher.bench(|| {
-            let output = Command::new(BINARY_PATH)
+            let output = Command::new(rustowl_bin_path())
                 .args(["check", DUMMY_PACKAGE, "--all-targets"])
                 .output()
                 .expect("Failed to run rustowl check with all targets");
@@ -61,7 +83,7 @@ mod rustowl_check {
     #[divan::bench]
     fn all_features(bencher: Bencher) {
         bencher.bench(|| {
-            let output = Command::new(BINARY_PATH)
+            let output = Command::new(rustowl_bin_path())
                 .args(["check", DUMMY_PACKAGE, "--all-features"])
                 .output()
                 .expect("Failed to run rustowl check with all features");
@@ -77,7 +99,7 @@ mod rustowl_comprehensive {
     #[divan::bench]
     fn comprehensive(bencher: Bencher) {
         bencher.bench(|| {
-            let output = Command::new(BINARY_PATH)
+            let output = Command::new(rustowl_bin_path())
                 .args(["check", DUMMY_PACKAGE, "--all-targets", "--all-features"])
                 .output()
                 .expect("Failed to run comprehensive rustowl check");

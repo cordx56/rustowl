@@ -50,7 +50,7 @@ jobs:
         run: echo "TOOLCHAIN_ARCH=aarch64" >> $GITHUB_ENV
       - name: setup env
         run: |
-          toolchain="$(./scripts/build/toolchain eval 'echo $RUSTOWL_TOOLCHAIN')"
+          toolchain="$(cargo xtask toolchain sh -lc 'echo $RUSTOWL_TOOLCHAIN')"
           echo "toolchain=$toolchain" >> $GITHUB_ENV
 
           ([[ "${{ matrix.target }}" == *msvc* ]] && echo "exec_ext=.exe" || echo "exec_ext=") >> $GITHUB_ENV
@@ -64,10 +64,10 @@ jobs:
       - name: Build
         run: |
           if [[ "${{ env.is_linux }}" == "true" ]]; then
-            ./scripts/build/toolchain cargo install --locked cargo-zigbuild
-            ./scripts/build/toolchain cargo zigbuild --target ${{ matrix.target }}.2.17 --profile=${{ env.build_profile }}
+            cargo xtask toolchain cargo install --locked cargo-zigbuild
+            cargo xtask toolchain cargo zigbuild --target ${{ matrix.target }}.2.17 --profile=${{ env.build_profile }}
           else
-            ./scripts/build/toolchain cargo build --target ${{ matrix.target }} --profile=${{ env.build_profile }}
+            cargo xtask toolchain cargo build --target ${{ matrix.target }} --profile=${{ env.build_profile }}
           fi
       - name: Check the functionality
         run: |

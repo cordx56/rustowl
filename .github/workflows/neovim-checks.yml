@@ -9,7 +9,7 @@ on:
       - selene.toml
       - vim.yml
       - nvim-tests/**/*
-      - scripts/run_nvim_tests.sh
+      - crates/xtask/**/*
       - .github/workflows/neovim-checks.yml
   push:
     branches:
@@ -22,7 +22,7 @@ on:
       - selene.toml
       - vim.yml
       - nvim-tests/**/*
-      - scripts/run_nvim_tests.sh
+      - crates/xtask/**/*
       - .github/workflows/neovim-checks.yml
 permissions:
   contents: read
@@ -44,10 +44,10 @@ jobs:
           version: v0.11.2
       - name: Setup RustOwl
         run: |
-          ./scripts/build/toolchain cargo build --release
-          ./scripts/build/toolchain cargo install --path crates/rustowl
+          cargo xtask toolchain cargo build --release
+          cargo xtask toolchain cargo install --path crates/rustowl
       - name: Run Tests
-        run: ./scripts/run_nvim_tests.sh
+        run: cargo xtask nvim-tests
   style:
     name: Check Styling Using Stylua
     runs-on: ubuntu-latest

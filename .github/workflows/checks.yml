@@ -83,11 +83,6 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - name: Install Rust toolchain
-        uses: ./.github/actions/rust-toolchain-yq
-        with:
-          targets: ${{ matrix.target }}
-          components: llvm-tools,rust-src,rustc-dev
       - name: Install cargo-nextest
         uses: taiki-e/install-action@3522286d40783523f9c7880e33f785905b4c20d0 # v2.66.1
         with:
@@ -95,44 +90,23 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
       - name: Install runtime deps
-        run: ./scripts/build/toolchain echo "Successfully installed runtime dependencies"
-        shell: bash
-      # `./scripts/build/toolchain` bootstraps a custom rustc sysroot + sets
-      # `RUSTC_BOOTSTRAP=rustowlc`. That setup is needed for building rustowlc,
-      # but it can break linking on windows-msvc when compiling third-party
-      # crates (missing std symbols like `std::io::stdio::stderr::INSTANCE`).
-      #
-      # Run tests/builds with the normal toolchain on Windows x86_64 MSVC.
+        run: cargo xtask toolchain echo "Successfully installed runtime dependencies"
       - name: Run tests with nextest
-        if: matrix.target != 'x86_64-pc-windows-msvc'
-        run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
-      - name: Run tests with nextest (Windows x86_64)
-        if: matrix.target == 'x86_64-pc-windows-msvc'
-        run: cargo nextest run --no-fail-fast
+        run: cargo xtask toolchain cargo nextest run --no-fail-fast
       - name: Run doc tests
-        if: matrix.target != 'x86_64-pc-windows-msvc'
-        run: ./scripts/build/toolchain cargo test --doc
-      - name: Run doc tests (Windows x86_64)
-        if: matrix.target == 'x86_64-pc-windows-msvc'
-        run: cargo test --doc
+        run: cargo xtask toolchain cargo test --doc
       - name: Build release
-        if: matrix.os != 'windows-11-arm' && matrix.target != 'x86_64-pc-windows-msvc'
-        run: ./scripts/build/toolchain cargo build --release
-      - name: Build release (Windows x86_64)
-        if: matrix.target == 'x86_64-pc-windows-msvc'
-        run: cargo build --release
+        if: matrix.os != 'windows-11-arm'
+        run: cargo xtask toolchain cargo build --release
       - name: Build Release (Windows ARM)
         if: matrix.os == 'windows-11-arm'
-        run: ./scripts/build/toolchain cargo build --profile arm-windows-release
+        run: cargo xtask toolchain cargo build --profile arm-windows-releas
       - name: Install binary
-        if: matrix.os != 'windows-11-arm' && matrix.target != 'x86_64-pc-windows-msvc'
-        run: ./scripts/build/toolchain cargo install --path crates/rustowl
-      - name: Install binary (Windows x86_64)
-        if: matrix.target == 'x86_64-pc-windows-msvc'
-        run: cargo install --path crates/rustowl
+        if: matrix.os != 'windows-11-arm'
+        run: cargo xtask toolchain cargo install --path crates/rustowl
       - name: Install binary (Windows ARM)
         if: matrix.os == 'windows-11-arm'
-        run: ./scripts/build/toolchain cargo install --path crates/rustowl --profile arm-windows-release
+        run: cargo xtask toolchain cargo install --path crates/rustowl --profile arm-windows-release
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
   vscode:
