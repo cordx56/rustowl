@@ -35,7 +35,7 @@ pub struct Args {
 pub async fn run(args: Args) -> Result<()> {
     let root = repo_root()?;
 
-    let channel = read_rust_toolchain_channel(&root)?;
+    let channel = read_toolchain_channel(&root)?;
     let host = host_tuple()?;
     let toolchain = format!("{}-{}", channel, host);
 
@@ -72,23 +72,20 @@ pub async fn run(args: Args) -> Result<()> {
         .await
 }
 
-fn read_rust_toolchain_channel(root: &Path) -> Result<String> {
-    let path = root.join("rust-toolchain.toml");
-    let content = read_to_string(&path)?;
-    // minimal parse: find line like channel = "1.92.0"
-    for line in content.lines() {
-        let line = line.trim();
-        if let Some(rest) = line.strip_prefix("channel") {
-            let rest = rest.trim_start();
-            if let Some(rest) = rest.strip_prefix('=') {
-                let rest = rest.trim();
-                if let Some(stripped) = rest.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-                    return Ok(stripped.to_string());
-                }
-            }
-        }
+fn read_toolchain_channel(root: &Path) -> Result<String> {
+    let pinned_stable = root.join(".rust-version-stable");
+    if pinned_stable.is_file() {
+        return Ok(read_to_string(&pinned_stable)?
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string());
     }
-    Err(anyhow!("could not parse channel from rust-toolchain.toml"))
+
+    Err(anyhow!(
+        "could not locate pinned stable toolchain version (expected .rust-version-stable)"
+    ))
 }
 
 fn host_tuple() -> Result<String> {
@@ -134,16 +131,18 @@ async fn ensure_sysroot(sysroot: &Path, toolchain: &str) -> Result<()> {
 
     let components = ["rustc", "rust-std", "cargo", "rustc-dev", "llvm-tools"];
 
+    // Download/install in parallel (matches legacy shell script behavior).
     let mut tasks = Vec::new();
     for component in components {
-        tasks.push(install_component(
+        tasks.push(tokio::spawn(install_component(
             component,
             sysroot.to_path_buf(),
             toolchain.to_string(),
-        ));
+        )));
     }
+
     for t in tasks {
-        t.await?;
+        t.await.context("join toolchain installer")??;
     }
 
     Ok(())
@@ -154,9 +153,19 @@ async fn install_component(component: &str, sysroot: PathBuf, toolchain: String)
     let url = format!("{dist_base}/{component}-{toolchain}.tar.gz");
     eprintln!("Downloading {url}");
 
-    let bytes = reqwest::get(&url)
+    let resp = reqwest::get(&url)
         .await
-        .with_context(|| format!("GET {url}"))?
+        .with_context(|| format!("GET {url}"))?;
+
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err(anyhow!(
+            "toolchain artifact not found (404): {url}\n\
+This usually means the pinned nightly ({toolchain}) is no longer available on static.rust-lang.org (cleanup/retention).\n\
+Fix by updating `rust-toolchain.toml` to an existing nightly date or set `$SYSROOT` to a pre-downloaded sysroot."
+        ));
+    }
+
+    let bytes = resp
         .error_for_status()
         .with_context(|| format!("HTTP {url}"))?
         .bytes()
