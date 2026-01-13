@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim AS chef
+FROM rust:slim-bookworm AS chef
 WORKDIR /app
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential=12.9 ca-certificates=20230311+deb12u1 curl=7.88.1-10+deb12u14 && \
@@ -12,8 +12,8 @@ RUN cargo xtask toolchain cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo xtask toolchain cargo chef cook --release --recipe-path recipe.json
-RUN cargo xtask toolchain cargo build --release
+RUN cargo xtask toolchain cargo chef cook --release --recipe-path recipe.json && \
+    cargo xtask toolchain cargo build --release
 
 # final image
 FROM debian:bookworm-slim
