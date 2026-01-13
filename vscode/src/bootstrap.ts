@@ -155,7 +155,9 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
           });
 
           return await new Promise<string>((resolve, reject) => {
-            installer.addListener("error", (error) => reject(error));
+            installer.addListener("error", (error) => {
+              reject(error);
+            });
             installer.addListener("exit", (code) => {
               (async () => {
                 if (code === 0) {
@@ -168,7 +170,9 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
                 const logPath = await writeErrorLog(dirPath, errorMessage);
                 await showDetailedError(errorMessage, logPath);
                 reject(new Error(`toolchain setup failed (exit code ${code})`));
-              })().catch((error) => reject(error));
+              })().catch((error) => {
+                reject(error);
+              });
             });
           });
         } catch (error) {
@@ -254,7 +258,11 @@ const showDetailedError = async (errorOutput: string, logPath: string) => {
       const logUri = vscode.Uri.file(logPath);
       await vscode.window.showTextDocument(logUri);
     } catch (error) {
-      vscode.window.showErrorMessage(`Failed to open log file: ${error}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(
+        `Failed to open log file: ${errorMessage}`,
+      );
     }
   } else if (selection === "Copy Log Path" && logPath !== "") {
     await vscode.env.clipboard.writeText(logPath);
