@@ -90,6 +90,12 @@ tikv-jemallocator.workspace = true
 zip.workspace = true
 
 [features]
+default = ["jemalloc"]
+
+# Use jemalloc as the global allocator on linux/macos.
+# Disable with `--no-default-features` (useful for Valgrind).
+jemalloc = []
+
 # Bench-only helpers used by `cargo bench` targets.
 # Off by default to avoid exposing internal APIs.
 bench = []

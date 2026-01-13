@@ -17,11 +17,20 @@ fn log_level_from_args(args: &Cli) -> LevelFilter {
     args.verbosity.tracing_level_filter()
 }
 
-#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
+#[cfg(all(
+    any(target_os = "linux", target_os = "macos"),
+    not(miri),
+    feature = "jemalloc"
+))]
 use tikv_jemallocator::Jemalloc;
 
-// Use jemalloc by default, but fall back to system allocator for Miri
-#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
+// Use jemalloc by default on linux/macos (but keep a feature-gated escape hatch
+// so we can run tools like Valgrind with the system allocator).
+#[cfg(all(
+    any(target_os = "linux", target_os = "macos"),
+    not(miri),
+    feature = "jemalloc"
+))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 

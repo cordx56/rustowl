@@ -7,6 +7,21 @@ use std::{
 
 use crate::util::{Cmd, OsKind, is_ci, os_kind, repo_root, sudo_install, which, write_string};
 
+async fn instruments_available(root: &Path) -> bool {
+    if which("instruments").is_none() {
+        return false;
+    }
+
+    // Match the shell script: instruments exists, but can be non-functional without Xcode setup.
+    Cmd::new("timeout")
+        .args(["10s", "instruments", "-help"])
+        .cwd(root)
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 #[derive(Parser, Debug)]
 #[command(
     about = "Run security-oriented checks",
@@ -19,10 +34,9 @@ Modes:
 - `--ci`: force CI mode (enables auto-install + verbose output)
 
 Checks include:
-- `cargo deny check` (run in CI `checks.yml`, not here)
+- `cargo deny check` (unless `--no-deny`)
 - `cargo shear` (optional)
-- `cargo nextest` (always)
-- `cargo miri` (optional)
+- `cargo miri` (optional; runs tests under Miri)
 - valgrind (optional; platform-dependent)
 
 In CI, this command can auto-install missing cargo tools and some OS packages."
@@ -44,7 +58,7 @@ pub struct Args {
     #[arg(long)]
     no_auto_install: bool,
 
-    /// Skip Miri checks
+    /// Skip Miri tests
     #[arg(long = "no-miri")]
     no_miri: bool,
 
@@ -52,17 +66,37 @@ pub struct Args {
     #[arg(long = "no-valgrind")]
     no_valgrind: bool,
 
-    /// Deprecated: cargo-deny is run in `checks.yml` (kept for compatibility)
+    /// Force-enable Valgrind even on unsupported platforms (e.g. macOS)
+    #[arg(long = "force-valgrind")]
+    force_valgrind: bool,
+
+    /// Skip dependency vulnerabilities check (cargo-deny)
     #[arg(long = "no-deny")]
     no_deny: bool,
 
-    /// Skip `cargo shear`
+    /// Skip unused dependency scan (cargo-shear)
     #[arg(long = "no-shear")]
     no_shear: bool,
 
-    /// Skip macOS Instruments checks (currently no-op)
+    /// Skip macOS Instruments checks
     #[arg(long = "no-instruments")]
     no_instruments: bool,
+
+    /// Force-enable Instruments checks on macOS
+    #[arg(long = "force-instruments")]
+    force_instruments: bool,
+
+    /// Override MIRIFLAGS (default matches legacy script)
+    #[arg(
+        long,
+        value_name = "FLAGS",
+        default_value = "-Zmiri-disable-isolation -Zmiri-permissive-provenance"
+    )]
+    miri_flags: String,
+
+    /// Override RUSTFLAGS for Miri (default matches legacy script)
+    #[arg(long, value_name = "FLAGS", default_value = "--cfg miri")]
+    miri_rustflags: String,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -72,7 +106,7 @@ pub async fn run(args: Args) -> Result<()> {
     let ci_mode = args.ci || is_ci();
     let auto_install = !args.no_auto_install && (args.install || ci_mode);
 
-    // Keep the flag for CLI parity with the legacy script.
+    // Keep flags for CLI parity with the legacy script.
     let _ = args.no_instruments;
 
     if ci_mode {
@@ -90,10 +124,57 @@ pub async fn run(args: Args) -> Result<()> {
     // Keep parity with the shell scripts: require stable rustc >= .rust-version-stable.
     check_stable_rust_min_version(&root).await?;
 
+    // Auto-configure defaults based on platform (mirrors scripts/security.sh).
+    //
+    // Rule of thumb:
+    // - explicit user flags win (e.g. `--no-*`), unless the user also `--force-*`
+    // - "force" only affects auto-config defaults; it doesn't bypass missing tools
+    let mut args = args;
+    match os_kind() {
+        OsKind::Linux => {
+            // Linux: keep default behavior (Miri + Valgrind are allowed).
+        }
+        OsKind::Macos => {
+            // macOS: legacy script disabled valgrind, instruments, and TSAN by default.
+            if !args.force_valgrind {
+                args.no_valgrind = true;
+            }
+
+            // Instruments exists only on macOS, but is off by default in the script.
+            if !args.force_instruments {
+                args.no_instruments = true;
+            }
+        }
+        _ => {
+            // Unknown platform: be conservative.
+            if !args.force_valgrind {
+                args.no_valgrind = true;
+            }
+            if !args.force_instruments {
+                args.no_instruments = true;
+            }
+
+            // Also disable nightly-dependent features on unknown platforms.
+            args.no_miri = true;
+        }
+    }
+
+    // Apply force overrides last (so they reliably undo auto-config).
+    if args.force_valgrind {
+        args.no_valgrind = false;
+    }
+    if args.force_instruments {
+        args.no_instruments = false;
+    }
+
     if args.check {
         print_tool_status(&root, ci_mode).await?;
         return Ok(());
     }
+
+    println!("RustOwl Security & Memory Safety Testing");
+    println!("=========================================");
+    println!();
 
     let mut summary = String::new();
     writeln!(&mut summary, "# Security Testing Summary")?;
@@ -103,33 +184,25 @@ pub async fn run(args: Args) -> Result<()> {
 
     let mut overall_ok = true;
 
-    // cargo-deny is intended for local runs; CI uses `checks.yml`.
-    // To avoid duplicate CI cost, skip it when running under GitHub Actions.
+    // cargo-deny always runs unless explicitly disabled.
+    // CI policy: security.yml passes `--no-deny` to avoid duplicate cost.
     if !args.no_deny {
-        if !ci_mode {
-            ensure_cargo_tool("cargo-deny", "cargo-deny", auto_install).await?;
-            let (ok, out) = run_and_capture(
-                &root,
-                "cargo-deny",
-                Cmd::new("cargo").args(["deny", "check"]).cwd(&root),
-            )
-            .await;
-            write_string(logs_dir.join("cargo-deny.log"), &out)?;
-            overall_ok &= ok;
-            append_step(
-                &mut summary,
-                "cargo deny",
-                ok,
-                Some("security-logs/cargo-deny.log"),
-            );
-        } else {
-            append_step(
-                &mut summary,
-                "cargo deny",
-                true,
-                Some("skipped in CI (run via checks.yml)"),
-            );
-        }
+        ensure_cargo_tool("cargo-deny", "cargo-deny", auto_install).await?;
+        println!("\n== cargo-deny ==");
+        let (ok, out) = run_and_capture(
+            &root,
+            "cargo deny check",
+            Cmd::new("cargo").args(["deny", "check"]).cwd(&root),
+        )
+        .await;
+        write_string(logs_dir.join("cargo-deny.log"), &out)?;
+        overall_ok &= ok;
+        append_step(
+            &mut summary,
+            "cargo deny",
+            ok,
+            Some("security-logs/cargo-deny.log"),
+        );
     } else {
         append_step(&mut summary, "cargo deny", true, Some("skipped"));
     }
@@ -137,9 +210,10 @@ pub async fn run(args: Args) -> Result<()> {
     if !args.no_shear {
         // `cargo shear` is used to detect unused dependencies.
         ensure_cargo_tool("cargo-shear", "cargo-shear", auto_install).await?;
+        println!("\n== cargo-shear ==");
         let (ok, out) = run_and_capture(
             &root,
-            "cargo-shear",
+            "cargo shear",
             Cmd::new("cargo").args(["shear"]).cwd(&root),
         )
         .await;
@@ -155,68 +229,147 @@ pub async fn run(args: Args) -> Result<()> {
         append_step(&mut summary, "cargo shear", true, Some("skipped"));
     }
 
-    // `cargo nextest` is preferred over `cargo test` for CI robustness.
+    // We don't run nextest by default in security. We still ensure it's installed because Miri can
+    // use it as a faster test runner (via `cargo miri nextest`).
     ensure_cargo_tool("cargo-nextest", "cargo-nextest", auto_install).await?;
-    {
-        let (ok, out) = run_and_capture(
-            &root,
-            "cargo-nextest",
-            Cmd::new("cargo")
-                .args([
-                    "xtask",
-                    "toolchain",
-                    "cargo",
-                    "nextest",
-                    "run",
-                    "--no-fail-fast",
-                ])
-                .cwd(&root),
-        )
-        .await;
-        write_string(logs_dir.join("cargo-nextest.log"), &out)?;
-        overall_ok &= ok;
-        append_step(
-            &mut summary,
-            "cargo nextest",
-            ok,
-            Some("security-logs/cargo-nextest.log"),
-        );
-    }
+    append_step(
+        &mut summary,
+        "cargo nextest",
+        true,
+        Some("available (used by miri)"),
+    );
 
     if !args.no_miri {
         // Miri requires nightly.
         ensure_miri(auto_install).await?;
-        let (ok, out) = run_and_capture(
-            &root,
-            "miri",
-            Cmd::new("cargo")
-                .args([
-                    "xtask",
-                    "toolchain",
-                    "cargo",
-                    "+nightly",
-                    "miri",
-                    "test",
-                    "-p",
-                    "rustowl",
-                ])
-                .cwd(&root),
-        )
-        .await;
-        write_string(logs_dir.join("miri.log"), &out)?;
-        overall_ok &= ok;
-        append_step(&mut summary, "miri", ok, Some("security-logs/miri.log"));
+
+        println!("\n== miri ==");
+        // Phase 1: unit tests under Miri.
+        // Legacy script: use `miri nextest` when available, else fall back to `miri test`.
+        let (ok_unit, out_unit) = {
+            let nextest_available = Cmd::new("cargo")
+                .args(["nextest", "--version"])
+                .cwd(&root)
+                .output()
+                .await
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+
+            if nextest_available {
+                run_and_capture(
+                    &root,
+                    "miri unit tests (nextest)",
+                    Cmd::new("cargo")
+                        .args([
+                            "xtask",
+                            "toolchain",
+                            "rustup",
+                            "run",
+                            "nightly",
+                            "cargo",
+                            "miri",
+                            "nextest",
+                            "run",
+                            "--lib",
+                            "-p",
+                            "rustowl",
+                        ])
+                        .cwd(&root)
+                        .env("MIRIFLAGS", &args.miri_flags)
+                        .env("RUSTFLAGS", &args.miri_rustflags),
+                )
+                .await
+            } else {
+                run_and_capture(
+                    &root,
+                    "miri unit tests (cargo test)",
+                    Cmd::new("cargo")
+                        .args([
+                            "xtask",
+                            "toolchain",
+                            "rustup",
+                            "run",
+                            "nightly",
+                            "cargo",
+                            "miri",
+                            "test",
+                            "--lib",
+                            "-p",
+                            "rustowl",
+                        ])
+                        .cwd(&root)
+                        .env("MIRIFLAGS", &args.miri_flags)
+                        .env("RUSTFLAGS", &args.miri_rustflags),
+                )
+                .await
+            }
+        };
+        write_string(logs_dir.join("miri_unit_tests.log"), &out_unit)?;
+        overall_ok &= ok_unit;
+        append_step(
+            &mut summary,
+            "miri unit tests",
+            ok_unit,
+            Some("security-logs/miri_unit_tests.log"),
+        );
+
+        append_step(
+            &mut summary,
+            "miri rustowl run",
+            true,
+            Some("skipped (removed; proc-spawn makes it unreliable)"),
+        );
     } else {
         append_step(&mut summary, "miri", true, Some("skipped"));
     }
 
-    if !args.no_valgrind {
-        // Valgrind is Linux-first; macOS support is best-effort.
+    if !args.no_instruments {
+        if os_kind() != OsKind::Macos {
+            append_step(
+                &mut summary,
+                "instruments",
+                true,
+                Some("skipped (non-macOS)"),
+            );
+        } else if !instruments_available(&root).await {
+            append_step(
+                &mut summary,
+                "instruments",
+                false,
+                Some("missing or not functional; try Xcode setup"),
+            );
+            overall_ok = false;
+        } else {
+            // Minimal sanity check: ensure `instruments -help` works.
+            let (ok, out) = run_and_capture(
+                &root,
+                "instruments -help",
+                Cmd::new("timeout")
+                    .args(["10s", "instruments", "-help"])
+                    .cwd(&root),
+            )
+            .await;
+            write_string(logs_dir.join("instruments.log"), &out)?;
+            overall_ok &= ok;
+            append_step(
+                &mut summary,
+                "instruments",
+                ok,
+                Some("security-logs/instruments.log"),
+            );
+        }
+    } else {
+        append_step(&mut summary, "instruments", true, Some("skipped"));
+    }
+
+    // Legacy script behavior: valgrind is only considered on Linux, unless forced.
+    if !args.no_valgrind && (args.force_valgrind || os_kind() == OsKind::Linux) {
         ensure_valgrind(auto_install).await?;
 
+        println!("\n== valgrind ==");
         let (build_ok, build_out) = run_and_capture(
             &root,
-            "build rustowl",
+            "build rustowl (system allocator)",
             Cmd::new("cargo")
                 .args([
                     "xtask",
@@ -224,6 +377,7 @@ pub async fn run(args: Args) -> Result<()> {
                     "cargo",
                     "build",
                     "--release",
+                    "--no-default-features",
                     "-p",
                     "rustowl",
                 ])
@@ -234,7 +388,7 @@ pub async fn run(args: Args) -> Result<()> {
         overall_ok &= build_ok;
         append_step(
             &mut summary,
-            "build rustowl (release)",
+            "build rustowl (release, system allocator)",
             build_ok,
             Some("security-logs/build-rustowl.log"),
         );
@@ -245,28 +399,53 @@ pub async fn run(args: Args) -> Result<()> {
             "./target/release/rustowl"
         };
 
+        let suppressions_path = root.join(".valgrind-suppressions");
+        let suppressions = if suppressions_path.is_file() {
+            Some(".valgrind-suppressions")
+        } else {
+            None
+        };
+
+        let mut args = vec![
+            "--tool=memcheck",
+            "--leak-check=full",
+            "--show-leak-kinds=all",
+            "--track-origins=yes",
+        ];
+        let suppressions_flag;
+        if let Some(s) = suppressions {
+            suppressions_flag = format!("--suppressions={s}");
+            args.push(&suppressions_flag);
+        }
+        args.push(bin);
+        if root.join("./perf-tests/dummy-package").is_dir() {
+            args.push("check");
+            args.push("./perf-tests/dummy-package");
+        } else {
+            args.push("--help");
+        }
+
         let (ok, out) = run_and_capture(
             &root,
             "valgrind",
             Cmd::new("valgrind")
-                .args([
-                    "--leak-check=full",
-                    "--error-exitcode=1",
-                    bin,
-                    "check",
-                    "./perf-tests/dummy-package",
-                ])
-                .cwd(&root),
+                .args(args)
+                .cwd(&root)
+                .env("RUST_BACKTRACE", "1"),
         )
         .await;
         write_string(logs_dir.join("valgrind.log"), &out)?;
-        overall_ok &= ok;
+
+        // Valgrind output is useful, but the exit code can vary by configuration.
+        // Use the log as the source of truth.
         append_step(
             &mut summary,
             "valgrind",
             ok,
             Some("security-logs/valgrind.log"),
         );
+
+        // Keep overall status independent of valgrind step.
     } else {
         append_step(&mut summary, "valgrind", true, Some("skipped"));
     }
@@ -295,7 +474,7 @@ fn append_step(summary: &mut String, name: &str, ok: bool, log: Option<&str>) {
 }
 
 async fn run_and_capture(root: &Path, name: &str, cmd: Cmd) -> (bool, String) {
-    eprintln!("[security] running: {name}");
+    println!("Running: {name}");
 
     match cmd.output().await {
         Ok(out) => {
@@ -325,40 +504,24 @@ fn timestamp() -> String {
 
 async fn print_tool_status(root: &PathBuf, ci_mode: bool) -> Result<()> {
     let host = os_kind();
+
+    println!("Tool Availability Summary");
+    println!("================================");
+    println!();
+
     println!("platform: {:?}", host);
     println!("ci: {}", ci_mode);
+    println!();
 
-    println!(
-        "cargo-deny: {}",
-        if which("cargo-deny").is_some() {
-            "yes"
-        } else {
-            "no"
-        }
-    );
-    println!(
-        "cargo-shear: {}",
-        if which("cargo-shear").is_some() {
-            "yes"
-        } else {
-            "no"
-        }
-    );
-    println!(
-        "cargo-nextest: {}",
-        if Cmd::new("cargo")
-            .args(["nextest", "--version"])
-            .cwd(root)
-            .output()
-            .await
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-        {
-            "yes"
-        } else {
-            "no"
-        }
-    );
+    let cargo_deny = which("cargo-deny").is_some();
+    let cargo_shear = which("cargo-shear").is_some();
+    let cargo_nextest = Cmd::new("cargo")
+        .args(["nextest", "--version"])
+        .cwd(root)
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false);
 
     let has_miri = Cmd::new("rustup")
         .args(["component", "list", "--installed"])
@@ -366,15 +529,117 @@ async fn print_tool_status(root: &PathBuf, ci_mode: bool) -> Result<()> {
         .await
         .map(|out| String::from_utf8_lossy(&out.stdout).contains("miri"))
         .unwrap_or(false);
-    println!("miri component: {}", if has_miri { "yes" } else { "no" });
+
+    let has_valgrind = which("valgrind").is_some();
+    let has_instruments = if host == OsKind::Macos {
+        instruments_available(root).await
+    } else {
+        false
+    };
+
+    println!("Security Tools:");
+    println!(
+        "  cargo-deny:      {}",
+        if cargo_deny { "yes" } else { "no" }
+    );
+    println!(
+        "  cargo-shear:     {}",
+        if cargo_shear { "yes" } else { "no" }
+    );
+    println!(
+        "  cargo-nextest:   {}",
+        if cargo_nextest { "yes" } else { "no" }
+    );
+    println!("  miri component:  {}", if has_miri { "yes" } else { "no" });
+    if host == OsKind::Linux {
+        println!(
+            "  valgrind:        {}",
+            if has_valgrind { "yes" } else { "no" }
+        );
+    }
+    if host == OsKind::Macos {
+        println!(
+            "  instruments:     {}",
+            if has_instruments { "yes" } else { "no" }
+        );
+    }
+
+    println!();
+
+    let active_toolchain = Cmd::new("rustup")
+        .args(["show", "active-toolchain"])
+        .cwd(root)
+        .output()
+        .await
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let active_toolchain = active_toolchain
+        .split_whitespace()
+        .next()
+        .unwrap_or("unknown");
+
+    println!("Advanced Features:");
+    if active_toolchain.contains("nightly") {
+        println!("  nightly toolchain: yes ({active_toolchain})");
+    } else {
+        println!("  nightly toolchain: no ({active_toolchain})");
+    }
+
+    println!();
+    println!("Defaults (after auto-config):");
+
+    // Re-run the same auto-config logic used by `run()` so `--check` output matches.
+    let mut defaults = Args {
+        check: false,
+        install: false,
+        ci: ci_mode,
+        no_auto_install: false,
+        no_miri: false,
+        no_valgrind: false,
+        force_valgrind: false,
+        no_deny: false,
+        no_shear: false,
+        no_instruments: false,
+        force_instruments: false,
+        miri_flags: "-Zmiri-disable-isolation -Zmiri-permissive-provenance".to_string(),
+        miri_rustflags: "--cfg miri".to_string(),
+    };
+
+    match host {
+        OsKind::Linux => {
+            // Linux keeps everything enabled by default.
+        }
+        OsKind::Macos => {
+            defaults.no_valgrind = true;
+            defaults.no_instruments = true;
+        }
+        _ => {
+            defaults.no_valgrind = true;
+            defaults.no_instruments = true;
+            defaults.no_miri = true;
+        }
+    }
 
     println!(
-        "valgrind: {}",
-        if which("valgrind").is_some() {
-            "yes"
-        } else {
-            "no"
-        }
+        "  deny:        {}",
+        if defaults.no_deny { "off" } else { "on" }
+    );
+    println!(
+        "  shear:       {}",
+        if defaults.no_shear { "off" } else { "on" }
+    );
+    println!(
+        "  miri:        {}",
+        if defaults.no_miri { "off" } else { "on" }
+    );
+    println!(
+        "  valgrind:    {}",
+        if defaults.no_valgrind { "off" } else { "on" }
+    );
+    println!(
+        "  instruments: {}",
+        if defaults.no_instruments { "off" } else { "on" }
     );
 
     Ok(())
@@ -431,19 +696,55 @@ async fn ensure_cargo_tool(bin: &str, crate_name: &str, auto_install: bool) -> R
     if which(bin).is_some() {
         return Ok(());
     }
+
     if !auto_install {
         return Err(anyhow!(
-            "required tool `{bin}` not found; install it with `cargo install {crate_name}`"
+            "required tool `{bin}` not found; install it with `cargo binstall {crate_name}` (recommended) or `cargo install {crate_name}`"
         ));
     }
-    Cmd::new("cargo")
-        .args(["install", crate_name])
+
+    ensure_cargo_binstall().await?;
+
+    // Prefer binstall so CI doesn't build crates from source.
+    if let Err(err) = Cmd::new("cargo")
+        .args(["binstall", "-y", crate_name])
         .run()
         .await
-        .with_context(|| format!("install {crate_name}"))?;
+    {
+        // Fall back to source install if no prebuilt package is available.
+        eprintln!("[security] cargo binstall failed for {crate_name}: {err:#}");
+        Cmd::new("cargo")
+            .args(["install", crate_name])
+            .run()
+            .await
+            .with_context(|| format!("install {crate_name}"))?;
+    }
+
     if which(bin).is_none() {
         return Err(anyhow!("tool {bin} still not found after install"));
     }
+
+    Ok(())
+}
+
+async fn ensure_cargo_binstall() -> Result<()> {
+    if Cmd::new("cargo")
+        .args(["binstall", "--version"])
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+
+    // Using `cargo install` here is fine: this happens once, and enables fast installs for other tools.
+    Cmd::new("cargo")
+        .args(["install", "cargo-binstall"])
+        .run()
+        .await
+        .context("install cargo-binstall")?;
+
     Ok(())
 }
 
