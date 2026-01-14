@@ -14,18 +14,21 @@ jobs:
   check:
     name: Format & Lint
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+          - 1.89.0
+          - 1.90.0
+          - 1.91.1
+          - 1.92.0
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Get Rust version
-        run: |
-          echo RUSTUP_TOOLCHAIN=$(cat ./scripts/build/channel) >> $GITHUB_ENV
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          toolchain: ${{ matrix.toolchain }}
           components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
 
       - name: Cache dependencies
