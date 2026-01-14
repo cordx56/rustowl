@@ -48,6 +48,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 rustls = { version = "0.23.36", default-features = false, features = [
   "aws_lc_rs",
 ] }
+rustversion = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 simple_logger = { version = "5", features = ["stderr"] }

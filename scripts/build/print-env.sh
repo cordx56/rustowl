@@ -1,12 +1,12 @@
 #!/bin/sh -e
 
-if [ $# -ne 1 ]; then
+TOOLCHAIN_CHANNEL="${TOOLCHAIN_CHANNEL:-"$1"}"
+
+if [ -z "$TOOLCHAIN_CHANNEL" ]; then
   echo "Usage: $0 <rust-version>"
   echo "Example: $0 1.89.0"
   exit 1
 fi
-
-TOOLCHAIN_CHANNEL="$1"
 
 # print host-tuple
 host_tuple() {

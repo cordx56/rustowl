@@ -1742,6 +1742,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rustls",
+ "rustversion",
  "serde",
  "serde_json",
  "simple_logger",

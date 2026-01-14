@@ -1,7 +1,9 @@
-mod analyze;
-mod cache;
+pub mod analyze;
+pub mod cache;
+pub mod compiler;
 
 use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
+use compiler::AsRustc;
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
 use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
@@ -41,16 +43,18 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     log::info!("start borrowck of {def_id:?}");
 
-    let analyzer = MirAnalyzer::init(tcx, def_id);
+    let analyzers = MirAnalyzer::init(AsRustc::from_rustc(tcx), AsRustc::from_rustc(def_id));
 
     {
         let mut tasks = TASKS.lock().unwrap();
-        match analyzer {
-            MirAnalyzerInitResult::Cached(cached) => {
-                handle_analyzed_result(tcx, cached);
-            }
-            MirAnalyzerInitResult::Analyzer(analyzer) => {
-                tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
+        for (_, analyzer) in analyzers {
+            match analyzer {
+                MirAnalyzerInitResult::Cached(cached) => {
+                    handle_analyzed_result(tcx, cached);
+                }
+                MirAnalyzerInitResult::Analyzer(analyzer) => {
+                    tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
+                }
             }
         }
 
@@ -119,7 +123,7 @@ pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
         );
     }
     let krate = Crate(HashMap::from([(
-        analyzed.file_name.to_owned(),
+        analyzed.file_path.to_string_lossy().to_string(),
         File {
             items: vec![analyzed.analyzed],
         },
