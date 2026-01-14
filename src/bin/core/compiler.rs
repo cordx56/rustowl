@@ -72,6 +72,19 @@ pub trait AsRustc {
 impl_as_rustc!(TyCtxt<'tcx>, rustc_middle::ty::TyCtxt<'tcx>);
 
 impl<'tcx> TyCtxt<'tcx> {
+    #[rustversion::since(1.90.0)]
+    pub fn get_borrowck_facts(&self, def_id: DefId) -> HashMap<DefId, BorrowckFacts<'tcx>> {
+        let facts = rustc_borrowck::consumers::get_bodies_with_borrowck_facts(
+            *self.as_rustc(),
+            *def_id.as_rustc(),
+            rustc_borrowck::consumers::ConsumerOptions::PoloniusInputFacts,
+        );
+        facts
+            .into_iter()
+            .map(|(k, v)| (AsRustc::from_rustc(k), AsRustc::from_rustc(v)))
+            .collect()
+    }
+    #[rustversion::before(1.90.0)]
     pub fn get_borrowck_facts(&self, def_id: DefId) -> HashMap<DefId, BorrowckFacts<'tcx>> {
         let mut result = HashMap::new();
         let facts = rustc_borrowck::consumers::get_body_with_borrowck_facts(
@@ -163,7 +176,6 @@ impl<'tcx> Body<'tcx> {
         AsRustc::from_rustc(self.0.span)
     }
 }
-
 
 impl_as_rustc!(
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

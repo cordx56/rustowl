@@ -188,8 +188,12 @@ impl_as_rustc!(
 impl RustcRichLocation {
     pub fn rich_location(&self) -> RichLocation {
         match self.as_rustc() {
-            rustc_borrowck::consumers::RichLocation::Start(l) => RichLocation::Start(AsRustc::from_rustc(*l)),
-            rustc_borrowck::consumers::RichLocation::Mid(l) => RichLocation::Mid(AsRustc::from_rustc(*l)),
+            rustc_borrowck::consumers::RichLocation::Start(l) => {
+                RichLocation::Start(AsRustc::from_rustc(*l))
+            }
+            rustc_borrowck::consumers::RichLocation::Mid(l) => {
+                RichLocation::Mid(AsRustc::from_rustc(*l))
+            }
         }
     }
 }

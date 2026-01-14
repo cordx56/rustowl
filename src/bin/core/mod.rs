@@ -6,7 +6,7 @@ use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
 use compiler::AsRustc;
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
-use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
+use rustc_middle::{query::queries, ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
 use std::collections::HashMap;
@@ -44,7 +44,6 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
     log::info!("start borrowck of {def_id:?}");
 
     let analyzers = MirAnalyzer::init(AsRustc::from_rustc(tcx), AsRustc::from_rustc(def_id));
-
     {
         let mut tasks = TASKS.lock().unwrap();
         for (_, analyzer) in analyzers {
@@ -65,13 +64,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
         }
     }
 
-    for def_id in tcx.nested_bodies_within(def_id) {
-        let _ = mir_borrowck(tcx, def_id);
-    }
-
-    Ok(tcx
-        .arena
-        .alloc(ConcreteOpaqueTypes(indexmap::IndexMap::default())))
+    Ok(tcx.arena.alloc(Default::default()))
 }
 
 pub struct AnalyzerCallback;
