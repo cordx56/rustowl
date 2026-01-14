@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 /// RegionEraser to erase region variables from MIR body
 /// This is required to hash MIR body
-struct RegionEraser<'tcx> {
+pub struct RegionEraser<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 impl<'tcx> rustc_middle::ty::TypeFolder<rustc_middle::ty::TyCtxt<'tcx>> for RegionEraser<'tcx> {
@@ -22,10 +22,10 @@ impl<'tcx> rustc_middle::ty::TypeFolder<rustc_middle::ty::TyCtxt<'tcx>> for Regi
 impl<'tcx> Body<'tcx> {
     /// Erase region variables in MIR body
     /// Refer: [`RegionEraser`]
-    pub fn erase_region_variables(tcx: TyCtxt<'tcx>, body: Body<'tcx>) -> Body<'tcx> {
+    pub fn erase_region_variables(self, tcx: TyCtxt<'tcx>) -> Body<'tcx> {
         let mut eraser = RegionEraser { tcx };
         use rustc_middle::ty::TypeFoldable;
-        AsRustc::from_rustc(body.as_rustc().clone().fold_with(&mut eraser))
+        AsRustc::from_rustc(self.into_rustc().fold_with(&mut eraser))
     }
 }
 

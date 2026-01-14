@@ -59,7 +59,7 @@ impl MirAnalyzer {
 
             // region variables should not be hashed (it results an error)
             // so we erase region variables and set 'static as new region
-            let mir_hash = tcx.get_hash(body.as_rustc());
+            let mir_hash = tcx.get_hash(body.clone().erase_region_variables(tcx).as_rustc());
             let file_hash = tcx.get_hash(source_info.source());
 
             let mut cache = cache::CACHE.lock().unwrap();

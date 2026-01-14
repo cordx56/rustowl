@@ -69,7 +69,10 @@ pub trait AsRustc {
     fn from_rustc(rustc: Self::Rustc) -> Self;
 }
 
-impl_as_rustc!(TyCtxt<'tcx>, rustc_middle::ty::TyCtxt<'tcx>);
+impl_as_rustc!(
+    #[derive(Clone, Copy)]
+    TyCtxt<'tcx>, rustc_middle::ty::TyCtxt<'tcx>,
+);
 
 impl<'tcx> TyCtxt<'tcx> {
     #[rustversion::since(1.90.0)]
