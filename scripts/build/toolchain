@@ -8,7 +8,7 @@ export TOOLCHAIN_CHANNEL=${TOOLCHAIN_CHANNEL:-"$(cat "${script_dir}/channel")"}
 export $(/bin/sh "$script_dir/print-env.sh")
 unset IFS
 
-NIGHTLY_DATE="$(echo "$TOOLCHAIN_CHANNEL" | awk 'match($0, /nightly-(.+)/, res) { print res[1] }')"
+DATE="$(echo "$TOOLCHAIN_CHANNEL" | awk 'match($0, /[0-9]+-[0-9]+-[0-9]+/) { print substr($0, RSTART, RLENGTH) }')"
 
 component_filename() {
     if [ "$1" = "rust-src" ]; then
@@ -16,7 +16,7 @@ component_filename() {
     else
         file_postfix="-${HOST_TUPLE}"
     fi
-    if [ -z "$NIGHTLY_DATE" ]; then
+    if [ -z "$DATE" ]; then
         echo "$1-${TOOLCHAIN_CHANNEL}${file_postfix}"
     else
         echo "$1-nightly${file_postfix}"
@@ -26,10 +26,10 @@ component_filename() {
 DIST_BASE="https://static.rust-lang.org/dist"
 download_component() {
     file_ext=".${2:-"tar.gz"}"
-    if [ -z "$NIGHTLY_DATE" ]; then
+    if [ -z "$DATE" ]; then
         url="${DIST_BASE}/$(component_filename "$1")${file_ext}"
     else
-        url="${DIST_BASE}/${NIGHTLY_DATE}/$(component_filename "$1")${file_ext}"
+        url="${DIST_BASE}/${DATE}/$(component_filename "$1")${file_ext}"
     fi
     echo "Downloading from $url" 1>&2
 
