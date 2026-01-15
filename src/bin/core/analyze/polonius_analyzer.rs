@@ -1,19 +1,17 @@
-use super::transform::{BorrowData, BorrowMap};
 use rayon::prelude::*;
-use rustc_borrowck::consumers::{PoloniusLocationTable, PoloniusOutput};
-use rustc_index::Idx;
-use rustc_middle::mir::Local;
 use rustowl::{models::*, utils};
 use std::collections::{HashMap, HashSet};
+
+use super::*;
 
 pub fn get_accurate_live(
     datafrog: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
     basic_blocks: &[MirBasicBlock],
-) -> HashMap<Local, Vec<Range>> {
+) -> HashMap<LocalId, Vec<Range>> {
     get_range(
         datafrog
-            .var_live_on_entry
+            .var_live_on_entry()
             .iter()
             .map(|(p, v)| (*p, v.iter().copied())),
         location_table,
@@ -27,14 +25,14 @@ pub fn get_borrow_live(
     location_table: &PoloniusLocationTable,
     borrow_map: &BorrowMap,
     basic_blocks: &[MirBasicBlock],
-) -> (HashMap<Local, Vec<Range>>, HashMap<Local, Vec<Range>>) {
+) -> (HashMap<LocalId, Vec<Range>>, HashMap<LocalId, Vec<Range>>) {
     let output = datafrog;
     let mut shared_borrows = HashMap::new();
     let mut mutable_borrows = HashMap::new();
-    for (location_idx, borrow_idc) in output.loan_live_at.iter() {
-        let location = location_table.to_rich_location(*location_idx);
+    for (location_idx, borrow_idc) in output.loan_live_at().iter() {
+        let location = location_table.get_rich_location(location_idx);
         for borrow_idx in borrow_idc {
-            match borrow_map.get_from_borrow_index(*borrow_idx) {
+            match borrow_map.get_from_borrow(borrow_idx) {
                 Some((_, BorrowData::Shared { borrowed, .. })) => {
                     shared_borrows
                         .entry(*borrowed)
@@ -57,10 +55,7 @@ pub fn get_borrow_live(
             .map(|(local, locations)| {
                 (
                     local,
-                    utils::eliminated_ranges(super::transform::rich_locations_to_ranges(
-                        basic_blocks,
-                        &locations,
-                    )),
+                    utils::eliminated_ranges(rich_locations_to_ranges(basic_blocks, &locations)),
                 )
             })
             .collect(),
@@ -69,10 +64,7 @@ pub fn get_borrow_live(
             .map(|(local, locations)| {
                 (
                     local,
-                    utils::eliminated_ranges(super::transform::rich_locations_to_ranges(
-                        basic_blocks,
-                        &locations,
-                    )),
+                    utils::eliminated_ranges(rich_locations_to_ranges(basic_blocks, &locations)),
                 )
             })
             .collect(),
@@ -80,14 +72,14 @@ pub fn get_borrow_live(
 }
 
 pub fn get_must_live(
-    datafrog: &PoloniusOutput,
+    output: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
     borrow_map: &BorrowMap,
     basic_blocks: &[MirBasicBlock],
-) -> HashMap<Local, Vec<Range>> {
+) -> HashMap<LocalId, Vec<Range>> {
     // obtain a map that region -> region contained locations
     let mut region_locations = HashMap::new();
-    for (location_idx, region_idc) in datafrog.origin_live_on_entry.iter() {
+    for (location_idx, region_idc) in output.origin_live_on_entry().iter() {
         for region_idx in region_idc {
             region_locations
                 .entry(*region_idx)
@@ -106,7 +98,7 @@ pub fn get_must_live(
 
     // check all regions' subset that must be satisfied
     let mut subsets = HashMap::new();
-    for (_, subset) in datafrog.subset.iter() {
+    for (_, subset) in output.subset().iter() {
         for (sup, subs) in subset.iter() {
             subsets
                 .entry(*sup)
@@ -130,7 +122,7 @@ pub fn get_must_live(
     // obtain a map that local -> locations
     // a local must lives in the locations
     let mut local_must_locations = HashMap::new();
-    for (_location, region_borrows) in datafrog.origin_contains_loan_at.iter() {
+    for (_location, region_borrows) in output.origin_contains_loan_at().iter() {
         for (region, borrows) in region_borrows.iter() {
             for borrow in borrows {
                 if let Some(locs) = region_must_locations.get(region)
@@ -148,11 +140,11 @@ pub fn get_must_live(
     HashMap::from_iter(local_must_locations.iter().map(|(local, locations)| {
         (
             *local,
-            utils::eliminated_ranges(super::transform::rich_locations_to_ranges(
+            utils::eliminated_ranges(rich_locations_to_ranges(
                 basic_blocks,
                 &locations
                     .iter()
-                    .map(|v| location_table.to_rich_location(*v))
+                    .map(|v| location_table.get_rich_location(v))
                     .collect::<Vec<_>>(),
             )),
         )
@@ -164,10 +156,10 @@ pub fn drop_range(
     datafrog: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
     basic_blocks: &[MirBasicBlock],
-) -> HashMap<Local, Vec<Range>> {
+) -> HashMap<LocalId, Vec<Range>> {
     get_range(
         datafrog
-            .var_drop_live_on_entry
+            .var_drop_live_on_entry()
             .iter()
             .map(|(p, v)| (*p, v.iter().copied())),
         location_table,
@@ -176,16 +168,16 @@ pub fn drop_range(
 }
 
 pub fn get_range(
-    live_on_entry: impl Iterator<Item = (impl Idx, impl Iterator<Item = impl Idx>)>,
+    live_on_entry: impl Iterator<Item = (Point, impl Iterator<Item = LocalId>)>,
     location_table: &PoloniusLocationTable,
     basic_blocks: &[MirBasicBlock],
-) -> HashMap<Local, Vec<Range>> {
+) -> HashMap<LocalId, Vec<Range>> {
     let mut local_locs = HashMap::new();
-    for (loc_idx, locals) in live_on_entry {
-        let location = location_table.to_rich_location(loc_idx.index().into());
+    for (point, locals) in live_on_entry {
+        let location = location_table.get_rich_location(&point);
         for local in locals {
             local_locs
-                .entry(local.index())
+                .entry(local)
                 .or_insert_with(Vec::new)
                 .push(location);
         }
@@ -194,11 +186,8 @@ pub fn get_range(
         .into_par_iter()
         .map(|(local, locations)| {
             (
-                local.into(),
-                utils::eliminated_ranges(super::transform::rich_locations_to_ranges(
-                    basic_blocks,
-                    &locations,
-                )),
+                local,
+                utils::eliminated_ranges(rich_locations_to_ranges(basic_blocks, &locations)),
             )
         })
         .collect()

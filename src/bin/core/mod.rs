@@ -1,10 +1,12 @@
-mod analyze;
-mod cache;
+pub mod analyze;
+pub mod cache;
+pub mod compiler;
 
 use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
+use compiler::AsRustc;
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
-use rustc_middle::{mir::ConcreteOpaqueTypes, query::queries, ty::TyCtxt, util::Providers};
+use rustc_middle::{query::queries, ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
 use std::collections::HashMap;
@@ -41,16 +43,17 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     log::info!("start borrowck of {def_id:?}");
 
-    let analyzer = MirAnalyzer::init(tcx, def_id);
-
+    let analyzers = MirAnalyzer::init(AsRustc::from_rustc(tcx), AsRustc::from_rustc(def_id));
     {
         let mut tasks = TASKS.lock().unwrap();
-        match analyzer {
-            MirAnalyzerInitResult::Cached(cached) => {
-                handle_analyzed_result(tcx, cached);
-            }
-            MirAnalyzerInitResult::Analyzer(analyzer) => {
-                tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
+        for (_, analyzer) in analyzers {
+            match analyzer {
+                MirAnalyzerInitResult::Cached(cached) => {
+                    handle_analyzed_result(tcx, cached);
+                }
+                MirAnalyzerInitResult::Analyzer(analyzer) => {
+                    tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
+                }
             }
         }
 
@@ -61,13 +64,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
         }
     }
 
-    for def_id in tcx.nested_bodies_within(def_id) {
-        let _ = mir_borrowck(tcx, def_id);
-    }
-
-    Ok(tcx
-        .arena
-        .alloc(ConcreteOpaqueTypes(indexmap::IndexMap::default())))
+    Ok(tcx.arena.alloc(Default::default()))
 }
 
 pub struct AnalyzerCallback;
@@ -119,7 +116,7 @@ pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
         );
     }
     let krate = Crate(HashMap::from([(
-        analyzed.file_name.to_owned(),
+        analyzed.file_path.to_string_lossy().to_string(),
         File {
             items: vec![analyzed.analyzed],
         },
