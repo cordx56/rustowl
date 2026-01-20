@@ -84,7 +84,7 @@ tikv-jemalloc-sys = "0.6"
 tikv-jemallocator = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-zip = "7.0.0"
+zip = "7.1.0"
 
 [profile.release]
 opt-level = 3
