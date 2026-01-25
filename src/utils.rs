@@ -108,18 +108,21 @@ pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
     let mut line = 0;
     let mut col = 0;
     // it seems that the compiler is ignoring CR
-    for (i, c) in s.replace("\r", "").chars().enumerate() {
+    let source_clean = s.replace("\r", "");
+    for (i, c) in source_clean.chars().enumerate() {
         if idx == Loc::from(i as u32) {
             return (line, col);
         }
         if c == '\n' {
             line += 1;
             col = 0;
-        } else if c != '\r' {
+        } else {
             col += 1;
         }
     }
-    (0, 0)
+    // Return current position when idx equals the string length (end position)
+    // or when idx is out of bounds
+    (line, col)
 }
 pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
     let mut col = 0;
