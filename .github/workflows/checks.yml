@@ -1,4 +1,4 @@
-name: Basic Checks
+name: CI
 
 on:
   pull_request:
@@ -21,8 +21,8 @@ jobs:
         id: toolchains
         run: echo 'toolchains=["1.89.0", "1.90.0", "1.91.1", "1.92.0", "1.93.0"]' >> $GITHUB_OUTPUT
 
-  check:
-    name: Format & Lint
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     needs:
       - define-matrix
@@ -37,18 +37,31 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.toolchain }}
-          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
+          components: clippy,llvm-tools,rust-src,rustc-dev
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Check formatting
-        run: cargo fmt --check
-
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --check
 
   test:
     name: Build & Test
@@ -106,3 +119,4 @@ jobs:
       - name: Run tests
         run: xvfb-run -a pnpm run test
         working-directory: ./vscode
+
