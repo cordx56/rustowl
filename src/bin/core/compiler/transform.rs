@@ -50,69 +50,87 @@ impl<'tcx> TyCtxt<'tcx> {
                     // `source_map` is not Send
                     .filter(|stmt| stmt.source_info.span.is_visible(source_map))
                     .collect();
-                let statements =
-                    statements
-                        .par_iter()
-                        .filter_map(|statement| {
-                            let span = AsRustc::from_rustc(statement.source_info.span);
-                            match &statement.kind {
-                                StatementKind::Assign(v) => {
-                                    let (place, rval) = &**v;
-                                    let target_local_index = place.local.as_u32();
-                                    let rv =
-                                        match rval {
-                                            Rvalue::Use(Operand::Move(p)) => {
-                                                let local = p.local;
-                                                range_from_span(
-                                                    &source_info.source,
-                                                    span,
-                                                    source_info.offset,
-                                                )
-                                                .map(|range| MirRval::Move {
-                                                    target_local: FnLocal::new(
-                                                        local.as_u32(),
-                                                        fn_id.as_u32(),
-                                                    ),
-                                                    range,
-                                                })
-                                            }
-                                            Rvalue::Ref(_region, kind, place) => {
-                                                let mutable =
-                                                    matches!(kind, BorrowKind::Mut { .. });
-                                                let local = place.local;
-                                                let outlive = None;
-                                                range_from_span(
-                                                    &source_info.source,
-                                                    span,
-                                                    source_info.offset,
-                                                )
-                                                .map(|range| MirRval::Borrow {
-                                                    target_local: FnLocal::new(
-                                                        local.as_u32(),
-                                                        fn_id.as_u32(),
-                                                    ),
-                                                    range,
-                                                    mutable,
-                                                    outlive,
-                                                })
-                                            }
-                                            _ => None,
-                                        };
-                                    range_from_span(&source_info.source, span, source_info.offset)
-                                        .map(|range| MirStatement::Assign {
-                                            target_local: FnLocal::new(
-                                                target_local_index,
-                                                fn_id.as_u32(),
-                                            ),
-                                            range,
-                                            rval: rv,
-                                        })
-                                }
-                                _ => range_from_span(&source_info.source, span, source_info.offset)
-                                    .map(|range| MirStatement::Other { range }),
+                let statements = statements
+                    .par_iter()
+                    .filter_map(|statement| {
+                        let span = AsRustc::from_rustc(statement.source_info.span);
+                        match &statement.kind {
+                            StatementKind::StorageLive(local) => {
+                                range_from_span(&source_info.source, span, source_info.offset).map(
+                                    |range| MirStatement::StorageLive {
+                                        target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
+                                        range,
+                                    },
+                                )
                             }
-                        })
-                        .collect();
+                            StatementKind::StorageDead(local) => {
+                                range_from_span(&source_info.source, span, source_info.offset).map(
+                                    |range| MirStatement::StorageDead {
+                                        target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
+                                        range,
+                                    },
+                                )
+                            }
+                            StatementKind::Assign(v) => {
+                                let (place, rval) = &**v;
+                                let target_local_index = place.local.as_u32();
+                                let rv = match rval {
+                                    Rvalue::Use(Operand::Move(p)) => {
+                                        let local = p.local;
+                                        range_from_span(
+                                            &source_info.source,
+                                            span,
+                                            source_info.offset,
+                                        )
+                                        .map(|range| {
+                                            MirRval::Move {
+                                                target_local: FnLocal::new(
+                                                    local.as_u32(),
+                                                    fn_id.as_u32(),
+                                                ),
+                                                range,
+                                            }
+                                        })
+                                    }
+                                    Rvalue::Ref(_region, kind, place) => {
+                                        let mutable = matches!(kind, BorrowKind::Mut { .. });
+                                        let local = place.local;
+                                        let outlive = None;
+                                        range_from_span(
+                                            &source_info.source,
+                                            span,
+                                            source_info.offset,
+                                        )
+                                        .map(|range| {
+                                            MirRval::Borrow {
+                                                target_local: FnLocal::new(
+                                                    local.as_u32(),
+                                                    fn_id.as_u32(),
+                                                ),
+                                                range,
+                                                mutable,
+                                                outlive,
+                                            }
+                                        })
+                                    }
+                                    _ => None,
+                                };
+                                range_from_span(&source_info.source, span, source_info.offset).map(
+                                    |range| MirStatement::Assign {
+                                        target_local: FnLocal::new(
+                                            target_local_index,
+                                            fn_id.as_u32(),
+                                        ),
+                                        range,
+                                        rval: rv,
+                                    },
+                                )
+                            }
+                            _ => range_from_span(&source_info.source, span, source_info.offset)
+                                .map(|range| MirStatement::Other { range }),
+                        }
+                    })
+                    .collect();
                 let terminator = bb_data.terminator.as_ref().and_then(|terminator| {
                     let span = AsRustc::from_rustc(terminator.source_info.span);
                     match &terminator.kind {
@@ -203,9 +221,6 @@ pub enum RichLocation {
     Mid(Location),
 }
 
-fn sort_locs(v: &mut [(u32, u32)]) {
-    v.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-}
 fn statement_location_to_range(
     basic_blocks: &[MirBasicBlock],
     basic_block: u32,
@@ -224,30 +239,14 @@ pub fn rich_locations_to_ranges(
     basic_blocks: &[MirBasicBlock],
     locations: &[RichLocation],
 ) -> Vec<Range> {
-    let mut starts = Vec::new();
-    let mut mids = Vec::new();
-    for rich in locations {
-        match rich {
-            RichLocation::Start(l) => {
-                starts.push((l.block(), l.statement()));
-            }
-            RichLocation::Mid(l) => {
-                mids.push((l.block(), l.statement()));
-            }
-        }
-    }
-    sort_locs(&mut starts);
-    sort_locs(&mut mids);
-    starts
+    // Convert each RichLocation to its statement's range and collect all ranges
+    locations
         .par_iter()
-        .zip(mids.par_iter())
-        .filter_map(|(s, m)| {
-            let sr = statement_location_to_range(basic_blocks, s.0, s.1);
-            let mr = statement_location_to_range(basic_blocks, m.0, m.1);
-            match (sr, mr) {
-                (Some(s), Some(m)) => Range::new(s.from(), m.until()),
-                _ => None,
-            }
+        .filter_map(|rich| {
+            let loc = match rich {
+                RichLocation::Start(l) | RichLocation::Mid(l) => l,
+            };
+            statement_location_to_range(basic_blocks, loc.block(), loc.statement())
         })
         .collect()
 }
