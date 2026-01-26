@@ -48,6 +48,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 rustls = { version = "0.23.36", default-features = false, features = [
   "aws_lc_rs",
 ] }
+rustversion = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 simple_logger = { version = "5", features = ["stderr"] }
@@ -83,7 +84,7 @@ tikv-jemalloc-sys = "0.6"
 tikv-jemallocator = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-zip = "7.0.0"
+zip = "7.1.0"
 
 [profile.release]
 opt-level = 3

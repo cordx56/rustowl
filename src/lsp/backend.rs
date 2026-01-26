@@ -1,7 +1,7 @@
 use super::analyze::*;
 use crate::{lsp::*, models::*, utils};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::{sync::RwLock, task::JoinSet};
 use tokio_util::sync::CancellationToken;
@@ -177,7 +177,7 @@ impl Backend {
         let mut error = progress::AnalysisStatus::Error;
         if let Some(analyzed) = &*self.analyzed.read().await {
             for (filename, file) in analyzed.0.iter() {
-                if filepath == PathBuf::from(filename) {
+                if &filepath.to_string_lossy() == filename {
                     if !file.items.is_empty() {
                         error = progress::AnalysisStatus::Finished;
                     }
@@ -189,7 +189,7 @@ impl Backend {
 
             let mut calc = decoration::CalcDecos::new(selected.selected().iter().copied());
             for (filename, file) in analyzed.0.iter() {
-                if filepath == PathBuf::from(filename) {
+                if &filepath.to_string_lossy() == filename {
                     for item in &file.items {
                         utils::mir_visit(item, &mut calc);
                     }

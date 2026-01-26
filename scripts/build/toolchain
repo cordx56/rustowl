@@ -4,12 +4,33 @@ script_dir="$(cd $(dirname "$0"); pwd)"
 
 IFS='
 '
-export $(/bin/sh "$script_dir/print-env.sh" "$(cat "${script_dir}/channel")")
+export TOOLCHAIN_CHANNEL=${TOOLCHAIN_CHANNEL:-"$(cat "${script_dir}/channel")"}
+export $(/bin/sh "$script_dir/print-env.sh")
 unset IFS
+
+DATE="$(echo "$TOOLCHAIN_CHANNEL" | awk 'match($0, /[0-9]+-[0-9]+-[0-9]+/) { print substr($0, RSTART, RLENGTH) }')"
+
+component_filename() {
+    if [ "$1" = "rust-src" ]; then
+        file_postfix=""
+    else
+        file_postfix="-${HOST_TUPLE}"
+    fi
+    if [ -z "$DATE" ]; then
+        echo "$1-${TOOLCHAIN_CHANNEL}${file_postfix}"
+    else
+        echo "$1-nightly${file_postfix}"
+    fi
+}
 
 DIST_BASE="https://static.rust-lang.org/dist"
 download_component() {
-    url="${DIST_BASE}/$1-${RUSTOWL_TOOLCHAIN}.${2:-"tar.gz"}"
+    file_ext=".${2:-"tar.gz"}"
+    if [ -z "$DATE" ]; then
+        url="${DIST_BASE}/$(component_filename "$1")${file_ext}"
+    else
+        url="${DIST_BASE}/${DATE}/$(component_filename "$1")${file_ext}"
+    fi
     echo "Downloading from $url" 1>&2
 
     curl -fsSL "$url"
@@ -21,7 +42,7 @@ install_component() {
     download_component "$1" | tar xzf - -C "$temp" > /dev/null
     echo "Component $1 extracted" 1>&2
 
-    component="$1-${RUSTOWL_TOOLCHAIN}"
+    component="$(component_filename "$1")"
     for com in $(cat "$temp/$component/components"); do
         base="$temp/$component/$com"
         (cd "$base" && find * -type f -exec /bin/sh -c "mkdir -p \"$2/\$(dirname \"{}\")\" && mv \"$base/{}\" \"$2/{}\"" \;)
@@ -33,7 +54,7 @@ install_component() {
 install_toolchain() {
     mkdir -p "$1"
 
-    components="rustc rust-std cargo rustc-dev llvm-tools"
+    components="rustc rust-std cargo rustc-dev llvm-tools $RUST_COMPONENTS"
     for component in $components; do
         install_component "$component" "$1" &
     done
