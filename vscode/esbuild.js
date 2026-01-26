@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 const esbuild = require("esbuild");
 
 const production = process.argv.includes("--production");
@@ -50,7 +51,8 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
+// eslint-disable-next-line promise/prefer-await-to-callbacks
+main().catch(async (error) => {
+  console.error(error);
+  throw error;
 });
