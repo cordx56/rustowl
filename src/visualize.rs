@@ -13,27 +13,29 @@ use std::path::Path;
 
 mod syntax;
 
-/// ANSI color codes for different decoration types and syntax highlighting.
-mod colors {
-    pub const RESET: &str = "\x1b[0m";
-    pub const GREEN: &str = "\x1b[92m";
-    pub const CYAN: &str = "\x1b[96m";
-    pub const PURPLE: &str = "\x1b[38;5;177m";
-    pub const MAGENTA: &str = "\x1b[95m";
-    pub const YELLOW: &str = "\x1b[93m";
-    pub const RED: &str = "\x1b[91m";
+/// Styles for different decoration types and syntax highlighting.
+pub(crate) mod colors {
+    use anstyle::{AnsiColor, Color, Effects, Style};
 
-    pub const DIM: &str = "\x1b[2m";
+    pub const GREEN: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightGreen)));
+    pub const CYAN: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightCyan)));
+    pub const PURPLE: Style =
+        Style::new().fg_color(Some(Color::Ansi256(anstyle::Ansi256Color(177))));
+    pub const MAGENTA: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightMagenta)));
+    pub const YELLOW: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightYellow)));
+    pub const RED: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightRed)));
+
+    pub const DIM: Style = Style::new().effects(Effects::DIMMED);
 
     // Syntax highlighting colors
-    pub const KEYWORD: &str = MAGENTA;
-    pub const TYPE: &str = YELLOW;
-    pub const STRING: &str = GREEN;
-    pub const NUMBER: &str = CYAN;
-    pub const COMMENT: &str = DIM;
-    pub const LIFETIME: &str = YELLOW;
-    pub const MACRO: &str = CYAN;
-    pub const ATTRIBUTE: &str = MAGENTA;
+    pub const KEYWORD: Style = MAGENTA;
+    pub const TYPE: Style = YELLOW;
+    pub const STRING: Style = GREEN;
+    pub const NUMBER: Style = CYAN;
+    pub const COMMENT: Style = DIM;
+    pub const LIFETIME: Style = YELLOW;
+    pub const MACRO: Style = CYAN;
+    pub const ATTRIBUTE: Style = MAGENTA;
 }
 
 /// Error types for visualization operations.
@@ -223,15 +225,15 @@ enum DecoType {
 }
 
 impl DecoType {
-    const COLOR_LIFETIME: &'static str = colors::GREEN;
-    const COLOR_IMMUTABLE: &'static str = colors::CYAN;
-    const COLOR_MUTABLE: &'static str = colors::PURPLE;
-    const COLOR_MOVE: &'static str = colors::YELLOW;
-    const COLOR_CALL: &'static str = colors::YELLOW;
-    const COLOR_SHARED: &'static str = colors::RED;
-    const COLOR_OUTLIVE: &'static str = colors::RED;
+    const COLOR_LIFETIME: anstyle::Style = colors::GREEN;
+    const COLOR_IMMUTABLE: anstyle::Style = colors::CYAN;
+    const COLOR_MUTABLE: anstyle::Style = colors::PURPLE;
+    const COLOR_MOVE: anstyle::Style = colors::YELLOW;
+    const COLOR_CALL: anstyle::Style = colors::YELLOW;
+    const COLOR_SHARED: anstyle::Style = colors::RED;
+    const COLOR_OUTLIVE: anstyle::Style = colors::RED;
 
-    fn color(&self) -> &'static str {
+    fn color(&self) -> anstyle::Style {
         match self {
             DecoType::Lifetime => Self::COLOR_LIFETIME,
             DecoType::ImmBorrow => Self::COLOR_IMMUTABLE,
@@ -285,14 +287,13 @@ impl<'a> CliRenderer<'a> {
         decos: &[Deco],
     ) {
         // Print header
+        let style = colors::CYAN;
         println!(
-            "\n{}=== Variable '{}' ({}/{}) in function '{}' ==={}\n",
-            colors::CYAN,
+            "\n{style}=== Variable '{}' ({}/{}) in function '{}' ==={style:#}\n",
             var_info.name,
             var_index + 1,
             total_vars,
             var_info.function_name,
-            colors::RESET
         );
 
         // Group decorations by line
@@ -356,13 +357,11 @@ impl<'a> CliRenderer<'a> {
         for line_num in display_start..=display_end {
             if let Some(line_content) = self.lines.get(line_num as usize) {
                 // Print line number and syntax-highlighted content
+                let dim = colors::DIM;
                 println!(
-                    "{}{:4} |{} {}{}",
-                    colors::DIM,
+                    "{dim}{:4} |{dim:#} {}",
                     line_num + 1,
-                    colors::RESET,
                     syntax::highlight(line_content),
-                    colors::RESET
                 );
 
                 // Print decorations for this line
@@ -408,18 +407,11 @@ impl<'a> CliRenderer<'a> {
             let underline: String = underline_chars.into_iter().collect();
             let underline = underline.trim_end();
 
-            let prefix = format!(
-                "{}   {} |{} ",
-                colors::DIM,
-                deco_type.short(),
-                colors::RESET
-            );
+            let dim = colors::DIM;
+            let color = deco_type.color();
             println!(
-                "{}{}{}{}",
-                prefix,
-                deco_type.color(),
-                underline,
-                colors::RESET,
+                "{dim}   {} |{dim:#} {color}{underline}{color:#}",
+                deco_type.short(),
             );
         }
     }
@@ -525,36 +517,33 @@ pub fn show_variable(
 
 /// Print a color legend for the different decoration types.
 fn print_legend() {
-    println!("{}Legend:{}", colors::CYAN, colors::RESET);
+    let cyan = colors::CYAN;
+    let lifetime = DecoType::COLOR_LIFETIME;
+    let immutable = DecoType::COLOR_IMMUTABLE;
+    let mutable = DecoType::COLOR_MUTABLE;
+    let mov = DecoType::COLOR_MOVE;
+    let red = colors::RED;
+
+    println!("{cyan}Legend:{cyan:#}");
     println!(
-        "  {}~~~{} lifetime ({})",
-        DecoType::COLOR_LIFETIME,
-        colors::RESET,
+        "  {lifetime}~~~{lifetime:#} lifetime ({})",
         DecoType::SHORT_LIFETIME,
     );
     println!(
-        "  {}~~~{} immutable borrow ({})",
-        DecoType::COLOR_IMMUTABLE,
-        colors::RESET,
+        "  {immutable}~~~{immutable:#} immutable borrow ({})",
         DecoType::SHORT_IMMUTABLE,
     );
     println!(
-        "  {}~~~{} mutable borrow ({})",
-        DecoType::COLOR_MUTABLE,
-        colors::RESET,
+        "  {mutable}~~~{mutable:#} mutable borrow ({})",
         DecoType::SHORT_MUTABLE,
     );
     println!(
-        "  {}~~~{} move ({}) / call ({})",
-        DecoType::COLOR_MOVE,
-        colors::RESET,
+        "  {mov}~~~{mov:#} move ({}) / call ({})",
         DecoType::SHORT_MOVE,
         DecoType::SHORT_CALL,
     );
     println!(
-        "  {}~~~{} outlive ({}) / shared mutable ({})",
-        colors::RED,
-        colors::RESET,
+        "  {red}~~~{red:#} outlive ({}) / shared mutable ({})",
         DecoType::SHORT_OUTLIVE,
         DecoType::SHORT_SHARED,
     );

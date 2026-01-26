@@ -1,6 +1,7 @@
 //! Rust syntax highlighter using tree-sitter-highlight.
 
-use super::colors;
+use crate::visualize::colors;
+use anstyle::Style;
 use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter as TsHighlighter};
 
 /// Recognized highlight names from tree-sitter-rust's highlights.scm.
@@ -29,8 +30,8 @@ const HIGHLIGHT_NAMES: &[&str] = &[
     "variable.parameter",
 ];
 
-/// Map highlight index to ANSI color code.
-fn color_for_highlight(index: usize) -> Option<&'static str> {
+/// Map highlight index to style.
+fn style_for_highlight(index: usize) -> Option<Style> {
     match HIGHLIGHT_NAMES.get(index)? {
         &"attribute" => Some(colors::ATTRIBUTE),
         &"comment" | &"comment.documentation" => Some(colors::COMMENT),
@@ -85,6 +86,8 @@ impl Highlighter {
 
     /// Highlight a line of Rust code.
     pub fn highlight(&mut self, line: &str) -> String {
+        use std::fmt::Write;
+
         let Ok(events) = self
             .highlighter
             .highlight(&self.config, line.as_bytes(), None, |_| None)
@@ -93,29 +96,24 @@ impl Highlighter {
         };
 
         let mut result = String::with_capacity(line.len() * 2);
-        let mut color_stack: Vec<&'static str> = Vec::new();
+        let mut style_stack: Vec<Style> = Vec::new();
 
         for event in events.flatten() {
             match event {
                 HighlightEvent::Source { start, end } => {
-                    if let Some(&color) = color_stack.last() {
-                        result.push_str(color);
-                        result.push_str(&line[start..end]);
-                        result.push_str(colors::RESET);
+                    let text = &line[start..end];
+                    if let Some(&style) = style_stack.last() {
+                        let _ = write!(result, "{style}{text}{style:#}");
                     } else {
-                        result.push_str(&line[start..end]);
+                        result.push_str(text);
                     }
                 }
                 HighlightEvent::HighlightStart(highlight) => {
-                    if let Some(color) = color_for_highlight(highlight.0) {
-                        color_stack.push(color);
-                    } else {
-                        // Push empty to maintain stack balance
-                        color_stack.push("");
-                    }
+                    let style = style_for_highlight(highlight.0).unwrap_or_default();
+                    style_stack.push(style);
                 }
                 HighlightEvent::HighlightEnd => {
-                    color_stack.pop();
+                    style_stack.pop();
                 }
             }
         }
