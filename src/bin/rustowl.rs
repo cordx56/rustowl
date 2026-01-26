@@ -94,13 +94,13 @@ async fn handle_command(command: Commands) {
             generate(shell, &mut Cli::command(), "rustowl", &mut io::stdout());
         }
         Commands::Show(command_options) => {
-            handle_show_command(command_options, rustc_threads).await;
+            handle_show_command(command_options).await;
         }
     }
 }
 
 /// Handles the show command for visualizing ownership and lifetimes.
-async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
+async fn handle_show_command(opts: cli::Show) {
     use rustowl::lsp::analyze::Analyzer;
 
     // Canonicalize the file path if specified
@@ -114,7 +114,7 @@ async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
     log::info!("Analyzing project at {path:?}");
 
     // Create an analyzer and run analysis
-    let analyzer = match Analyzer::new(&path, rustc_threads).await {
+    let analyzer = match Analyzer::new(&path).await {
         Ok(a) => a,
         Err(e) => {
             log::error!("Failed to create analyzer: {e:?}");
