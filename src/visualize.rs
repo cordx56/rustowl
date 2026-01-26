@@ -162,7 +162,7 @@ impl MirVisitor for FindVariablesByName<'_> {
 }
 
 /// Type of decoration for a range.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum DecoType {
     Lifetime,
     ImmBorrow,
@@ -304,31 +304,48 @@ impl<'a> CliRenderer<'a> {
     }
 
     /// Print decoration underlines for a single line.
+    /// Groups decorations of the same type on the same output line.
     fn print_decorations(&self, decos: &[(u32, u32, DecoType)]) {
-        // Sort decorations by start column
-        let mut sorted_decos = decos.to_vec();
-        sorted_decos.sort_by_key(|(start, _, _)| *start);
-
-        // Group decorations by type for cleaner output
-        let mut by_type: HashMap<&'static str, Vec<(u32, u32)>> = HashMap::new();
-        for (start, end, deco_type) in &sorted_decos {
-            by_type
-                .entry(deco_type.label())
-                .or_default()
-                .push((*start, *end));
+        // Group decorations by type
+        let mut by_type: HashMap<DecoType, Vec<(u32, u32)>> = HashMap::new();
+        for (start, end, deco_type) in decos {
+            by_type.entry(*deco_type).or_default().push((*start, *end));
         }
 
-        // Print each decoration type on its own line
-        for (start, end, deco_type) in &sorted_decos {
-            let prefix = "    | ";
-            let spaces = " ".repeat(*start as usize);
-            let underline_len = (*end - *start).max(1) as usize;
-            let underline = "~".repeat(underline_len);
+        // Sort types by the earliest start position for consistent output order
+        let mut types_with_min_start: Vec<(DecoType, u32)> = by_type
+            .iter()
+            .map(|(deco_type, ranges)| {
+                let min_start = ranges.iter().map(|(s, _)| *s).min().unwrap_or(0);
+                (*deco_type, min_start)
+            })
+            .collect();
+        types_with_min_start.sort_by_key(|(_, start)| *start);
 
+        // Print each decoration type on its own line
+        for (deco_type, _) in types_with_min_start {
+            let ranges = &by_type[&deco_type];
+            let mut sorted_ranges = ranges.clone();
+            sorted_ranges.sort_by_key(|(start, _)| *start);
+
+            // Build the underline string with all ranges of this type
+            let max_end = sorted_ranges.iter().map(|(_, e)| *e).max().unwrap_or(0) as usize;
+            let mut underline_chars = vec![' '; max_end + 1];
+
+            for (start, end) in &sorted_ranges {
+                for i in (*start as usize)..=(*end as usize).min(underline_chars.len() - 1) {
+                    underline_chars[i] = '~';
+                }
+            }
+
+            // Convert to string, trimming trailing spaces
+            let underline: String = underline_chars.into_iter().collect();
+            let underline = underline.trim_end();
+
+            let prefix = "    | ";
             println!(
-                "{}{}{}{}{}  <- {}{}",
+                "{}{}{}{}  <- {}{}",
                 prefix,
-                spaces,
                 deco_type.color(),
                 underline,
                 colors::RESET,
