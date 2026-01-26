@@ -129,7 +129,7 @@ async fn install_component(component: &str, dest: &Path) -> Result<(), ()> {
     let tempdir = tempfile::tempdir().map_err(|_| ())?;
     // Using `tempdir.path()` more than once causes SEGV, so we use `tempdir.path().to_owned()`.
     let temp_path = tempdir.path().to_owned();
-    log::info!("temp dir is made: {}", temp_path.display());
+    log::debug!("temp dir is made: {}", temp_path.display());
 
     let dist_base = "https://static.rust-lang.org/dist";
     let base_url = match TOOLCHAIN_DATE {
@@ -247,14 +247,14 @@ pub async fn get_executable_path(name: &str) -> String {
     let sysroot = get_sysroot().await;
     let exec_bin = sysroot.join("bin").join(&exec_name);
     if exec_bin.is_file() {
-        log::info!("{name} is selected in sysroot/bin");
+        log::debug!("{name} is selected in sysroot/bin");
         return exec_bin.to_string_lossy().to_string();
     }
 
     let mut current_exec = env::current_exe().unwrap();
     current_exec.set_file_name(&exec_name);
     if current_exec.is_file() {
-        log::info!("{name} is selected in the same directory as rustowl executable");
+        log::debug!("{name} is selected in the same directory as rustowl executable");
         return current_exec.to_string_lossy().to_string();
     }
 
@@ -299,6 +299,7 @@ pub async fn setup_cargo_command(rustc_threads: usize) -> tokio::process::Comman
 
 pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
     command.env("RUSTC_BOOTSTRAP", "1"); // Support nightly projects
+    command.env("RUST_LOG", log::max_level().to_string());
 
     #[cfg(target_os = "linux")]
     {

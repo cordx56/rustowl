@@ -42,7 +42,7 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
             }
         };
         let read = serde_json::from_str(&s).ok();
-        log::info!("cache read: {}", cache_path.display());
+        log::debug!("cache read: {}", cache_path.display());
         read
     } else {
         None
@@ -72,6 +72,6 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
         if let Err(e) = f.write_all(s.as_bytes()) {
             log::warn!("failed to write incremental cache file: {e}");
         }
-        log::info!("incremental cache saved: {}", cache_path.display());
+        log::debug!("incremental cache saved: {}", cache_path.display());
     }
 }

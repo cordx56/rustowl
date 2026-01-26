@@ -90,7 +90,7 @@ async fn handle_command(command: Commands, rustc_threads: usize) {
             }
         }
         Commands::Completions(command_options) => {
-            set_log_level("off".parse().unwrap());
+            set_log_level(log::LevelFilter::Off);
             let shell = command_options.shell;
             generate(shell, &mut Cli::command(), "rustowl", &mut io::stdout());
         }
@@ -104,8 +104,6 @@ async fn handle_command(command: Commands, rustc_threads: usize) {
 async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
     use rustowl::lsp::analyze::Analyzer;
 
-    set_log_level("warn".parse().unwrap());
-
     // Canonicalize the file path if specified
     let file_path = opts.path.as_ref().and_then(|p| p.canonicalize().ok());
 
@@ -114,13 +112,13 @@ async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
         .clone()
         .unwrap_or_else(|| env::current_dir().unwrap_or(".".into()));
 
-    log::info!("Analyzing project at {:?}", path);
+    log::info!("Analyzing project at {path:?}");
 
     // Create an analyzer and run analysis
     let analyzer = match Analyzer::new(&path, rustc_threads).await {
         Ok(a) => a,
         Err(e) => {
-            log::error!("Failed to create analyzer: {:?}", e);
+            log::error!("Failed to create analyzer: {e:?}");
             std::process::exit(1);
         }
     };
@@ -141,7 +139,7 @@ async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
                 }
             }
             rustowl::lsp::analyze::AnalyzerEvent::CrateChecked { package, .. } => {
-                log::info!("Analyzed: {}", package);
+                log::debug!("Analyzed: {package}");
             }
         }
     }
@@ -172,7 +170,7 @@ fn initialize_logging() {
         .with_colors(true)
         .init()
         .unwrap();
-    set_log_level("info".parse().unwrap());
+    set_log_level(log::LevelFilter::Info);
 }
 
 /// Handles the case when no command is provided (version display or LSP server mode)
