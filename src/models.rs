@@ -306,6 +306,7 @@ pub enum MirDecl {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Function {
     pub fn_id: u32,
+    pub name: String,
     pub basic_blocks: Vec<MirBasicBlock>,
     pub decls: Vec<MirDecl>,
 }

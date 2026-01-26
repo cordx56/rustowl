@@ -220,6 +220,7 @@ mod miri_memory_safety_tests {
         // Test Function model with complex nested structures
         let function = Function {
             fn_id: 42,
+            name: String::from("test_function"),
             basic_blocks: Vec::new(),
             decls: Vec::new(),
         };
@@ -242,6 +243,7 @@ mod miri_memory_safety_tests {
         for i in 0..100 {
             functions.push(Function {
                 fn_id: i,
+                name: format!("function_{i}"),
                 basic_blocks: Vec::new(),
                 decls: Vec::new(),
             });
@@ -253,6 +255,7 @@ mod miri_memory_safety_tests {
         // Test vector capacity management
         let large_function = Function {
             fn_id: 999,
+            name: String::from("large_function"),
             basic_blocks: Vec::with_capacity(1000),
             decls: Vec::with_capacity(500),
         };

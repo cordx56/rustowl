@@ -9,6 +9,7 @@ pub mod models;
 pub mod shells;
 pub mod toolchain;
 pub mod utils;
+pub mod visualize;
 
 pub use lsp::backend::Backend;
 

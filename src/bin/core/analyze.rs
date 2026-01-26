@@ -31,6 +31,7 @@ pub struct MirAnalyzer {
     input: PoloniusInput,
     basic_blocks: Vec<MirBasicBlock>,
     fn_id: DefId,
+    name: String,
     file_hash: String,
     mir_hash: String,
     accurate_live: HashMap<LocalId, Vec<Range>>,
@@ -48,7 +49,8 @@ impl MirAnalyzer {
         let facts = tcx.get_borrowck_facts(fn_id);
         for (fn_id, mut facts) in facts {
             let source_info = tcx.source_info_from_span(facts.body().span());
-            log::info!("facts of {fn_id:?} prepared; start analyze...");
+            let name = tcx.def_name(fn_id);
+            log::debug!("facts of {fn_id:?} ({name}) prepared; start analyze...");
 
             let body = facts.body();
 
@@ -72,7 +74,7 @@ impl MirAnalyzer {
             if let Some(cache) = cache.as_mut()
                 && let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash)
             {
-                log::info!("MIR cache hit: {fn_id:?}");
+                log::debug!("MIR cache hit: {fn_id:?}");
                 result.insert(
                     fn_id,
                     MirAnalyzerInitResult::Cached(AnalyzeResult {
@@ -106,10 +108,10 @@ impl MirAnalyzer {
             let location_table = facts.location_table();
 
             let analyzer = Box::pin(async move {
-                log::info!("start re-computing borrow check with dump: true");
+                log::debug!("start re-computing borrow check with dump: true");
                 // compute accurate region, which may eliminate invalid region
                 let output = input.compute();
-                log::info!("second borrow check finished");
+                log::debug!("second borrow check finished");
 
                 let accurate_live =
                     polonius_analyzer::get_accurate_live(&output, &location_table, &basic_blocks);
@@ -138,6 +140,7 @@ impl MirAnalyzer {
                     user_vars,
                     basic_blocks,
                     fn_id,
+                    name,
                     file_hash,
                     mir_hash,
                     accurate_live,
@@ -225,6 +228,7 @@ impl MirAnalyzer {
             mir_hash: self.mir_hash,
             analyzed: Function {
                 fn_id: self.fn_id.as_u32(),
+                name: self.name,
                 basic_blocks,
                 decls,
             },

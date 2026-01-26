@@ -112,7 +112,7 @@ impl Analyzer {
     ) -> AnalyzeEventIter {
         let package_name = metadata.root_package().as_ref().unwrap().name.to_string();
         let target_dir = metadata.target_directory.as_std_path().join("owl");
-        log::info!("clear cargo cache");
+        log::debug!("clear cargo cache");
         let mut command = toolchain::setup_cargo_command(1).await;
         command
             .args(["clean", "--package", &package_name])
@@ -155,7 +155,7 @@ impl Analyzer {
 
         let package_count = metadata.packages.len();
 
-        log::info!("start analyzing package {package_name}");
+        log::debug!("start analyzing package {package_name}");
         let mut child = command.spawn().unwrap();
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
@@ -169,7 +169,7 @@ impl Analyzer {
                     serde_json::from_str(&line)
                 {
                     let checked = target.name;
-                    log::info!("crate {checked} checked");
+                    log::debug!("crate {checked} checked");
 
                     let event = AnalyzerEvent::CrateChecked {
                         package: checked,
@@ -182,7 +182,7 @@ impl Analyzer {
                     let _ = sender.send(event).await;
                 }
             }
-            log::info!("stdout closed");
+            log::debug!("stdout closed");
             notify_c.notify_one();
         });
 
@@ -221,7 +221,7 @@ impl Analyzer {
             command.stderr(std::process::Stdio::null());
         }
 
-        log::info!("start analyzing {}", path.display());
+        log::debug!("start analyzing {}", path.display());
         let mut child = command.spawn().unwrap();
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
@@ -236,7 +236,7 @@ impl Analyzer {
                     let _ = sender.send(event).await;
                 }
             }
-            log::info!("stdout closed");
+            log::debug!("stdout closed");
             notify_c.notify_one();
         });
 

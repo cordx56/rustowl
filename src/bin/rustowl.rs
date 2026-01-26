@@ -90,10 +90,77 @@ async fn handle_command(command: Commands, rustc_threads: usize) {
             }
         }
         Commands::Completions(command_options) => {
-            set_log_level("off".parse().unwrap());
+            set_log_level(log::LevelFilter::Off);
             let shell = command_options.shell;
             generate(shell, &mut Cli::command(), "rustowl", &mut io::stdout());
         }
+        Commands::Show(command_options) => {
+            handle_show_command(command_options, rustc_threads).await;
+        }
+    }
+}
+
+/// Handles the show command for visualizing ownership and lifetimes.
+async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
+    use rustowl::lsp::analyze::Analyzer;
+
+    // Canonicalize the file path if specified
+    let file_path = opts.path.as_ref().and_then(|p| p.canonicalize().ok());
+
+    // Determine the project path for analysis
+    let path = file_path
+        .clone()
+        .unwrap_or_else(|| env::current_dir().unwrap_or(".".into()));
+
+    log::info!("Analyzing project at {path:?}");
+
+    // Create an analyzer and run analysis
+    let analyzer = match Analyzer::new(&path, rustc_threads).await {
+        Ok(a) => a,
+        Err(e) => {
+            log::error!("Failed to create analyzer: {e:?}");
+            std::process::exit(1);
+        }
+    };
+
+    let mut iter = analyzer.analyze(opts.all_targets, opts.all_features).await;
+
+    // Collect analysis results
+    let mut crate_data: Option<rustowl::models::Crate> = None;
+    while let Some(event) = iter.next_event().await {
+        match event {
+            rustowl::lsp::analyze::AnalyzerEvent::Analyzed(ws) => {
+                for krate in ws.0.into_values() {
+                    if let Some(existing) = &mut crate_data {
+                        existing.merge(krate);
+                    } else {
+                        crate_data = Some(krate);
+                    }
+                }
+            }
+            rustowl::lsp::analyze::AnalyzerEvent::CrateChecked { package, .. } => {
+                log::debug!("Analyzed: {package}");
+            }
+        }
+    }
+
+    let crate_data = match crate_data {
+        Some(data) => data,
+        None => {
+            log::error!("Analysis produced no results");
+            std::process::exit(1);
+        }
+    };
+
+    // Run visualization
+    if let Err(e) = rustowl::visualize::show_variable(
+        &crate_data,
+        file_path.as_deref(),
+        &opts.function_path,
+        &opts.variable,
+    ) {
+        log::error!("{e}");
+        std::process::exit(1);
     }
 }
 
@@ -103,7 +170,7 @@ fn initialize_logging() {
         .with_colors(true)
         .init()
         .unwrap();
-    set_log_level("info".parse().unwrap());
+    set_log_level(log::LevelFilter::Info);
 }
 
 /// Handles the case when no command is provided (version display or LSP server mode)

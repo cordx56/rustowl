@@ -41,7 +41,7 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
 }
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
-    log::info!("start borrowck of {def_id:?}");
+    log::debug!("start borrowck of {def_id:?}");
 
     let analyzers = MirAnalyzer::init(AsRustc::from_rustc(tcx), AsRustc::from_rustc(def_id));
     {
@@ -57,9 +57,9 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
             }
         }
 
-        log::info!("there are {} tasks", tasks.len());
+        log::debug!("there are {} tasks", tasks.len());
         while let Some(Ok(result)) = tasks.try_join_next() {
-            log::info!("one task joined");
+            log::debug!("one task joined");
             handle_analyzed_result(tcx, result);
         }
     }
@@ -91,7 +91,7 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         #[allow(clippy::await_holding_lock)]
         RUNTIME.block_on(async move {
             while let Some(Ok(result)) = { TASKS.lock().unwrap().join_next().await } {
-                log::info!("one task joined");
+                log::debug!("one task joined");
                 handle_analyzed_result(tcx, result);
             }
             if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
