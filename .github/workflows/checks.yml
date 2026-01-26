@@ -22,7 +22,7 @@ jobs:
         run: |
           TOOLCHAINS='["1.89.0", "1.90.0", "1.91.1", "1.92.0", "1.93.0"]'
           echo "toolchains=$TOOLCHAINS" >> $GITHUB_OUTPUT
-          echo "latest=$(jq -r '.[-1]' <<< '$TOOLCHAINS')" >> $GITHUB_OUTPUT
+          echo "latest=$(jq -r '.[-1]' <<< "$TOOLCHAINS")" >> "$GITHUB_OUTPUT"
 
   lint:
     name: Lint
