@@ -40,6 +40,9 @@ pub enum Commands {
 
     /// Generate shell completions.
     Completions(Completions),
+
+    /// Show ownership and lifetime visualization for a variable.
+    Show(Show),
 }
 
 #[derive(Args, Debug)]
@@ -103,4 +106,27 @@ pub struct Completions {
     /// The shell to generate completions for.
     #[arg(value_enum)]
     pub shell: crate::shells::Shell,
+}
+
+#[derive(Args, Debug)]
+pub struct Show {
+    /// The path of the file to analyze.
+    #[arg(value_name("file"), value_hint(ValueHint::FilePath))]
+    pub file: std::path::PathBuf,
+
+    /// The name of the function to analyze.
+    #[arg(value_name("function"))]
+    pub function: String,
+
+    /// The name of the variable to visualize.
+    #[arg(value_name("variable"))]
+    pub variable: String,
+
+    /// Check all targets.
+    #[arg(long, default_value_t = false)]
+    pub all_targets: bool,
+
+    /// Check all features.
+    #[arg(long, default_value_t = false)]
+    pub all_features: bool,
 }

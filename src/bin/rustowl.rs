@@ -94,6 +94,76 @@ async fn handle_command(command: Commands, rustc_threads: usize) {
             let shell = command_options.shell;
             generate(shell, &mut Cli::command(), "rustowl", &mut io::stdout());
         }
+        Commands::Show(command_options) => {
+            handle_show_command(command_options, rustc_threads).await;
+        }
+    }
+}
+
+/// Handles the show command for visualizing ownership and lifetimes.
+async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
+    use rustowl::lsp::analyze::Analyzer;
+
+    let file_path = opts.file.canonicalize().unwrap_or_else(|_| opts.file.clone());
+
+    // Find the project root (where Cargo.toml is)
+    let project_root = file_path
+        .ancestors()
+        .find(|p| p.join("Cargo.toml").exists())
+        .unwrap_or_else(|| {
+            log::error!("Could not find Cargo.toml in parent directories");
+            std::process::exit(1);
+        });
+
+    log::info!("Analyzing project at {:?}", project_root);
+
+    // Create an analyzer and run analysis
+    let analyzer = match Analyzer::new(project_root, rustc_threads).await {
+        Ok(a) => a,
+        Err(e) => {
+            log::error!("Failed to create analyzer: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut iter = analyzer.analyze(opts.all_targets, opts.all_features).await;
+
+    // Collect analysis results
+    let mut crate_data: Option<rustowl::models::Crate> = None;
+    while let Some(event) = iter.next_event().await {
+        match event {
+            rustowl::lsp::analyze::AnalyzerEvent::Analyzed(ws) => {
+                for krate in ws.0.into_values() {
+                    if let Some(existing) = &mut crate_data {
+                        existing.merge(krate);
+                    } else {
+                        crate_data = Some(krate);
+                    }
+                }
+            }
+            rustowl::lsp::analyze::AnalyzerEvent::CrateChecked { package, .. } => {
+                log::info!("Analyzed: {}", package);
+            }
+        }
+    }
+
+    let crate_data = match crate_data {
+        Some(data) => data,
+        None => {
+            log::error!("Analysis produced no results");
+            std::process::exit(1);
+        }
+    };
+
+    // Run visualization
+    if let Err(e) = rustowl::visualize::show_variable(
+        &crate_data,
+        &file_path,
+        &opts.function,
+        &opts.variable,
+    ) {
+        log::error!("{}", e);
+        std::process::exit(1);
     }
 }
 

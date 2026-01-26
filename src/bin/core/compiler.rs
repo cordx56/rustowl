@@ -135,6 +135,11 @@ impl<'tcx> TyCtxt<'tcx> {
             .crate_name(rustc_hir::def_id::LOCAL_CRATE)
             .to_string()
     }
+
+    pub fn def_name(&self, def_id: DefId) -> String {
+        self.as_rustc()
+            .def_path_str(def_id.as_rustc().to_def_id())
+    }
 }
 
 impl_as_rustc!(

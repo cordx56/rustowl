@@ -31,6 +31,7 @@ pub struct MirAnalyzer {
     input: PoloniusInput,
     basic_blocks: Vec<MirBasicBlock>,
     fn_id: DefId,
+    name: String,
     file_hash: String,
     mir_hash: String,
     accurate_live: HashMap<LocalId, Vec<Range>>,
@@ -47,7 +48,8 @@ impl MirAnalyzer {
         let facts = tcx.get_borrowck_facts(fn_id);
         for (fn_id, mut facts) in facts {
             let source_info = tcx.source_info_from_span(facts.body().span());
-            log::info!("facts of {fn_id:?} prepared; start analyze...");
+            let name = tcx.def_name(fn_id);
+            log::info!("facts of {fn_id:?} ({name}) prepared; start analyze...");
 
             let body = facts.body();
 
@@ -133,6 +135,7 @@ impl MirAnalyzer {
                     user_vars,
                     basic_blocks,
                     fn_id,
+                    name,
                     file_hash,
                     mir_hash,
                     accurate_live,
@@ -215,6 +218,7 @@ impl MirAnalyzer {
             mir_hash: self.mir_hash,
             analyzed: Function {
                 fn_id: self.fn_id.as_u32(),
+                name: self.name,
                 basic_blocks,
                 decls,
             },
