@@ -210,8 +210,9 @@ impl MirVisitor for FindVariablesByName<'_> {
 }
 
 /// Type of decoration for a range.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum DecoType {
+    // Order matches the legend display order
     Lifetime,
     ImmBorrow,
     MutBorrow,
@@ -383,18 +384,12 @@ impl<'a> CliRenderer<'a> {
             by_type.entry(*deco_type).or_default().push((*start, *end));
         }
 
-        // Sort types by the earliest start position for consistent output order
-        let mut types_with_min_start: Vec<(DecoType, u32)> = by_type
-            .iter()
-            .map(|(deco_type, ranges)| {
-                let min_start = ranges.iter().map(|(s, _)| *s).min().unwrap_or(0);
-                (*deco_type, min_start)
-            })
-            .collect();
-        types_with_min_start.sort_by_key(|(_, start)| *start);
+        // Sort types by their defined order (matches legend)
+        let mut types: Vec<DecoType> = by_type.keys().copied().collect();
+        types.sort();
 
         // Print each decoration type on its own line
-        for (deco_type, _) in types_with_min_start {
+        for deco_type in types {
             let ranges = &by_type[&deco_type];
             let mut sorted_ranges = ranges.clone();
             sorted_ranges.sort_by_key(|(start, _)| *start);
