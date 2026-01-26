@@ -30,7 +30,7 @@ mod colors {
     pub const TYPE: &str = YELLOW;
     pub const STRING: &str = GREEN;
     pub const NUMBER: &str = CYAN;
-    pub const COMMENT: &str = "\x1b[90m";
+    pub const COMMENT: &str = DIM;
     pub const LIFETIME: &str = YELLOW;
     pub const MACRO: &str = CYAN;
     pub const ATTRIBUTE: &str = MAGENTA;
