@@ -235,15 +235,14 @@ impl<'a> CliRenderer<'a> {
             } else {
                 // Handle multi-line decorations by adding to each line
                 for line in start_line..=end_line {
-                    let col_start = if line == start_line {
-                        start_col
-                    } else {
-                        0
-                    };
+                    let col_start = if line == start_line { start_col } else { 0 };
                     let col_end = if line == end_line {
                         end_col
                     } else {
-                        self.lines.get(line as usize).map(|l| l.len() as u32).unwrap_or(0)
+                        self.lines
+                            .get(line as usize)
+                            .map(|l| l.len() as u32)
+                            .unwrap_or(0)
                     };
                     line_decos
                         .entry(line)
@@ -392,9 +391,10 @@ pub fn show_variable(
         let file_path = Path::new(file_path_str);
 
         // Get the file data for calculating decorations
-        let file = crate_data.0.get(file_path_str).ok_or_else(|| {
-            VisualizeError::FileNotFound(file_path_str.clone())
-        })?;
+        let file = crate_data
+            .0
+            .get(file_path_str)
+            .ok_or_else(|| VisualizeError::FileNotFound(file_path_str.clone()))?;
 
         // Read the source file
         let source = std::fs::read_to_string(file_path)?;
@@ -420,26 +420,10 @@ pub fn show_variable(
 /// Print a color legend for the different decoration types.
 fn print_legend() {
     println!("{}Legend:{}", colors::BLUE, colors::RESET);
-    println!(
-        "  {}~~~{} lifetime",
-        colors::GREEN,
-        colors::RESET
-    );
-    println!(
-        "  {}~~~{} immutable borrow",
-        colors::BLUE,
-        colors::RESET
-    );
-    println!(
-        "  {}~~~{} mutable borrow",
-        colors::MAGENTA,
-        colors::RESET
-    );
-    println!(
-        "  {}~~~{} move / call",
-        colors::YELLOW,
-        colors::RESET
-    );
+    println!("  {}~~~{} lifetime", colors::GREEN, colors::RESET);
+    println!("  {}~~~{} immutable borrow", colors::BLUE, colors::RESET);
+    println!("  {}~~~{} mutable borrow", colors::MAGENTA, colors::RESET);
+    println!("  {}~~~{} move / call", colors::YELLOW, colors::RESET);
     println!(
         "  {}~~~{} outlive / shared mutable",
         colors::RED,

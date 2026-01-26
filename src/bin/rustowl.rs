@@ -106,11 +106,12 @@ async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
 
     set_log_level("warn".parse().unwrap());
 
-    let path = opts
-        .path
-        .as_ref()
-        .map(|p| p.canonicalize().ok())
-        .flatten()
+    // Canonicalize the file path if specified
+    let file_path = opts.path.as_ref().and_then(|p| p.canonicalize().ok());
+
+    // Determine the project path for analysis
+    let path = file_path
+        .clone()
         .unwrap_or_else(|| env::current_dir().unwrap_or(".".into()));
 
     log::info!("Analyzing project at {:?}", path);
@@ -156,7 +157,7 @@ async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
     // Run visualization
     if let Err(e) = rustowl::visualize::show_variable(
         &crate_data,
-        opts.path.as_deref(),
+        file_path.as_deref(),
         &opts.function_path,
         &opts.variable,
     ) {
