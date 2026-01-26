@@ -60,6 +60,28 @@ pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
     ranges
 }
 
+/// Compute intersection of two range lists.
+/// Returns ranges that are covered by both lists.
+pub fn intersect_ranges(ranges1: Vec<Range>, ranges2: Vec<Range>) -> Vec<Range> {
+    let mut result = Vec::new();
+    for r1 in &ranges1 {
+        for r2 in &ranges2 {
+            if let Some(common) = common_range(*r1, *r2) {
+                result.push(common);
+            }
+        }
+    }
+    eliminated_ranges(result)
+}
+
+/// Compute union of two range lists.
+/// Returns ranges that are covered by either list.
+pub fn union_ranges(ranges1: Vec<Range>, ranges2: Vec<Range>) -> Vec<Range> {
+    let mut combined = ranges1;
+    combined.extend(ranges2);
+    eliminated_ranges(combined)
+}
+
 pub fn exclude_ranges(mut from: Vec<Range>, excludes: Vec<Range>) -> Vec<Range> {
     let mut i = 0;
     'outer: while i < from.len() {

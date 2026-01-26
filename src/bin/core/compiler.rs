@@ -178,6 +178,88 @@ impl<'tcx> Body<'tcx> {
     pub fn span(&self) -> Span {
         AsRustc::from_rustc(self.0.span)
     }
+
+    /// Extract StorageLive and StorageDead information from MIR body.
+    /// Returns a map from LocalId to (StorageLive ranges, StorageDead ranges).
+    pub fn get_storage_info(
+        &self,
+        source_info: &SourceInfo,
+    ) -> (HashMap<LocalId, Vec<Range>>, HashMap<LocalId, Vec<Range>>) {
+        use rustc_middle::mir::*;
+
+        let mut storage_live: HashMap<LocalId, Vec<Range>> = HashMap::new();
+        let mut storage_dead: HashMap<LocalId, Vec<Range>> = HashMap::new();
+
+        for bb_data in self.0.basic_blocks.iter() {
+            for stmt in &bb_data.statements {
+                let span = AsRustc::from_rustc(stmt.source_info.span);
+                match &stmt.kind {
+                    StatementKind::StorageLive(local) => {
+                        if let Some(range) =
+                            range_from_span(&source_info.source, span, source_info.offset)
+                        {
+                            storage_live
+                                .entry(AsRustc::from_rustc(*local))
+                                .or_default()
+                                .push(range);
+                        }
+                    }
+                    StatementKind::StorageDead(local) => {
+                        if let Some(range) =
+                            range_from_span(&source_info.source, span, source_info.offset)
+                        {
+                            storage_dead
+                                .entry(AsRustc::from_rustc(*local))
+                                .or_default()
+                                .push(range);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        (storage_live, storage_dead)
+    }
+
+    /// Compute storage ranges for each local variable based on StorageLive/StorageDead.
+    /// Returns a map from LocalId to a list of ranges where the variable is valid.
+    pub fn compute_storage_ranges(&self, source_info: &SourceInfo) -> HashMap<LocalId, Vec<Range>> {
+        use rustowl::utils;
+
+        let (storage_live, storage_dead) = self.get_storage_info(source_info);
+        let mut result: HashMap<LocalId, Vec<Range>> = HashMap::new();
+
+        for (local, live_ranges) in &storage_live {
+            let dead_ranges = storage_dead.get(local);
+
+            for live_range in live_ranges {
+                // Find the corresponding StorageDead
+                // We look for a StorageDead with position >= StorageLive position
+                let end_pos = if let Some(dead_ranges) = dead_ranges {
+                    dead_ranges
+                        .iter()
+                        .filter(|dr| dr.from() >= live_range.from())
+                        .map(|dr| dr.until())
+                        .min_by_key(|loc| *loc)
+                } else {
+                    None
+                };
+
+                if let Some(end) = end_pos
+                    && let Some(range) = Range::new(live_range.from(), end)
+                {
+                    result.entry(*local).or_default().push(range);
+                }
+            }
+        }
+
+        // Eliminate overlapping ranges
+        result
+            .into_iter()
+            .map(|(local, ranges)| (local, utils::eliminated_ranges(ranges)))
+            .collect()
+    }
 }
 
 impl_as_rustc!(
