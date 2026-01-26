@@ -89,21 +89,29 @@ impl<'a> FindVariablesByName<'a> {
     /// - A simple function name: `foo` matches `crate::module::foo`
     /// - A partial path: `module::foo` matches `crate::module::foo`
     /// - A full path: `crate::module::foo` matches exactly
+    /// - Async functions: `foo` matches `crate::module::foo::{closure#0}` (async state machine)
     fn matches_function(&self, name: &str) -> bool {
+        // Strip async/closure suffixes from the function name
+        // Async functions are compiled to state machines with names like:
+        // - `func::{closure#0}`
+        // - `func::{async_block#0}`
+        // - `func::{async fn body}`
+        let base_name = Self::strip_async_suffix(name);
+
         // Exact match
-        if name == self.function_path {
+        if base_name == self.function_path {
             return true;
         }
 
         // Check if the function name ends with the given path
         // e.g., "module::foo" matches "crate::module::foo"
-        if name.ends_with(&format!("::{}", self.function_path)) {
+        if base_name.ends_with(&format!("::{}", self.function_path)) {
             return true;
         }
 
         // Check if the given path is a suffix of the function name
         // This handles cases like "foo" matching "crate::module::foo"
-        let name_parts: Vec<&str> = name.split("::").collect();
+        let name_parts: Vec<&str> = base_name.split("::").collect();
         let path_parts: Vec<&str> = self.function_path.split("::").collect();
 
         if path_parts.len() <= name_parts.len() {
@@ -112,6 +120,19 @@ impl<'a> FindVariablesByName<'a> {
         }
 
         false
+    }
+
+    /// Strip async-related suffixes from function names.
+    ///
+    /// Async functions in Rust are compiled into state machines, and their
+    /// bodies appear with suffixes like `{closure#0}`, `{async_block#0}`, etc.
+    fn strip_async_suffix(name: &str) -> &str {
+        // Find the start of any `{...}` suffix
+        if let Some(brace_pos) = name.find("::{") {
+            &name[..brace_pos]
+        } else {
+            name
+        }
     }
 }
 
