@@ -67,25 +67,51 @@ pub struct VariableInfo {
 
 /// Find variables by name within a specific function.
 struct FindVariablesByName<'a> {
-    function_name: &'a str,
+    function_path: &'a str,
     variable_name: &'a str,
     current_function_name: String,
     found: Vec<VariableInfo>,
 }
 
 impl<'a> FindVariablesByName<'a> {
-    fn new(function_name: &'a str, variable_name: &'a str) -> Self {
+    fn new(function_path: &'a str, variable_name: &'a str) -> Self {
         Self {
-            function_name,
+            function_path,
             variable_name,
             current_function_name: String::new(),
             found: Vec::new(),
         }
     }
 
+    /// Check if the function name matches the given path.
+    ///
+    /// The function path can be:
+    /// - A simple function name: `foo` matches `crate::module::foo`
+    /// - A partial path: `module::foo` matches `crate::module::foo`
+    /// - A full path: `crate::module::foo` matches exactly
     fn matches_function(&self, name: &str) -> bool {
-        // Match the function name exactly or as the last part of a qualified path
-        name == self.function_name || name.ends_with(&format!("::{}", self.function_name))
+        // Exact match
+        if name == self.function_path {
+            return true;
+        }
+
+        // Check if the function name ends with the given path
+        // e.g., "module::foo" matches "crate::module::foo"
+        if name.ends_with(&format!("::{}", self.function_path)) {
+            return true;
+        }
+
+        // Check if the given path is a suffix of the function name
+        // This handles cases like "foo" matching "crate::module::foo"
+        let name_parts: Vec<&str> = name.split("::").collect();
+        let path_parts: Vec<&str> = self.function_path.split("::").collect();
+
+        if path_parts.len() <= name_parts.len() {
+            let suffix = &name_parts[name_parts.len() - path_parts.len()..];
+            return suffix == path_parts.as_slice();
+        }
+
+        false
     }
 }
 
@@ -312,39 +338,68 @@ pub fn find_file<'a>(crate_data: &'a Crate, file_path: &Path) -> Option<&'a File
     None
 }
 
-/// Main entry point for CLI visualization.
+/// Main entry point for CLI visualization with optional file path.
 ///
 /// Shows ownership and lifetime visualization for a specific variable
 /// in a function within the analyzed crate data.
 pub fn show_variable(
     crate_data: &Crate,
-    file_path: &Path,
-    function_name: &str,
+    file_path: Option<&Path>,
+    function_path: &str,
     variable_name: &str,
 ) -> Result<(), VisualizeError> {
-    // Find the file in the crate data
-    let file = find_file(crate_data, file_path)
-        .ok_or_else(|| VisualizeError::FileNotFound(file_path.display().to_string()))?;
+    // Collect all matching variables across files
+    let mut all_found: Vec<(String, VariableInfo)> = Vec::new();
 
-    // Find variables matching the name in the specified function
-    let mut finder = FindVariablesByName::new(function_name, variable_name);
-    for func in &file.items {
-        utils::mir_visit(func, &mut finder);
+    if let Some(path) = file_path {
+        // Search in specific file
+        let file = find_file(crate_data, path)
+            .ok_or_else(|| VisualizeError::FileNotFound(path.display().to_string()))?;
+
+        let mut finder = FindVariablesByName::new(function_path, variable_name);
+        for func in &file.items {
+            utils::mir_visit(func, &mut finder);
+        }
+
+        for var in finder.found {
+            all_found.push((path.to_string_lossy().to_string(), var));
+        }
+    } else {
+        // Search in all files
+        for (file_path_str, file) in &crate_data.0 {
+            let mut finder = FindVariablesByName::new(function_path, variable_name);
+            for func in &file.items {
+                utils::mir_visit(func, &mut finder);
+            }
+
+            for var in finder.found {
+                all_found.push((file_path_str.clone(), var));
+            }
+        }
     }
 
-    if finder.found.is_empty() {
+    if all_found.is_empty() {
         return Err(VisualizeError::VariableNotFound(format!(
             "'{}' in function '{}'",
-            variable_name, function_name
+            variable_name, function_path
         )));
     }
 
-    // Read the source file
-    let source = std::fs::read_to_string(file_path)?;
-    let renderer = CliRenderer::new(&source);
+    let total_vars = all_found.len();
 
-    // For each found variable, calculate and display decorations
-    for (idx, var_info) in finder.found.iter().enumerate() {
+    // Display each found variable
+    for (idx, (file_path_str, var_info)) in all_found.iter().enumerate() {
+        let file_path = Path::new(file_path_str);
+
+        // Get the file data for calculating decorations
+        let file = crate_data.0.get(file_path_str).ok_or_else(|| {
+            VisualizeError::FileNotFound(file_path_str.clone())
+        })?;
+
+        // Read the source file
+        let source = std::fs::read_to_string(file_path)?;
+        let renderer = CliRenderer::new(&source);
+
         // Calculate decorations for this variable
         let mut calc = CalcDecos::new(std::iter::once(var_info.local));
         for func in &file.items {
@@ -353,7 +408,7 @@ pub fn show_variable(
         calc.handle_overlapping();
         let decos = calc.decorations();
 
-        renderer.render_variable(var_info, idx, finder.found.len(), &decos);
+        renderer.render_variable(var_info, idx, total_vars, &decos);
     }
 
     // Print legend

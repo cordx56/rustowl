@@ -104,21 +104,19 @@ async fn handle_command(command: Commands, rustc_threads: usize) {
 async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
     use rustowl::lsp::analyze::Analyzer;
 
-    let file_path = opts.file.canonicalize().unwrap_or_else(|_| opts.file.clone());
+    set_log_level("warn".parse().unwrap());
 
-    // Find the project root (where Cargo.toml is)
-    let project_root = file_path
-        .ancestors()
-        .find(|p| p.join("Cargo.toml").exists())
-        .unwrap_or_else(|| {
-            log::error!("Could not find Cargo.toml in parent directories");
-            std::process::exit(1);
-        });
+    let path = opts
+        .path
+        .as_ref()
+        .map(|p| p.canonicalize().ok())
+        .flatten()
+        .unwrap_or_else(|| env::current_dir().unwrap_or(".".into()));
 
-    log::info!("Analyzing project at {:?}", project_root);
+    log::info!("Analyzing project at {:?}", path);
 
     // Create an analyzer and run analysis
-    let analyzer = match Analyzer::new(project_root, rustc_threads).await {
+    let analyzer = match Analyzer::new(&path, rustc_threads).await {
         Ok(a) => a,
         Err(e) => {
             log::error!("Failed to create analyzer: {:?}", e);
@@ -158,11 +156,11 @@ async fn handle_show_command(opts: cli::Show, rustc_threads: usize) {
     // Run visualization
     if let Err(e) = rustowl::visualize::show_variable(
         &crate_data,
-        &file_path,
-        &opts.function,
+        opts.path.as_deref(),
+        &opts.function_path,
         &opts.variable,
     ) {
-        log::error!("{}", e);
+        log::error!("{e}");
         std::process::exit(1);
     }
 }

@@ -110,13 +110,15 @@ pub struct Completions {
 
 #[derive(Args, Debug)]
 pub struct Show {
-    /// The path of the file to analyze.
-    #[arg(value_name("file"), value_hint(ValueHint::FilePath))]
-    pub file: std::path::PathBuf,
+    /// The path of the file to analyze (optional).
+    /// If specified, the function path is relative to this file.
+    /// If not specified, the function path is relative to the crate root.
+    #[arg(short, long, value_name("path"), value_hint(ValueHint::FilePath))]
+    pub path: Option<std::path::PathBuf>,
 
-    /// The name of the function to analyze.
-    #[arg(value_name("function"))]
-    pub function: String,
+    /// The path of the function to analyze (e.g., module::function).
+    #[arg(value_name("function_path"))]
+    pub function_path: String,
 
     /// The name of the variable to visualize.
     #[arg(value_name("variable"))]
