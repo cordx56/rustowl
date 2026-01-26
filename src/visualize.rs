@@ -167,7 +167,7 @@ impl<'a> FindVariablesByName<'a> {
         let method_start = as_pos + gt_pos + 3;
         let method_name = &name[method_start..];
 
-        Some(format!("{}::{}", type_name, method_name))
+        Some(format!("{type_name}::{method_name}"))
     }
 
     /// Strip async-related suffixes from function names.
