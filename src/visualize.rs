@@ -105,28 +105,40 @@ impl<'a> FindVariablesByName<'a> {
     /// - A partial path: `module::foo` matches `crate::module::foo`
     /// - A full path: `crate::module::foo` matches exactly
     /// - Async functions: `foo` matches `crate::module::foo::{closure#0}` (async state machine)
+    /// - Trait implementations: `Type::method` matches `<module::Type as Trait>::method`
     fn matches_function(&self, name: &str) -> bool {
-        // Strip async/closure suffixes from the function name
-        // Async functions are compiled to state machines with names like:
-        // - `func::{closure#0}`
-        // - `func::{async_block#0}`
-        // - `func::{async fn body}`
+        // For async functions, we need to match both the outer function and the closure
+        // The actual code is in the closure, but we strip the suffix when matching
         let base_name = Self::strip_async_suffix(name);
 
+        // For trait implementations, normalize the name to `Type::method` format
+        // e.g., `<lsp::backend::Backend as tower_lsp::LanguageServer>::did_open`
+        //    -> `lsp::backend::Backend::did_open`
+        if let Some(normalized) = Self::normalize_trait_impl_name(base_name)
+            && self.matches_normalized(&normalized)
+        {
+            return true;
+        }
+
+        self.matches_normalized(base_name)
+    }
+
+    /// Check if the normalized function name matches the search path.
+    fn matches_normalized(&self, name: &str) -> bool {
         // Exact match
-        if base_name == self.function_path {
+        if name == self.function_path {
             return true;
         }
 
         // Check if the function name ends with the given path
         // e.g., "module::foo" matches "crate::module::foo"
-        if base_name.ends_with(&format!("::{}", self.function_path)) {
+        if name.ends_with(&format!("::{}", self.function_path)) {
             return true;
         }
 
         // Check if the given path is a suffix of the function name
         // This handles cases like "foo" matching "crate::module::foo"
-        let name_parts: Vec<&str> = base_name.split("::").collect();
+        let name_parts: Vec<&str> = name.split("::").collect();
         let path_parts: Vec<&str> = self.function_path.split("::").collect();
 
         if path_parts.len() <= name_parts.len() {
@@ -135,6 +147,27 @@ impl<'a> FindVariablesByName<'a> {
         }
 
         false
+    }
+
+    /// Normalize trait implementation names to `Type::method` format.
+    ///
+    /// Converts `<module::Type as Trait>::method` to `module::Type::method`.
+    /// Returns `None` if the name is not a trait implementation.
+    fn normalize_trait_impl_name(name: &str) -> Option<String> {
+        if !name.starts_with('<') {
+            return None;
+        }
+
+        let as_pos = name.find(" as ")?;
+        let gt_pos = name[as_pos..].find(">::")?;
+
+        // Extract the type name (between '<' and ' as ')
+        let type_name = &name[1..as_pos];
+        // Extract the method name (after '>::')
+        let method_start = as_pos + gt_pos + 3;
+        let method_name = &name[method_start..];
+
+        Some(format!("{}::{}", type_name, method_name))
     }
 
     /// Strip async-related suffixes from function names.
