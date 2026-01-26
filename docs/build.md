@@ -1,5 +1,15 @@
 # Build guide
 
+<!--toc:start-->
+- [Build guide](#build-guide)
+  - [RustOwl](#rustowl)
+    - [Build RustOwl using stable toolchain](#build-rustowl-using-stable-toolchain)
+    - [Build RustOwl using custom toolchain](#build-rustowl-using-custom-toolchain)
+  - [VSCode extension](#vscode-extension)
+    - [Prerequisite](#prerequisite)
+    - [Build & Run](#build-run)
+<!--toc:end-->
+
 Here we describe how to build each of our repository.
 
 ## RustOwl

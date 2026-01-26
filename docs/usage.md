@@ -1,11 +1,29 @@
 # RustOwl usage
 
+## Table of Contents
+
+<!--toc:start-->
+
+- [RustOwl usage](#rustowl-usage)
+  - [Table of Contents](#table-of-contents)
+  - [Quick Start](#quick-start)
+  - [Getting started](#getting-started)
+  - [Basic usage](#basic-usage)
+  - [Advanced usage](#advanced-usage)
+  <!--toc:end-->
+
+## Quick Start
+
+1. Install RustOwl (docs/installation.md) and the editor extension for your editor.
+2. Open a Rust Cargo workspace and save a Rust file to trigger analysis.
+3. Place the cursor on a variable or function call and wait a short idle time to see visualizations.
+
 Here, I describe how to use RustOwl in your workflow.
 
 ## Getting started
 
 First, please install the RustOwl LSP server and extension for your editor.
-Installation guide is on [the top page of this repository](/README.md).
+Installation guide is on [installation](/docs/installation.md) file.
 
 Then, please open a Rust source code file (`.rs`) in the editor.
 RustOwl only works with a Cargo workspace, so you need to open the source code that is part of a Cargo workspace.
