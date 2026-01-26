@@ -39,6 +39,7 @@ pub struct MirAnalyzer {
     shared_live: HashMap<LocalId, Vec<Range>>,
     mutable_live: HashMap<LocalId, Vec<Range>>,
     drop_range: HashMap<LocalId, Vec<Range>>,
+    storage_range: HashMap<LocalId, Vec<Range>>,
 }
 impl MirAnalyzer {
     /// initialize analyzer
@@ -95,6 +96,10 @@ impl MirAnalyzer {
             // this must be done in local thread
             let basic_blocks = tcx.collect_basic_blocks(fn_id, &body, &source_info);
 
+            // compute storage ranges based on StorageLive/StorageDead
+            // this must be done in local thread as body cannot be sent across threads
+            let storage_range = body.compute_storage_ranges(&source_info);
+
             // collect borrow data
             // this must be done in local thread
             let borrow_data = facts.borrow_map();
@@ -143,6 +148,7 @@ impl MirAnalyzer {
                     shared_live,
                     mutable_live,
                     drop_range,
+                    storage_range,
                 }
             });
             result.insert(fn_id, MirAnalyzerInitResult::Analyzer(analyzer));
@@ -158,6 +164,7 @@ impl MirAnalyzer {
         let must_live_at = &self.must_live;
 
         let drop_range = &self.drop_range;
+        let storage_range = &self.storage_range;
         self.local_decls
             .iter()
             .map(|(local, ty)| {
@@ -168,6 +175,7 @@ impl MirAnalyzer {
                 let mutable_borrow = self.mutable_live.get(local).cloned().unwrap_or(Vec::new());
                 let drop = self.is_drop(*local);
                 let drop_range = drop_range.get(local).cloned().unwrap_or(Vec::new());
+                let storage_range = storage_range.get(local).cloned().unwrap_or(Vec::new());
                 let fn_local = FnLocal::new(local.as_u32(), self.fn_id.as_u32());
                 if let Some((span, name)) = user_vars.get(local).cloned() {
                     MirDecl::User {
@@ -181,6 +189,7 @@ impl MirAnalyzer {
                         must_live_at,
                         drop,
                         drop_range,
+                        storage_range,
                     }
                 } else {
                     MirDecl::Other {
@@ -192,6 +201,7 @@ impl MirAnalyzer {
                         drop,
                         drop_range,
                         must_live_at,
+                        storage_range,
                     }
                 }
             })

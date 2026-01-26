@@ -286,6 +286,8 @@ pub enum MirDecl {
         drop: bool,
         drop_range: Vec<Range>,
         must_live_at: Vec<Range>,
+        /// Range from StorageLive to StorageDead for this variable
+        storage_range: Vec<Range>,
     },
     Other {
         local: FnLocal,
@@ -296,6 +298,8 @@ pub enum MirDecl {
         drop: bool,
         drop_range: Vec<Range>,
         must_live_at: Vec<Range>,
+        /// Range from StorageLive to StorageDead for this variable
+        storage_range: Vec<Range>,
     },
 }
 

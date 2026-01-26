@@ -539,48 +539,61 @@ impl CalcDecos {
 }
 impl utils::MirVisitor for CalcDecos {
     fn visit_decl(&mut self, decl: &MirDecl) {
-        let (local, lives, shared_borrow, mutable_borrow, drop_range, must_live_at, name, drop) =
-            match decl {
-                MirDecl::User {
-                    local,
-                    name,
-                    lives,
-                    shared_borrow,
-                    mutable_borrow,
-                    drop_range,
-                    must_live_at,
-                    drop,
-                    ..
-                } => (
-                    *local,
-                    lives,
-                    shared_borrow,
-                    mutable_borrow,
-                    drop_range,
-                    must_live_at,
-                    Some(name),
-                    drop,
-                ),
-                MirDecl::Other {
-                    local,
-                    lives,
-                    shared_borrow,
-                    mutable_borrow,
-                    drop_range,
-                    must_live_at,
-                    drop,
-                    ..
-                } => (
-                    *local,
-                    lives,
-                    shared_borrow,
-                    mutable_borrow,
-                    drop_range,
-                    must_live_at,
-                    None,
-                    drop,
-                ),
-            };
+        let (
+            local,
+            lives,
+            shared_borrow,
+            mutable_borrow,
+            drop_range,
+            must_live_at,
+            storage_range,
+            name,
+            drop,
+        ) = match decl {
+            MirDecl::User {
+                local,
+                name,
+                lives,
+                shared_borrow,
+                mutable_borrow,
+                drop_range,
+                must_live_at,
+                storage_range,
+                drop,
+                ..
+            } => (
+                *local,
+                lives,
+                shared_borrow,
+                mutable_borrow,
+                drop_range,
+                must_live_at,
+                storage_range,
+                Some(name),
+                drop,
+            ),
+            MirDecl::Other {
+                local,
+                lives,
+                shared_borrow,
+                mutable_borrow,
+                drop_range,
+                must_live_at,
+                storage_range,
+                drop,
+                ..
+            } => (
+                *local,
+                lives,
+                shared_borrow,
+                mutable_borrow,
+                drop_range,
+                must_live_at,
+                storage_range,
+                None,
+                drop,
+            ),
+        };
         self.current_fn_id = local.fn_id;
         if self.locals.contains(&local) {
             let var_str = match name {
@@ -589,11 +602,13 @@ impl utils::MirVisitor for CalcDecos {
                 }
                 None => "anonymous variable".to_owned(),
             };
-            // merge Drop object lives
+            // Compute variable availability range:
+            // - drop variables (Non-Copy): intersection of drop_range and storage_range
+            // - non-drop variables (Copy): union of lives and storage_range
             let drop_copy_live = if *drop {
-                utils::eliminated_ranges(drop_range.clone())
+                utils::intersect_ranges(drop_range.clone(), storage_range.clone())
             } else {
-                utils::eliminated_ranges(lives.clone())
+                utils::union_ranges(lives.clone(), storage_range.clone())
             };
             for range in &drop_copy_live {
                 self.decorations.push(Deco::Lifetime {

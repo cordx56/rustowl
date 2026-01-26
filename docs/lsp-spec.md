@@ -1,5 +1,20 @@
 # The RustOwl LSP specification
 
+## Table of Contents
+
+<!--toc:start-->
+
+- [The RustOwl LSP specification](#the-rustowl-lsp-specification)
+  - [Table of Contents](#table-of-contents)
+  - [Types](#types)
+    - [`OprType`](#oprtype)
+    - [`Decoration`](#decoration)
+  - [Methods](#methods)
+    - [`rustowl/cursor`](#rustowlcursor)
+      - [Request payload](#request-payload)
+      - [Response payload](#response-payload)
+<!--toc:end-->
+
 `rustowl`, is an LSP server which provides RustOwl information.
 To display various types of decorations, RustOwl supports some custom methods from the client.
 

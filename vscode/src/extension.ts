@@ -1,7 +1,4 @@
 import * as vscode from "vscode";
-
-import { zInfer, zLspCursorResponse, zLspRange } from "./schemas";
-import { bootstrapRustowl } from "./bootstrap";
 import {
   LanguageClient,
   ServerOptions,
@@ -10,12 +7,16 @@ import {
   LanguageClientOptions,
 } from "vscode-languageclient/node";
 
+import { bootstrapRustowl } from "./bootstrap";
+import { zInfer, zLspCursorResponse, zLspRange } from "./schemas";
+
 export let client: LanguageClient | undefined = undefined;
 
-let decoTimer: NodeJS.Timeout | null = null;
-let enabled: boolean = true;
+let decoTimer: ReturnType<typeof setTimeout> | null = null;
+let enabled = true;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+  // eslint-disable-next-line no-console
   console.log("rustowl activated");
 
   const lspExec: Executable = {
@@ -27,22 +28,23 @@ export function activate(context: vscode.ExtensionContext) {
     documentSelector: [{ scheme: "file", language: "rust" }],
   };
 
-  (async () => {
-    try {
-      const exec = await bootstrapRustowl(context.globalStorageUri.fsPath);
-      serverOptions.command = exec;
+  try {
+    const exec = await bootstrapRustowl(context.globalStorageUri.fsPath);
+    serverOptions.command = exec;
 
-      client = new LanguageClient(
-        "rustowl",
-        "RustOwl",
-        serverOptions,
-        clientOptions,
-      );
-      client.start();
-    } catch (e) {
-      vscode.window.showErrorMessage(`Failed to start RustOwl\n${e}`);
-    }
-  })();
+    client = new LanguageClient(
+      "rustowl",
+      "RustOwl",
+      serverOptions,
+      clientOptions,
+    );
+    await client.start();
+  } catch (error) {
+    vscode.window.showErrorMessage(
+      `Failed to start RustOwl\n${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
+  }
 
   let activeEditor: vscode.TextEditor | undefined =
     vscode.window.activeTextEditor;
@@ -148,7 +150,11 @@ export function activate(context: vscode.ExtensionContext) {
           outlive.push({ range });
         }
       }
-      if ("hover_text" in deco && deco.hover_text) {
+      if (
+        "hover_text" in deco &&
+        deco.hover_text !== null &&
+        deco.hover_text !== ""
+      ) {
         messages.push({ range, hoverMessage: deco.hover_text });
       }
     }
@@ -183,6 +189,7 @@ export function activate(context: vscode.ExtensionContext) {
     const resp = await req;
     const data = zLspCursorResponse.safeParse(resp);
     if (data.success) {
+      // eslint-disable-next-line no-console
       console.log(data.data);
       if (data.data.status === "finished") {
         statusBar.text = "$(check) RustOwl";
@@ -248,10 +255,14 @@ export function activate(context: vscode.ExtensionContext) {
           clearTimeout(decoTimer);
           decoTimer = null;
         }
-        decoTimer = setTimeout(async () => {
+        decoTimer = setTimeout(() => {
           const select = ev.textEditor.selection.active;
           const uri = ev.textEditor.document.uri;
-          rustowlHoverRequest(ev.textEditor, select, uri);
+          // eslint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks
+          rustowlHoverRequest(ev.textEditor, select, uri).catch((error) => {
+            // eslint-disable-next-line no-console
+            console.error(error);
+          });
         }, displayDelay);
       }
     },
@@ -262,6 +273,19 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
   if (client) {
-    client.stop();
+    try {
+      const stopPromise = client.stop();
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises, @typescript-eslint/strict-boolean-expressions
+      if (stopPromise && typeof stopPromise.catch === "function") {
+        // eslint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks
+        stopPromise.catch((error) => {
+          // eslint-disable-next-line no-console
+          console.error(error);
+        });
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Error during deactivation:", error);
+    }
   }
 }

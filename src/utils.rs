@@ -60,6 +60,28 @@ pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
     ranges
 }
 
+/// Compute intersection of two range lists.
+/// Returns ranges that are covered by both lists.
+pub fn intersect_ranges(ranges1: Vec<Range>, ranges2: Vec<Range>) -> Vec<Range> {
+    let mut result = Vec::new();
+    for r1 in &ranges1 {
+        for r2 in &ranges2 {
+            if let Some(common) = common_range(*r1, *r2) {
+                result.push(common);
+            }
+        }
+    }
+    eliminated_ranges(result)
+}
+
+/// Compute union of two range lists.
+/// Returns ranges that are covered by either list.
+pub fn union_ranges(ranges1: Vec<Range>, ranges2: Vec<Range>) -> Vec<Range> {
+    let mut combined = ranges1;
+    combined.extend(ranges2);
+    eliminated_ranges(combined)
+}
+
 pub fn exclude_ranges(mut from: Vec<Range>, excludes: Vec<Range>) -> Vec<Range> {
     let mut i = 0;
     'outer: while i < from.len() {
@@ -108,18 +130,21 @@ pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
     let mut line = 0;
     let mut col = 0;
     // it seems that the compiler is ignoring CR
-    for (i, c) in s.replace("\r", "").chars().enumerate() {
+    let source_clean = s.replace("\r", "");
+    for (i, c) in source_clean.chars().enumerate() {
         if idx == Loc::from(i as u32) {
             return (line, col);
         }
         if c == '\n' {
             line += 1;
             col = 0;
-        } else if c != '\r' {
+        } else {
             col += 1;
         }
     }
-    (0, 0)
+    // Return current position when idx equals the string length (end position)
+    // or when idx is out of bounds
+    (line, col)
 }
 pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
     let mut col = 0;
