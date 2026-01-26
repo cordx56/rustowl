@@ -428,7 +428,7 @@ pub fn find_file<'a>(crate_data: &'a Crate, file_path: &Path) -> Option<&'a File
 
     // Try matching by file name or relative path
     for (path, file) in &crate_data.0 {
-        if path.ends_with::<str>(&file_path_str) || file_path_str.ends_with::<str>(path) {
+        if path.ends_with(&*file_path_str) || file_path_str.ends_with(&**path) {
             return Some(file);
         }
     }
