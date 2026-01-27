@@ -77,6 +77,8 @@ jobs:
         run: rustowl check ./perf-tests/dummy-package
 
       - name: Test algorithm consistency
+        # it can be different between other Rust versions
+        if: env.TOOLCHAIN_CHANNEL == "1.93.0"
         run: ./scripts/algorithm.sh
 
   vscode:
