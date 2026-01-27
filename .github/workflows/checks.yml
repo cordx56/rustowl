@@ -76,6 +76,9 @@ jobs:
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
 
+      - name: Test algorithm consistency
+        run: ./scripts/algorithm.sh
+
   vscode:
     name: VS Code Extension Checks
     runs-on: ubuntu-latest
