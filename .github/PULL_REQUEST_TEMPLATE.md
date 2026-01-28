@@ -7,14 +7,14 @@
 
 ## Type Of Change
 
-<!-- What types of changes does your code introduce? Put an `x` in all the boxes that apply. -->
+<!-- What types of changes does your code introduce? Remove the options that do not apply. -->
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Documentation update
-- [ ] Enhancement
-- [ ] Breaking change
-- [ ] Other
+- Bug fix
+- New feature
+- Documentation update
+- Enhancement
+- Breaking change
+- Other
 
 ## Description
 
