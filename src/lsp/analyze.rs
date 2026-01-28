@@ -109,7 +109,7 @@ impl Analyzer {
     ) -> AnalyzeEventIter {
         let package_name = metadata.root_package().as_ref().unwrap().name.to_string();
         let target_dir = metadata.target_directory.as_std_path().join("owl");
-        log::info!("clear cargo cache");
+        log::debug!("clear cargo cache");
         let mut command = toolchain::setup_cargo_command().await;
         command
             .args(["clean", "--package", &package_name])
