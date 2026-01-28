@@ -210,10 +210,6 @@ async fn start_lsp_server(rustc_threads: usize) {
 
 #[tokio::main]
 async fn main() {
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .expect("crypto provider already installed");
-
     initialize_logging();
 
     let parsed_args = Cli::parse();
