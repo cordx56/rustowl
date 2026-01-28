@@ -273,12 +273,9 @@ pub async fn setup_cargo_command() -> tokio::process::Command {
         .unwrap_or("".to_string())
         .split_whitespace()
         .fold("".to_string(), |acc, x| format!("{acc}{delimiter}{x}"));
-    let mut encoded_flags = env::var("CARGO_ENCODED_RUSTFLAGS")
+    let encoded_flags = env::var("CARGO_ENCODED_RUSTFLAGS")
         .map(|v| format!("{v}{delimiter}"))
         .unwrap_or("".to_string());
-    if 1 < rustc_threads {
-        encoded_flags = format!("-Z{delimiter}threads={rustc_threads}{delimiter}{encoded_flags}");
-    }
 
     let sysroot = get_sysroot().await;
     command
