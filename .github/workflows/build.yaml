@@ -36,11 +36,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # Using fat LTO causes failure to link on Windows ARM
+      # Using fat LTO causes failure to link on Windows
       - name: Set build profile
         run: |
-          if [[ "${{ matrix.os }}" == "windows-11-arm" ]]; then
-            echo "build_profile=arm-windows-release" >> $GITHUB_ENV
+          if [[ "${{ matrix.os }}" == windows* ]]; then
+            echo "build_profile=windows-release" >> $GITHUB_ENV
           else
             echo "build_profile=release" >> $GITHUB_ENV
           fi
