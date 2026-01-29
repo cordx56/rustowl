@@ -11,6 +11,8 @@ on:
       run_id:
         description: Run ID of this workflow
         value: ${{ github.run_id }}
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   rustowl:
