@@ -1,4 +1,4 @@
-name: Basic Checks
+name: CI
 
 on:
   pull_request:
@@ -16,19 +16,28 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       toolchains: ${{ steps.toolchains.outputs.toolchains }}
+      latest: ${{ steps.toolchains.outputs.latest }}
     steps:
-      - name: Define supported Rust toolchains
-        id: toolchains
-        run: echo 'toolchains=["1.89.0", "1.90.0", "1.91.1", "1.92.0", "1.93.0"]' >> $GITHUB_OUTPUT
+      - id: toolchains
+        run: |
+          TOOLCHAINS='["1.89.0", "1.90.0", "1.91.1", "1.92.0", "1.93.0"]'
+          echo "toolchains=$TOOLCHAINS" >> $GITHUB_OUTPUT
+          echo "latest=$(jq -r '.[-1]' <<< "$TOOLCHAINS")" >> "$GITHUB_OUTPUT"
 
-  check:
-    name: Format & Lint
-    runs-on: ubuntu-latest
+  lint:
+    name: Lint
+    runs-on: ${{ matrix.os }}
     needs:
       - define-matrix
     strategy:
       matrix:
-        toolchain: ${{ fromJSON(needs.define-matrix.outputs.toolchains) }}
+        os:
+          - windows-latest
+          - windows-11-arm
+          - macos-15-intel
+          - macos-latest
+          - ubuntu-latest
+          - ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -36,19 +45,33 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.toolchain }}
-          components: clippy,rustfmt,llvm-tools,rust-src,rustc-dev
+          toolchain: ${{ needs.define-matrix.outputs.latest }}
+          components: clippy,llvm-tools,rust-src,rustc-dev
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Check formatting
-        run: cargo fmt --check
-
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+  format:
+    name: Format Check
+    runs-on: ubuntu-latest
+    needs: define-matrix
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ needs.define-matrix.outputs.latest }}
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --check
 
   test:
     name: Build & Test
@@ -66,6 +89,8 @@ jobs:
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build release
         run: ./scripts/build/toolchain cargo build --release

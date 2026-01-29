@@ -1,7 +1,6 @@
 [package]
 name = "rustowl"
 version = "1.0.0-rc.1"
-authors = ["cordx56 <cordx56@cordx.cx>"]
 edition = "2024"
 description = "Visualize Ownership and Lifetimes in Rust"
 documentation = "https://github.com/cordx56/rustowl/blob/main/README.md"
@@ -30,25 +29,16 @@ harness = false
 name = "rustowl_bench_simple"
 
 [dependencies]
-cargo_metadata = "0.23"
 anstyle = "1"
+cargo_metadata = "0.23"
 clap = { version = "4", features = ["cargo", "derive"] }
 clap_complete = "4"
 clap_complete_nushell = "4"
 flate2 = "1"
 log = "0.4"
-num_cpus = "1"
 process_alive = "0.2"
 rayon = "1"
-reqwest = { version = "0.12", default-features = false, features = [
-  "http2",
-  "rustls-tls-native-roots-no-provider",
-  "socks",
-  "system-proxy",
-] }
-rustls = { version = "0.23.36", default-features = false, features = [
-  "aws_lc_rs",
-] }
+reqwest = { version = "0.13.1", features = ["socks"] }
 rustversion = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -68,9 +58,9 @@ tokio = { version = "1", features = [
 ] }
 tokio-util = "0.7"
 tower-lsp = "0.20"
-uuid = { version = "1", features = ["v4"] }
 tree-sitter-highlight = "0.26"
 tree-sitter-rust = "0.24"
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
@@ -97,12 +87,8 @@ lto = "fat"
 codegen-units = 1
 
 [profile.release.package."*"]
-strip = "symbols"
 opt-level = 3
-
-[profile.arm-windows-release]
-inherits = "release"
-lto = "off"
+strip = "symbols"
 
 [profile.security]
 inherits = "release"
@@ -111,3 +97,7 @@ debug = true
 strip = "none"
 debug-assertions = true
 overflow-checks = true
+
+[profile.windows-release]
+inherits = "release"
+lto = "off"

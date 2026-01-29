@@ -262,7 +262,7 @@ pub async fn get_executable_path(name: &str) -> String {
     exec_name.to_owned()
 }
 
-pub async fn setup_cargo_command(rustc_threads: usize) -> tokio::process::Command {
+pub async fn setup_cargo_command() -> tokio::process::Command {
     let cargo = get_executable_path("cargo").await;
     let mut command = tokio::process::Command::new(&cargo);
     let rustowlc = get_executable_path("rustowlc").await;
@@ -273,12 +273,9 @@ pub async fn setup_cargo_command(rustc_threads: usize) -> tokio::process::Comman
         .unwrap_or("".to_string())
         .split_whitespace()
         .fold("".to_string(), |acc, x| format!("{acc}{delimiter}{x}"));
-    let mut encoded_flags = env::var("CARGO_ENCODED_RUSTFLAGS")
+    let encoded_flags = env::var("CARGO_ENCODED_RUSTFLAGS")
         .map(|v| format!("{v}{delimiter}"))
         .unwrap_or("".to_string());
-    if 1 < rustc_threads {
-        encoded_flags = format!("-Z{delimiter}threads={rustc_threads}{delimiter}{encoded_flags}");
-    }
 
     let sysroot = get_sysroot().await;
     command

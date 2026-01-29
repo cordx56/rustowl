@@ -162,7 +162,3 @@ pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
     }
     0
 }
-
-pub fn get_default_parallel_count() -> usize {
-    num_cpus::get_physical()
-}

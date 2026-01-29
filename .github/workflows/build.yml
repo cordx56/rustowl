@@ -11,6 +11,8 @@ on:
       run_id:
         description: Run ID of this workflow
         value: ${{ github.run_id }}
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   rustowl:
@@ -18,11 +20,11 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-24.04
+          - ubuntu-latest
           - ubuntu-24.04-arm
-          - macos-15
+          - macos-latest
           - macos-15-intel
-          - windows-2022
+          - windows-latest
           - windows-11-arm
 
     runs-on: ${{ matrix.os }}
@@ -36,11 +38,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # Using fat LTO causes failure to link on Windows ARM
+      # Using fat LTO causes failure to link on Windows
       - name: Set build profile
         run: |
-          if [[ "${{ matrix.os }}" == "windows-11-arm" ]]; then
-            echo "build_profile=arm-windows-release" >> $GITHUB_ENV
+          if [[ "${{ matrix.os }}" == windows* ]]; then
+            echo "build_profile=windows-release" >> $GITHUB_ENV
           else
             echo "build_profile=release" >> $GITHUB_ENV
           fi
