@@ -422,13 +422,13 @@ pub fn find_file<'a>(crate_data: &'a Crate, file_path: &Path) -> Option<&'a File
     let file_path_str = file_path.to_string_lossy();
 
     // Try exact match first
-    if let Some(file) = crate_data.0.get(file_path_str.as_ref()) {
+    if let Some(file) = crate_data.0.get::<str>(&file_path_str) {
         return Some(file);
     }
 
     // Try matching by file name or relative path
     for (path, file) in &crate_data.0 {
-        if path.ends_with(file_path_str.as_ref()) || file_path_str.ends_with(path) {
+        if path.ends_with(&*file_path_str) || file_path_str.ends_with(&**path) {
             return Some(file);
         }
     }
