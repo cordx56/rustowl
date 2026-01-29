@@ -1,3 +1,7 @@
+---
+source: tests/algorithm.rs
+expression: output
+---
 
 [96m=== Variable 'v2' (1/1) in function 'vec::f2' ===[0m
 
