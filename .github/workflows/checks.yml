@@ -26,12 +26,18 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     needs:
       - define-matrix
     strategy:
       matrix:
-        toolchain: ${{ fromJSON(needs.define-matrix.outputs.toolchains) }}
+        os:
+          - windows-latest
+          - windows-11-arm
+          - macos-15-intel
+          - macos-latest
+          - ubuntu-latest
+          - ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -39,7 +45,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.toolchain }}
+          toolchain: ${{ needs.define-matrix.outputs.latest }}
           components: clippy,llvm-tools,rust-src,rustc-dev
 
       - name: Cache dependencies
