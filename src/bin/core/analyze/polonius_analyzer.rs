@@ -77,6 +77,14 @@ pub fn get_must_live(
     borrow_map: &BorrowMap,
     basic_blocks: &[MirBasicBlock],
 ) -> HashMap<LocalId, Vec<Range>> {
+    // obtain a map that borrow index -> local
+    let mut borrow_local = HashMap::new();
+    for (local, borrow_idc) in borrow_map.local_map().iter() {
+        for borrow_idx in borrow_idc {
+            borrow_local.insert(*borrow_idx, *local);
+        }
+    }
+
     // obtain a map that region -> region contained locations
     let mut region_locations = HashMap::new();
     for (location_idx, region_idc) in output.origin_live_on_entry().iter() {
@@ -88,46 +96,55 @@ pub fn get_must_live(
         }
     }
 
-    // obtain a map that borrow index -> local
-    let mut borrow_local = HashMap::new();
-    for (local, borrow_idc) in borrow_map.local_map().iter() {
-        for borrow_idx in borrow_idc {
-            borrow_local.insert(*borrow_idx, *local);
-        }
-    }
-
-    // check all regions' subset that must be satisfied
-    let mut subsets = HashMap::new();
-    for (_, subset) in output.subset().iter() {
-        for (sup, subs) in subset.iter() {
-            subsets
-                .entry(*sup)
-                .or_insert_with(HashSet::new)
-                .extend(subs.iter().copied());
-        }
-    }
-    // obtain a map that region -> locations
-    // a region must contains the locations
+    // obtain a map that region -> locations where region must be live
+    // For subset relation sup >= sub at point p:
+    // - if sup is live at p, sup itself must be live at p (for borrows contained in sup)
+    // - if sup is live at p, sub must also be live at p (for borrows contained in sub)
+    // IMPORTANT: subset relations only apply from the point where they are established
     let mut region_must_locations = HashMap::new();
-    for (sup, subs) in subsets.iter() {
-        for sub in subs {
-            if let Some(locs) = region_locations.get(sub) {
+    for (location_idx, subset) in output.subset().iter() {
+        for (sup, subs) in subset.iter() {
+            // If sup region is live at this point
+            if region_locations
+                .get(sup)
+                .is_some_and(|locs| locs.contains(location_idx))
+            {
+                // sup is must_live at this point (for borrows contained in sup)
                 region_must_locations
                     .entry(*sup)
                     .or_insert_with(HashSet::new)
-                    .extend(locs.iter().copied());
+                    .insert(*location_idx);
+                // sub regions are also must_live at this point
+                for sub in subs {
+                    region_must_locations
+                        .entry(*sub)
+                        .or_insert_with(HashSet::new)
+                        .insert(*location_idx);
+                }
             }
         }
     }
-    // obtain a map that local -> locations
-    // a local must lives in the locations
-    let mut local_must_locations = HashMap::new();
+
+    // Build a map from borrow to all regions that ever contain it
+    let mut borrow_regions = HashMap::new();
     for (_location, region_borrows) in output.origin_contains_loan_at().iter() {
         for (region, borrows) in region_borrows.iter() {
             for borrow in borrows {
-                if let Some(locs) = region_must_locations.get(region)
-                    && let Some(local) = borrow_local.get(borrow)
-                {
+                borrow_regions
+                    .entry(*borrow)
+                    .or_insert_with(HashSet::new)
+                    .insert(*region);
+            }
+        }
+    }
+
+    // obtain a map that local -> locations
+    // a local must live where any of its borrow's regions must be live
+    let mut local_must_locations = HashMap::new();
+    for (borrow, regions) in borrow_regions.iter() {
+        if let Some(local) = borrow_local.get(borrow) {
+            for region in regions {
+                if let Some(locs) = region_must_locations.get(region) {
                     local_must_locations
                         .entry(*local)
                         .or_insert_with(HashSet::new)
