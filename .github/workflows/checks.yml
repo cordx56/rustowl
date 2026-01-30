@@ -95,11 +95,11 @@ jobs:
       - name: Install nextest
         uses: taiki-e/install-action@cargo-nextest
 
-      - name: Run tests
-        run: cargo nextest run --no-fail-fast
-
       - name: Build release
         run: ./scripts/build/toolchain cargo build --release
+
+      - name: Run tests
+        run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
 
       - name: Install binary
         run: ./scripts/build/toolchain cargo install --path .

@@ -6,7 +6,7 @@ static BUILD_ONCE: Once = Once::new();
 fn ensure_rustowl_built() {
     BUILD_ONCE.call_once(|| {
         let status = Command::new("cargo")
-            .args(["build"])
+            .args(["build", "--release"])
             .status()
             .expect("Failed to build rustowl");
         assert!(status.success(), "Failed to build rustowl");
@@ -16,20 +16,24 @@ fn ensure_rustowl_built() {
 fn get_rustowl_output(function_path: &str, variable: &str) -> String {
     ensure_rustowl_built();
 
-    let output = Command::new("cargo")
-        .args([
-            "run",
-            "--bin",
-            "rustowl",
-            "--",
-            "show",
-            "--path",
-            "algo-tests/src/vec.rs",
-            function_path,
-            variable,
-        ])
-        .output()
-        .expect("Failed to run rustowl");
+    let output = Command::new(&format!(
+        "target{}release{}rustowl",
+        std::path::MAIN_SEPARATOR,
+        std::path::MAIN_SEPARATOR
+    ))
+    .args([
+        "show",
+        "--path",
+        &format!(
+            "algo-tests{}src{}vec.rs",
+            std::path::MAIN_SEPARATOR,
+            std::path::MAIN_SEPARATOR
+        ),
+        function_path,
+        variable,
+    ])
+    .output()
+    .expect("Failed to run rustowl");
 
     assert!(output.status.success(), "rustowl command failed");
     String::from_utf8(output.stdout).expect("Invalid UTF-8")
