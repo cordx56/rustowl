@@ -92,6 +92,12 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      - name: Install nextest
+        uses: taiki-e/install-action@cargo-nextest
+
+      - name: Run tests
+        run: cargo nextest run --no-fail-fast
+
       - name: Build release
         run: ./scripts/build/toolchain cargo build --release
 
