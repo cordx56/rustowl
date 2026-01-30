@@ -75,12 +75,19 @@ jobs:
 
   test:
     name: Build & Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     needs:
       - define-matrix
     strategy:
       matrix:
         toolchain: ${{ fromJSON(needs.define-matrix.outputs.toolchains) }}
+        os:
+          - windows-latest
+          - windows-11-arm
+          - macos-15-intel
+          - macos-latest
+          - ubuntu-latest
+          - ubuntu-24.04-arm
     env:
       TOOLCHAIN_CHANNEL: ${{ matrix.toolchain }}
     steps:

@@ -16,7 +16,7 @@ fn ensure_rustowl_built() {
 fn get_rustowl_output(function_path: &str, variable: &str) -> String {
     ensure_rustowl_built();
 
-    let output = Command::new(&format!(
+    let output = Command::new(format!(
         "target{}release{}rustowl",
         std::path::MAIN_SEPARATOR,
         std::path::MAIN_SEPARATOR
@@ -24,7 +24,7 @@ fn get_rustowl_output(function_path: &str, variable: &str) -> String {
     .args([
         "show",
         "--path",
-        &format!(
+        format!(
             "algo-tests{}src{}vec.rs",
             std::path::MAIN_SEPARATOR,
             std::path::MAIN_SEPARATOR
