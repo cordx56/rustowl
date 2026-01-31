@@ -78,6 +78,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs:
       - define-matrix
+    defaults:
+       shell: bash
     strategy:
       matrix:
         toolchain: ${{ fromJSON(needs.define-matrix.outputs.toolchains) }}
@@ -110,12 +112,6 @@ jobs:
 
       - name: Install binary
         run: ./scripts/build/toolchain cargo install --path .
-
-      - name: Add cargo bin to PATH (Windows)
-        shell: pwsh
-        if: startsWith(matrix.os, 'windows')
-        run: |
-          echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
