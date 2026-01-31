@@ -75,12 +75,22 @@ jobs:
 
   test:
     name: Build & Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     needs:
       - define-matrix
+    defaults:
+       run:
+         shell: bash
     strategy:
       matrix:
         toolchain: ${{ fromJSON(needs.define-matrix.outputs.toolchains) }}
+        os:
+          - windows-latest
+          - windows-11-arm
+          - macos-15-intel
+          - macos-latest
+          - ubuntu-latest
+          - ubuntu-24.04-arm
     env:
       TOOLCHAIN_CHANNEL: ${{ matrix.toolchain }}
     steps:
@@ -92,8 +102,14 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      - name: Install nextest
+        uses: taiki-e/install-action@cargo-nextest
+
       - name: Build release
         run: ./scripts/build/toolchain cargo build --release
+
+      - name: Run tests
+        run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
 
       - name: Install binary
         run: ./scripts/build/toolchain cargo install --path .

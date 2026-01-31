@@ -64,6 +64,7 @@ uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
+insta = "1.46"
 
 [build-dependencies]
 clap = { version = "4", features = ["derive"] }
