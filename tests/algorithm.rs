@@ -24,7 +24,7 @@ fn get_rustowl_output(function_path: &str, variable: &str) -> String {
     .args([
         "show",
         "--path",
-        format!(
+        &format!(
             "algo-tests{}src{}vec.rs",
             std::path::MAIN_SEPARATOR,
             std::path::MAIN_SEPARATOR
