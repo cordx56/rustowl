@@ -115,7 +115,7 @@ jobs:
         shell: pwsh
         if: startsWith(matrix.os, 'windows')
         run: |
-    echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
