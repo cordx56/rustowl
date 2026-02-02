@@ -105,13 +105,21 @@ jobs:
       - name: Install nextest
         uses: taiki-e/install-action@cargo-nextest
 
+      # Using lto causes build failure in Windows
+      - name: Set build profile
+        run: |
+          if [[ "${{ matrix.os }}" == windows* ]]; then
+            echo "build_profile=windows-release" >> $GITHUB_ENV
+          else
+            echo "build_profile=release" >> $GITHUB_ENV
+          fi
+
       - name: Build release
-        run: ./scripts/build/toolchain cargo build --release
+        run: ./scripts/build/toolchain cargo build --release --profile=${{ env.build_profile }}
 
       - name: Run tests
-        # MIR is still unstable, so this test can fail in other version of Rust.
-        # Update thi manually.
-        if: ${{ matrix.toolchain == '1.93.0' }}
+        # MIR is still unstable, so this test can fail in other versions of Rust.
+        if: matrix.toolchain == needs.define-matrix.outputs.latest
         run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
 
       - name: Install binary
