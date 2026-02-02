@@ -109,6 +109,9 @@ jobs:
         run: ./scripts/build/toolchain cargo build --release
 
       - name: Run tests
+        # MIR is still unstable, so this test can fail in other version of Rust.
+        # Update thi manually.
+        if: ${{ matrix.toolchain == '1.93.0' }}
         run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
 
       - name: Install binary
