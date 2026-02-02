@@ -115,7 +115,7 @@ jobs:
           fi
 
       - name: Build release
-        run: ./scripts/build/toolchain cargo build --release --profile=${{ env.build_profile }}
+        run: ./scripts/build/toolchain cargo build --profile=${{ env.build_profile }}
 
       - name: Run tests
         # MIR is still unstable, so this test can fail in other versions of Rust.
