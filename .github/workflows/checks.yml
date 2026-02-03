@@ -114,7 +114,7 @@ jobs:
         run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
 
       - name: Install binary
-        run: ./scripts/build/toolchain cargo install --path . --profile=${{ env.build_profile }}
+        run: ./scripts/build/toolchain cargo install --path .
 
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
