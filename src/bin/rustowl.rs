@@ -11,7 +11,7 @@ use tower_lsp::{LspService, Server};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
-#[cfg(all(any(target_os = "linux", targey_os = "macos"), not(miri)))]
+#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
 use tikv_jemalloc_sys as _;
 
 fn set_log_level(default: log::LevelFilter) {
