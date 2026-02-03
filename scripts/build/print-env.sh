@@ -12,7 +12,7 @@ fi
 host_tuple() {
     if [ -z "$TOOLCHAIN_OS" ]; then
         # Get OS
-        case "$(uname -s)" in
+       uname -s)" in
             Linux)
                 TOOLCHAIN_OS="unknown-linux-gnu"
                 ;;
@@ -63,16 +63,19 @@ print_env() {
     echo "PATH=$sysroot/bin:$PATH"
     echo "RUSTC_BOOTSTRAP=rustowlc"
 
-    # C/C++ lto with Windows lto fix
-    # TODO: add C/C++ lto to targets other then windows
+    # LTO for C/C++
+    echo "CFLAGS=-flto=fat"
+    echo "CXXFLAGS=-flto=fat"
+
+    # Fix for Windows LTO + LTO for C/C++
     case "$(host_tuple)" in
         *-pc-windows-msvc)
             echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link.exe"
             echo "RUSTFLAGS=-Clinker=lld-link"
             echo "CC=clang-cl"
             echo "CXX=clang-cl"
-            echo "CFLAGS=/clang:-flto=full /clang:-fuse-ld=lld-link"
-            echo "CXXFLAGS=/clang:-flto=full /clang:-fuse-ld=lld-link"
+            echo "CFLAGS=/clang:-flto=fat /clang:-fuse-ld=lld-link"
+            echo "CXXFLAGS=/clang:-flto=fat /clang:-fuse-ld=lld-link"
             echo "AR=llvm-lib"
             ;;
     esac
