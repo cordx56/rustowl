@@ -71,6 +71,7 @@ print_env() {
     case "$(host_tuple)" in
         *-pc-windows-msvc)
             echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link.exe"
+            echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=lld-link.exe"
             echo "RUSTFLAGS=-Clinker=lld-link"
             echo "CC=clang-cl"
             echo "CXX=clang-cl"
