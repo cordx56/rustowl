@@ -73,9 +73,8 @@ clap_complete_nushell = "4"
 clap_mangen = "0.2"
 regex = "1"
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemalloc-sys = "0.6"
-tikv-jemallocator = "0.6"
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+tikv-jemalloc-sys = { version = "0.6", features = ["override_allocator_on_supported_platforms"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 zip = "7.2.0"
