@@ -64,8 +64,8 @@ print_env() {
     echo "RUSTC_BOOTSTRAP=rustowlc"
 
     # LTO for C/C++
-    echo "CFLAGS=-flto=full"
-    echo "CXXFLAGS=-flto=full"
+    echo "CFLAGS=-flto"
+    echo "CXXFLAGS=-flto"
 
     # Fix for Windows LTO + LTO for C/C++
     case "$(host_tuple)" in
@@ -75,8 +75,8 @@ print_env() {
             echo "RUSTFLAGS=-Clinker=lld-link"
             echo "CC=clang-cl"
             echo "CXX=clang-cl"
-            echo "CFLAGS=/clang:-flto=full /clang:-fuse-ld=lld-link"
-            echo "CXXFLAGS=/clang:-flto=full /clang:-fuse-ld=lld-link"
+            echo "CFLAGS=/clang:-flto /clang:-fuse-ld=lld-link"
+            echo "CXXFLAGS=/clang:-flto /clang:-fuse-ld=lld-link"
             echo "AR=llvm-lib"
             ;;
     esac
