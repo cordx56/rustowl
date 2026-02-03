@@ -38,15 +38,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # Using fat LTO causes failure to link on Windows
-      - name: Set build profile
-        run: |
-          if [[ "${{ matrix.os }}" == windows* ]]; then
-            echo "build_profile=windows-release" >> $GITHUB_ENV
-          else
-            echo "build_profile=release" >> $GITHUB_ENV
-          fi
-
       # uname on Windows on ARM returns "x86_64"
       - name: Set ARCH flag for Windows on ARM
         if: matrix.os == 'windows-11-arm'
@@ -73,14 +64,14 @@ jobs:
         run: |
           if [[ "${{ env.is_linux }}" == "true" ]]; then
             ./scripts/build/toolchain cargo install --locked cargo-zigbuild
-            ./scripts/build/toolchain cargo zigbuild --target ${{ env.host_tuple }}.2.17 --profile=${{ env.build_profile }}
+            ./scripts/build/toolchain cargo zigbuild --target ${{ env.host_tuple }}.2.17 --release
           else
-            ./scripts/build/toolchain cargo build --target ${{ env.host_tuple }} --profile=${{ env.build_profile }}
+            ./scripts/build/toolchain cargo build --target ${{ env.host_tuple }} --release
           fi
 
       - name: Check the functionality
         run: |
-          ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
+          ./target/${{ env.host_tuple }}/release/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
 
       - name: Set archive name
         run: |
@@ -94,8 +85,8 @@ jobs:
         run: |
           rm -rf rustowl && mkdir -p rustowl/sysroot/${{ env.toolchain }}/bin
 
-          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./rustowl/
-          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/sysroot/${{ env.toolchain }}/bin
+          cp target/${{ env.host_tuple }}/release/rustowl${{ env.exec_ext }} ./rustowl/
+          cp target/${{ env.host_tuple }}/release/rustowlc${{ env.exec_ext }} ./rustowl/sysroot/${{ env.toolchain }}/bin
 
           cp README.md ./rustowl
           cp LICENSE ./rustowl
