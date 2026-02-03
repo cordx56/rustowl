@@ -63,9 +63,7 @@ print_env() {
     echo "PATH=$sysroot/bin:$PATH"
     echo "RUSTC_BOOTSTRAP=rustowlc"
 
-    # LTO for C/C++
-    echo "CFLAGS=-flto"
-    echo "CXXFLAGS=-flto"
+    # TODO(MuntasirSZN): enable fat lto `-flto` option via CFLAGS and CXXFLAGS (fails now with symbols not found) This flag in Windows becomes /clang:-flto
 
     # Fix for Windows LTO + LTO for C/C++
     case "$(host_tuple)" in
@@ -75,8 +73,8 @@ print_env() {
             echo "RUSTFLAGS=-Clinker=lld-link"
             echo "CC=clang-cl"
             echo "CXX=clang-cl"
-            echo "CFLAGS=/clang:-flto /clang:-fuse-ld=lld-link"
-            echo "CXXFLAGS=/clang:-flto /clang:-fuse-ld=lld-link"
+            echo "CFLAGS=/clang:-fuse-ld=lld-link"
+            echo "CXXFLAGS=/clang:-fuse-ld=lld-link"
             echo "AR=llvm-lib"
             ;;
     esac
