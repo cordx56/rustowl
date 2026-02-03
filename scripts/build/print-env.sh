@@ -12,7 +12,7 @@ fi
 host_tuple() {
     if [ -z "$TOOLCHAIN_OS" ]; then
         # Get OS
-        case uname -s)" in
+        case "$(uname -s)" in
             Linux)
                 TOOLCHAIN_OS="unknown-linux-gnu"
                 ;;
