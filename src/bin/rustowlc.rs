@@ -26,7 +26,7 @@ pub mod core;
 
 use std::process::exit;
 
-#[cfg(any(target_os ="linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use tikv_jemalloc_sys as _;
 
 fn main() {
