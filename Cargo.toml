@@ -82,7 +82,7 @@ zip = "7.2.0"
 [profile.release]
 opt-level = 3
 strip = "debuginfo"
-lto = "fat"
+lto = "thin"
 codegen-units = 1
 
 [profile.release.package."*"]
