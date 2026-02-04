@@ -11,6 +11,9 @@ use tower_lsp::{LspService, Server};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
+// Cited from rustc 
+// https://github.com/rust-lang/rust/pull/148925 
+// MIT License
 #[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
 use tikv_jemalloc_sys as _;
 
