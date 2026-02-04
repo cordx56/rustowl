@@ -26,6 +26,9 @@ pub mod core;
 
 use std::process::exit;
 
+// Cited from rustc
+// https://github.com/rust-lang/rust/pull/148925
+// MIT License
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use tikv_jemalloc_sys as _;
 
