@@ -21,7 +21,7 @@ jobs:
       - id: toolchains
         run: |
           TOOLCHAINS='["1.89.0", "1.90.0", "1.91.1", "1.92.0", "1.93.0"]'
-          echo "toolchains=$TOOLCHAINS" >> $GITHUB_OUTPUT
+          echo "toolchains=$TOOLCHAINS" >> "$GITHUB_OUTPUT"
           echo "latest=$(jq -r '.[-1]' <<< "$TOOLCHAINS")" >> "$GITHUB_OUTPUT"
 
   lint:
@@ -46,7 +46,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ needs.define-matrix.outputs.latest }}
-          components: clippy,llvm-tools,rust-src,rustc-dev
+          components: clippy, llvm-tools, rust-src, rustc-dev
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
@@ -78,9 +78,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs:
       - define-matrix
+
     defaults:
-       run:
-         shell: bash
+      run:
+        shell: bash
+
     strategy:
       matrix:
         toolchain: ${{ fromJSON(needs.define-matrix.outputs.toolchains) }}
@@ -91,11 +93,33 @@ jobs:
           - macos-latest
           - ubuntu-latest
           - ubuntu-24.04-arm
+
     env:
       TOOLCHAIN_CHANNEL: ${{ matrix.toolchain }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Setup MSYS2 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          msystem: ${{ runner.arch == 'ARM64' && 'CLANGARM64' || 'UCRT64' }}
+          install: >
+            clang
+            lld
+            nasm
+
+      - name: Expose MSYS2 toolchain to PATH
+        if: runner.os == 'Windows'
+        run: |
+          if [[ "$RUNNER_ARCH" == "ARM64" ]]; then
+            echo "C:/msys64/clangarm64/bin" >> "$GITHUB_PATH"
+          else
+            echo "C:/msys64/ucrt64/bin" >> "$GITHUB_PATH"
+          fi
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
