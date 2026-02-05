@@ -35,9 +35,6 @@ jobs:
           components: miri,rust-src,llvm-tools-preview,rustc-dev
           cache: false
 
-      - name: Install LLVM and Clang
-        uses: ./.github/actions/setup-rust-llvm
-
       - name: Install system dependencies (Linux)
         if: matrix.runner_os == 'Linux'
         run: |
