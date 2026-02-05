@@ -101,14 +101,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Get rust LLVM version
-        id: llvm-ver
-        run: echo "llvm_ver=$(rustc -vV | grep 'LLVM version' | cut -d ' ' -f 3)" >> "$GITHUB_ENV"
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
-          version: ${{ env.llvm_ver }}
+          toolchain: ${{ matrix.toolchain }}
+          components: rust-src,rustc-dev,llvm-tools
+      - name: Install LLVM and Clang
+        uses: ./.github/actions/setup-rust-llvm
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

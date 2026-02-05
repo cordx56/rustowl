@@ -1,0 +1,86 @@
+name: setup-rust-llvm
+description: >
+  Install LLVM/Clang matching Rust's LLVM version with controlled fallbacks.
+  Designed for cross-language LTO correctness.
+
+outputs:
+  llvm-version:
+    description: LLVM version selected
+    value: ${{ steps.export.outputs.llvm_version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect Rust LLVM version
+      id: detect
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        LLVM_FULL=$(rustc -vV | sed -n 's/^LLVM version: //p')
+        LLVM_MAJOR=${LLVM_FULL%%.*}
+        LLVM_MINOR=$(echo "$LLVM_FULL" | cut -d. -f2)
+
+        echo "LLVM_FULL=$LLVM_FULL" >> "$GITHUB_ENV"
+        echo "LLVM_MAJOR=$LLVM_MAJOR" >> "$GITHUB_ENV"
+        echo "LLVM_MINOR=$LLVM_MINOR" >> "$GITHUB_ENV"
+
+    - name: Install exact LLVM match
+      id: llvm_exact
+      uses: KyleMayes/install-llvm-action@v2
+      with:
+        version: ${{ env.LLVM_FULL }}
+        env: true
+      continue-on-error: true
+
+    - name: Resolve LLVM minor fallback
+      id: resolve
+      if: steps.llvm_exact.outcome == 'failure'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        TAGS=$(curl -fsSL https://api.github.com/repos/llvm/llvm-project/tags \
+          | jq -r '.[].name' \
+          | grep "^llvmorg-${LLVM_MAJOR}\.${LLVM_MINOR}\.")
+
+        FALLBACK=$(echo "$TAGS" | sed 's/^llvmorg-//' | sort -V | tail -n1)
+
+        if [[ -z "$FALLBACK" ]]; then
+          echo "::error::No LLVM fallback found for ${LLVM_MAJOR}.${LLVM_MINOR}"
+          exit 1
+        fi
+
+        echo "LLVM_FALLBACK=$FALLBACK" >> "$GITHUB_ENV"
+
+    - name: Install LLVM fallback
+      if: steps.llvm_exact.outcome == 'failure'
+      uses: KyleMayes/install-llvm-action@v2
+      with:
+        version: ${{ env.LLVM_FALLBACK }}
+
+    - name: Verify LLVM compatibility
+      id: verify
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        RUST_LLVM=$(rustc -vV | sed -n 's/^LLVM version: //p')
+        CLANG_LLVM=$(clang --version | sed -n 's/.*LLVM version \([0-9.]*\).*/\1/p')
+
+        echo "Rust LLVM  : $RUST_LLVM"
+        echo "Clang LLVM : $CLANG_LLVM"
+
+        if [[ "$RUST_LLVM" != "$CLANG_LLVM" ]]; then
+          echo "::warning::LLVM mismatch — cross-language LTO might not work!"
+          echo "LLVM_SELECTED=$CLANG_LLVM" >> "$GITHUB_ENV"
+        else
+          echo "LLVM_SELECTED=$RUST_LLVM" >> "$GITHUB_ENV"
+        fi
+
+    - name: Export outputs
+      id: export
+      shell: bash
+      run: |
+        echo "llvm_version=${LLVM_SELECTED}" >> "$GITHUB_OUTPUT"
+
