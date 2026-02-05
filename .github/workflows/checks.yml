@@ -44,9 +44,13 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        id: toolchain
         with:
           toolchain: ${{ needs.define-matrix.outputs.latest }}
           components: clippy,llvm-tools,rust-src,rustc-dev
+
+      - name: Force toolchain
+        run: echo "RUSTUP_TOOLCHAIN=${{ steps.toolchain.outputs.name }}" >> "$GITHUB_ENV"
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
@@ -118,15 +122,15 @@ jobs:
         uses: taiki-e/install-action@cargo-nextest
 
       - name: Build release
-        run: ./scripts/build/toolchain cargo build --release
+        run: cargo build --release
 
       - name: Run tests
         # MIR is still unstable, so this test can fail in other versions of Rust.
         if: matrix.toolchain == needs.define-matrix.outputs.latest
-        run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
+        run: cargo nextest run --no-fail-fast
 
       - name: Install binary
-        run: ./scripts/build/toolchain cargo install --path .
+        run: cargo install --path .
 
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package

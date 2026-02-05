@@ -1,6 +1,6 @@
 name: setup-rust-llvm
 description: >
-  Install LLVM/Clang matching Rust's LLVM version with controlled fallbacks.
+  Install LLVM/Clang matching Rust's LLVM version with forward-patch fallback.
   Designed for cross-language LTO correctness.
 
 outputs:
@@ -11,6 +11,9 @@ outputs:
 runs:
   using: composite
   steps:
+    # ------------------------------------------------------------
+    # Detect Rust LLVM version
+    # ------------------------------------------------------------
     - name: Detect Rust LLVM version
       id: detect
       shell: bash
@@ -18,49 +21,84 @@ runs:
         set -euo pipefail
 
         LLVM_FULL=$(rustc -vV | sed -n 's/^LLVM version: //p')
-        LLVM_MAJOR=${LLVM_FULL%%.*}
+        LLVM_MAJOR=$(echo "$LLVM_FULL" | cut -d. -f1)
         LLVM_MINOR=$(echo "$LLVM_FULL" | cut -d. -f2)
+        LLVM_PATCH=$(echo "$LLVM_FULL" | cut -d. -f3)
 
-        echo "LLVM_FULL=$LLVM_FULL" >> "$GITHUB_ENV"
+        echo "LLVM_FULL=$LLVM_FULL"   >> "$GITHUB_ENV"
         echo "LLVM_MAJOR=$LLVM_MAJOR" >> "$GITHUB_ENV"
         echo "LLVM_MINOR=$LLVM_MINOR" >> "$GITHUB_ENV"
+        echo "LLVM_PATCH=$LLVM_PATCH" >> "$GITHUB_ENV"
 
-    - name: Install exact LLVM match
-      id: llvm_exact
-      uses: KyleMayes/install-llvm-action@v2
-      with:
-        version: ${{ env.LLVM_FULL }}
-        env: true
-      continue-on-error: true
-
-    - name: Resolve LLVM minor fallback
-      id: resolve
-      if: steps.llvm_exact.outcome == 'failure'
+    # ------------------------------------------------------------
+    # Fetch all available patches for this major.minor
+    # ------------------------------------------------------------
+    - name: Fetch LLVM patch candidates
+      id: patches
       shell: bash
       run: |
         set -euo pipefail
 
-        TAGS=$(curl -fsSL https://api.github.com/repos/llvm/llvm-project/tags \
+        curl -fsSL https://api.github.com/repos/llvm/llvm-project/tags \
           | jq -r '.[].name' \
-          | grep "^llvmorg-${LLVM_MAJOR}\.${LLVM_MINOR}\.")
+          | sed 's/^llvmorg-//' \
+          | grep "^${LLVM_MAJOR}\.${LLVM_MINOR}\." \
+          | sort -V \
+          > llvm_patches.txt
 
-        FALLBACK=$(echo "$TAGS" | sed 's/^llvmorg-//' | sort -V | tail -n1)
-
-        if [[ -z "$FALLBACK" ]]; then
-          echo "::error::No LLVM fallback found for ${LLVM_MAJOR}.${LLVM_MINOR}"
+        if [[ ! -s llvm_patches.txt ]]; then
+          echo "::error::No LLVM releases found for ${LLVM_MAJOR}.${LLVM_MINOR}"
           exit 1
         fi
 
-        echo "LLVM_FALLBACK=$FALLBACK" >> "$GITHUB_ENV"
+    # ------------------------------------------------------------
+    # Try patches >= Rust patch, in ascending order
+    # ------------------------------------------------------------
+    - name: Probe LLVM versions
+      id: probe
+      shell: bash
+      run: |
+        set -euo pipefail
 
-    - name: Install LLVM fallback
-      if: steps.llvm_exact.outcome == 'failure'
+        SELECTED=""
+
+        while read -r VER; do
+          PATCH=$(echo "$VER" | cut -d. -f3)
+
+          if (( PATCH < LLVM_PATCH )); then
+            continue
+          fi
+
+          echo "::group::Trying LLVM $VER"
+          if llvm_ver="$VER" \
+             && echo "LLVM_TRY=$VER" >> "$GITHUB_ENV"; then
+            echo "::endgroup::"
+            SELECTED="$VER"
+            break
+          fi
+          echo "::endgroup::"
+        done < llvm_patches.txt
+
+        if [[ -z "$SELECTED" ]]; then
+          echo "::error::No usable LLVM binary found for ${LLVM_MAJOR}.${LLVM_MINOR}.x"
+          exit 1
+        fi
+
+        echo "LLVM_SELECTED=$SELECTED" >> "$GITHUB_ENV"
+
+    # ------------------------------------------------------------
+    # Install selected LLVM
+    # ------------------------------------------------------------
+    - name: Install LLVM
       uses: KyleMayes/install-llvm-action@v2
       with:
-        version: ${{ env.LLVM_FALLBACK }}
+        version: ${{ env.LLVM_SELECTED }}
+        env: true
 
+    # ------------------------------------------------------------
+    # Verify LLVM compatibility
+    # ------------------------------------------------------------
     - name: Verify LLVM compatibility
-      id: verify
       shell: bash
       run: |
         set -euo pipefail
@@ -71,13 +109,13 @@ runs:
         echo "Rust LLVM  : $RUST_LLVM"
         echo "Clang LLVM : $CLANG_LLVM"
 
-        if [[ "$RUST_LLVM" != "$CLANG_LLVM" ]]; then
-          echo "::warning::LLVM mismatch — cross-language LTO might not work!"
-          echo "LLVM_SELECTED=$CLANG_LLVM" >> "$GITHUB_ENV"
-        else
-          echo "LLVM_SELECTED=$RUST_LLVM" >> "$GITHUB_ENV"
+        if [[ "$CLANG_LLVM" != "$LLVM_SELECTED" ]]; then
+          echo "::warning::Installed LLVM does not match selected version"
         fi
 
+    # ------------------------------------------------------------
+    # Export outputs
+    # ------------------------------------------------------------
     - name: Export outputs
       id: export
       shell: bash
