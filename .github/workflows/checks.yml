@@ -46,7 +46,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ needs.define-matrix.outputs.latest }}
-          components: clippy, llvm-tools, rust-src, rustc-dev
+          components: clippy,llvm-tools,rust-src,rustc-dev
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
@@ -101,25 +101,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup MSYS2 (Windows)
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          update: true
-          msystem: ${{ runner.arch == 'ARM64' && 'CLANGARM64' || 'UCRT64' }}
-          install: >
-            clang
-            lld
-            nasm
+      - name: Get rust LLVM version
+        id: llvm-ver
+        run: echo "llvm_ver=$(rustc -vV | grep 'LLVM version' | cut -d ' ' -f 3)" >> "$GITHUB_ENV"
 
-      - name: Expose MSYS2 toolchain to PATH
-        if: runner.os == 'Windows'
-        run: |
-          if [[ "$RUNNER_ARCH" == "ARM64" ]]; then
-            echo "C:/msys64/clangarm64/bin" >> "$GITHUB_PATH"
-          else
-            echo "C:/msys64/ucrt64/bin" >> "$GITHUB_PATH"
-          fi
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: ${{ env.llvm_ver }}
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

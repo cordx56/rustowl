@@ -36,6 +36,15 @@ jobs:
           # Automatically reads from rust-toolchain.toml
           cache: false
 
+      - name: Get rust LLVM version
+        id: llvm-ver
+        run: echo "llvm_ver=$(rustc -vV | grep 'LLVM version' | cut -d ' ' -f 3)" >> "$GITHUB_ENV"
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: ${{ env.llvm_ver }}
+
       - name: Install system dependencies (Linux)
         if: matrix.runner_os == 'Linux'
         run: |
