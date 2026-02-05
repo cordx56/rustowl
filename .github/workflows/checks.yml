@@ -20,6 +20,7 @@ jobs:
     steps:
       - id: toolchains
         run: |
+          # Last 5 stable versions only
           TOOLCHAINS='["1.89.0", "1.90.0", "1.91.1", "1.92.0", "1.93.0"]'
           echo "toolchains=$TOOLCHAINS" >> "$GITHUB_OUTPUT"
           echo "latest=$(jq -r '.[-1]' <<< "$TOOLCHAINS")" >> "$GITHUB_OUTPUT"
@@ -44,7 +45,6 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        id: toolchain
         with:
           toolchain: ${{ needs.define-matrix.outputs.latest }}
           components: clippy,llvm-tools,rust-src,rustc-dev
