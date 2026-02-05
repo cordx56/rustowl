@@ -49,9 +49,6 @@ jobs:
           toolchain: ${{ needs.define-matrix.outputs.latest }}
           components: clippy,llvm-tools,rust-src,rustc-dev
 
-      - name: Force toolchain
-        run: echo "RUSTUP_TOOLCHAIN=${{ steps.toolchain.outputs.name }}" >> "$GITHUB_ENV"
-
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -110,6 +107,10 @@ jobs:
         with:
           toolchain: ${{ matrix.toolchain }}
           components: rust-src,rustc-dev,llvm-tools
+
+      - name: Force toolchain
+        run: echo "RUSTUP_TOOLCHAIN=${{ steps.toolchain.outputs.name }}" >> "$GITHUB_ENV"
+
       - name: Install LLVM and Clang
         uses: ./.github/actions/setup-rust-llvm
 
