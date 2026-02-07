@@ -110,6 +110,11 @@ jobs:
       - name: Install nextest
         uses: taiki-e/install-action@cargo-nextest
 
+      # uname on Windows on ARM returns "x86_64"
+      - name: Set ARCH flag for Windows on ARM
+        if: matrix.os == 'windows-11-arm'
+        run: echo "TOOLCHAIN_ARCH=aarch64" >> $GITHUB_ENV
+
       - name: Build release
         run: ./scripts/build/toolchain cargo build --release
 
