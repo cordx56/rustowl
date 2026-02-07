@@ -72,7 +72,7 @@ print_env() {
             echo "CC=clang-cl"
             echo "CXX=clang-cl"
             echo "CFLAGS=/clang:-g0 /clang:-flto /clang:-fuse-ld=lld-link"
-            echo "CXXFLAGS=/clang:-O3 /clang:-g0 /clang:-flto /clang:-fuse-ld=lld-link"
+            echo "CXXFLAGS=/clang:-g0 /clang:-flto /clang:-fuse-ld=lld-link"
             echo "AR=llvm-lib"
             echo "LDFLAGS=/DEBUG:NONE"
             ;;
