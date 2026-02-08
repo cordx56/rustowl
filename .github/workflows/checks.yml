@@ -20,8 +20,9 @@ jobs:
     steps:
       - id: toolchains
         run: |
+          # Last 5 stable versions only
           TOOLCHAINS='["1.89.0", "1.90.0", "1.91.1", "1.92.0", "1.93.0"]'
-          echo "toolchains=$TOOLCHAINS" >> $GITHUB_OUTPUT
+          echo "toolchains=$TOOLCHAINS" >> "$GITHUB_OUTPUT"
           echo "latest=$(jq -r '.[-1]' <<< "$TOOLCHAINS")" >> "$GITHUB_OUTPUT"
 
   lint:
@@ -75,28 +76,64 @@ jobs:
 
   test:
     name: Build & Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     needs:
       - define-matrix
+
+    defaults:
+      run:
+        shell: bash
+
     strategy:
       matrix:
         toolchain: ${{ fromJSON(needs.define-matrix.outputs.toolchains) }}
+        os:
+          - windows-latest
+          - windows-11-arm
+          - macos-15-intel
+          - macos-latest
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+
     env:
       TOOLCHAIN_CHANNEL: ${{ matrix.toolchain }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      # Using fat LTO causes failure to link on Windows
+      - name: Set build profile
+        run: |
+          if [[ "${{ matrix.os }}" == windows* ]]; then
+            echo "build_profile=windows-release" >> $GITHUB_ENV
+          else
+            echo "build_profile=release" >> $GITHUB_ENV
+          fi
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      - name: Install nextest
+        uses: taiki-e/install-action@cargo-nextest
+
+      # uname on Windows on ARM returns "x86_64"
+      - name: Set ARCH flag for Windows on ARM
+        if: matrix.os == 'windows-11-arm'
+        run: echo "TOOLCHAIN_ARCH=aarch64" >> $GITHUB_ENV
+
       - name: Build release
-        run: ./scripts/build/toolchain cargo build --release
+        run: ./scripts/build/toolchain cargo build --profile=${{ env.build_profile }}
+
+      - name: Run tests
+        # MIR is still unstable, so this test can fail in other versions of Rust.
+        if: matrix.toolchain == needs.define-matrix.outputs.latest
+        run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
 
       - name: Install binary
-        run: ./scripts/build/toolchain cargo install --path .
+        run: ./scripts/build/toolchain cargo install --path . --profile=${{ env.build_profile }}
 
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
