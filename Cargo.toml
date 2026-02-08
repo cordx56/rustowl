@@ -96,3 +96,7 @@ debug = true
 strip = "none"
 debug-assertions = true
 overflow-checks = true
+
+[profile.windows-release] 
+inherits = "release" 
+lto = "off"
