@@ -102,6 +102,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # Using fat LTO causes failure to link on Windows
+      - name: Set build profile
+        run: |
+          if [[ "${{ matrix.os }}" == windows* ]]; then
+            echo "build_profile=windows-release" >> $GITHUB_ENV
+          else
+            echo "build_profile=release" >> $GITHUB_ENV
+          fi
+
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -116,15 +125,15 @@ jobs:
         run: echo "TOOLCHAIN_ARCH=aarch64" >> $GITHUB_ENV
 
       - name: Build release
-        run: ./scripts/build/toolchain cargo build --release
+        run: ./scripts/build/toolchain cargo build --profile=${{ env.build_profile }}
 
       - name: Run tests
         # MIR is still unstable, so this test can fail in other versions of Rust.
         if: matrix.toolchain == needs.define-matrix.outputs.latest
-        run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
+        run: ./scripts/build/toolchain cargo nextest run --no-fail-fast --profile=${{ env.build_profile }}
 
       - name: Install binary
-        run: ./scripts/build/toolchain cargo install --path .
+        run: ./scripts/build/toolchain cargo install --path . --profile=${{ env.build_profile }}
 
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
