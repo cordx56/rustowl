@@ -38,6 +38,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # Using fat LTO causes failure to link on Windows 
+       - name: Set build profile
+         run: |
+           if [[ "${{ matrix.os }}" == windows* ]]; then
+             echo "build_profile=windows-release" >> $GITHUB_ENV
+           else
+             echo "build_profile=release" >> $GITHUB_ENV
+           fi
+
       # uname on Windows on ARM returns "x86_64"
       - name: Set ARCH flag for Windows on ARM
         if: matrix.os == 'windows-11-arm'
