@@ -38,7 +38,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # Using fat LTO causes failure to link on Windows 
+      # Using fat LTO causes failure to link on Windows
       - name: Set build profile
         run: |
           if [[ "${{ matrix.os }}" == windows* ]]; then
