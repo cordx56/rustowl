@@ -130,7 +130,7 @@ jobs:
       - name: Run tests
         # MIR is still unstable, so this test can fail in other versions of Rust.
         if: matrix.toolchain == needs.define-matrix.outputs.latest
-        run: ./scripts/build/toolchain cargo nextest run --no-fail-fast --profile=${{ env.build_profile }}
+        run: ./scripts/build/toolchain cargo nextest run --no-fail-fast
 
       - name: Install binary
         run: ./scripts/build/toolchain cargo install --path . --profile=${{ env.build_profile }}
