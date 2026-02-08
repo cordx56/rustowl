@@ -19,7 +19,11 @@ fn ensure_rustowl_built() {
 fn get_rustowl_output(function_path: &str, variable: &str) -> String {
     ensure_rustowl_built();
 
-    let exe_name = if cfg!(windows) { "rustowl.exe" } else { "rustowl" };
+    let exe_name = if cfg!(windows) {
+        "rustowl.exe"
+    } else {
+        "rustowl"
+    };
     let profile_dir = if cfg!(windows) {
         "windows_release"
     } else {
