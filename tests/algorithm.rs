@@ -5,10 +5,13 @@ static BUILD_ONCE: Once = Once::new();
 
 fn ensure_rustowl_built() {
     BUILD_ONCE.call_once(|| {
-        let status = Command::new("cargo")
-            .args(["build", "--release"])
-            .status()
-            .expect("Failed to build rustowl");
+        let mut cmd = Command::new("cargo");
+        if cfg!(windows) {
+            cmd.args(["build", "--profile", "windows_release"]);
+        } else {
+            cmd.args(["build", "--release"]);
+        }
+        let status = cmd.status().expect("Failed to build rustowl");
         assert!(status.success(), "Failed to build rustowl");
     });
 }
@@ -16,10 +19,19 @@ fn ensure_rustowl_built() {
 fn get_rustowl_output(function_path: &str, variable: &str) -> String {
     ensure_rustowl_built();
 
+    let exe_name = if cfg!(windows) { "rustowl.exe" } else { "rustowl" };
+    let profile_dir = if cfg!(windows) {
+        "windows_release"
+    } else {
+        "release"
+    };
+
     let output = Command::new(format!(
-        "target{}release{}rustowl",
+        "target{}{}{}{}",
         std::path::MAIN_SEPARATOR,
-        std::path::MAIN_SEPARATOR
+        profile_dir,
+        std::path::MAIN_SEPARATOR,
+        exe_name
     ))
     .args([
         "show",
