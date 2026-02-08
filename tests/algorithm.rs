@@ -7,7 +7,7 @@ fn ensure_rustowl_built() {
     BUILD_ONCE.call_once(|| {
         let mut cmd = Command::new("cargo");
         if cfg!(windows) {
-            cmd.args(["build", "--profile", "windows_release"]);
+            cmd.args(["build", "--profile", "windows-release"]);
         } else {
             cmd.args(["build", "--release"]);
         }
@@ -25,7 +25,7 @@ fn get_rustowl_output(function_path: &str, variable: &str) -> String {
         "rustowl"
     };
     let profile_dir = if cfg!(windows) {
-        "windows_release"
+        "windows-release"
     } else {
         "release"
     };
