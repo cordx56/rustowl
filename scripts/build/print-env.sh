@@ -62,21 +62,6 @@ print_env() {
     echo "SYSROOT=$sysroot"
     echo "PATH=$sysroot/bin:$PATH"
     echo "RUSTC_BOOTSTRAP=rustowlc"
-
-
-    case "$(host_tuple)" in
-        *-pc-windows-msvc)
-            echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link.exe"
-            echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=lld-link.exe"
-            echo "RUSTFLAGS=-Clinker=lld-link"
-            echo "CC=clang-cl"
-            echo "CXX=clang-cl"
-            echo "CFLAGS=/clang:-g0 /clang:-flto /clang:-fuse-ld=lld-link"
-            echo "CXXFLAGS=/clang:-g0 /clang:-flto /clang:-fuse-ld=lld-link"
-            echo "AR=llvm-lib"
-            echo "LDFLAGS=/DEBUG:NONE"
-            ;;
-    esac
 }
 
 print_env
