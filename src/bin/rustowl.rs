@@ -11,13 +11,11 @@ use tower_lsp::{LspService, Server};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
-use tikv_jemallocator::Jemalloc;
-
-// Use jemalloc by default, but fall back to system allocator for Miri
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+// Cited from rustc
+// https://github.com/rust-lang/rust/pull/148925
+// MIT License
+#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
+use tikv_jemalloc_sys as _;
 
 fn set_log_level(default: log::LevelFilter) {
     log::set_max_level(
