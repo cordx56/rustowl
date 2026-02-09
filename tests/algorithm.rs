@@ -11,8 +11,15 @@ fn ensure_rustowl_built() {
         } else {
             cmd.args(["build", "--release"]);
         }
-        let status = cmd.status().expect("Failed to build rustowl");
-        assert!(status.success(), "Failed to build rustowl");
+        let output = cmd
+            .output()
+            .unwrap_or_else(|e| panic!("Failed to execute cargo build: {e}"));
+        assert!(
+            output.status.success(),
+            "Failed to build rustowl.\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     });
 }
 
@@ -30,28 +37,35 @@ fn get_rustowl_output(function_path: &str, variable: &str) -> String {
         "release"
     };
 
-    let output = Command::new(format!(
+    let rustowl_path = format!(
         "target{}{}{}{}",
         std::path::MAIN_SEPARATOR,
         profile_dir,
         std::path::MAIN_SEPARATOR,
         exe_name
-    ))
-    .args([
-        "show",
-        "--path",
-        &format!(
-            "algo-tests{}src{}vec.rs",
-            std::path::MAIN_SEPARATOR,
-            std::path::MAIN_SEPARATOR
-        ),
-        function_path,
-        variable,
-    ])
-    .output()
-    .expect("Failed to run rustowl");
+    );
 
-    assert!(output.status.success(), "rustowl command failed");
+    let output = Command::new(&rustowl_path)
+        .args([
+            "show",
+            "--path",
+            &format!(
+                "algo-tests{}src{}vec.rs",
+                std::path::MAIN_SEPARATOR,
+                std::path::MAIN_SEPARATOR
+            ),
+            function_path,
+            variable,
+        ])
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to execute {rustowl_path}: {e}"));
+
+    assert!(
+        output.status.success(),
+        "{rustowl_path} command failed.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     String::from_utf8(output.stdout).expect("Invalid UTF-8")
 }
 
