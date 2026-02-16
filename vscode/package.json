@@ -142,7 +142,7 @@
     "eslint-plugin-oxlint": "^1.46.0",
     "eslint-plugin-promise": "^7.2.1",
     "eslint-plugin-security": "^3.0.1",
-    "eslint-plugin-unicorn": "^62.0.0",
+    "eslint-plugin-unicorn": "^63.0.0",
     "glob": "^13.0.3",
     "globals": "^17.3.0",
     "mocha": "^11.7.5",
