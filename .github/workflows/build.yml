@@ -117,7 +117,7 @@ jobs:
           cp ./rustowl/rustowl${{ env.exec_ext }} ./rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
 
       - name: Upload
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: rustowl-runtime-${{ env.host_tuple }}
           path: |
@@ -151,7 +151,7 @@ jobs:
         working-directory: ./vscode
 
       - name: Upload
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: rustowl-vscode
           path: vscode/**/*.vsix
