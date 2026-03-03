@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
-makedepends=('git' 'rustup' 'zig=0.13.0')
+makedepends=('git' 'gcc' 'make' 'autoconf' 'cmake' 'curl')
 arch=('any')
 source=("git+https://github.com/cordx56/rustowl.git")
 sha256sums=('SKIP')
@@ -20,36 +20,24 @@ pkgver() {
 
 prepare() {
     cd "$srcdir/rustowl"
-    export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.89.0
-    rustup component add rust-src rustc-dev llvm-tools
-    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+    ./scripts/build/toolchain cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
     cd "$srcdir/rustowl"
-    export CARGO_TARGET_DIR=target
-    export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.89.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
-    cargo build --frozen --release --all-features --target $(rustc --print=host-tuple)
+    ./scripts/build/toolchain cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)"
 }
 
 check() {
     cd "$srcdir/rustowl"
-    export RUSTC_BOOTSTRAP=1
-    export RUSTUP_TOOLCHAIN=1.89.0
-    cargo test --frozen --all-features
+    ./scripts/build/toolchain cargo test --frozen --all-features
 }
 
 package() {
     cd "$srcdir/rustowl"
     find target -type d | grep -E 'rustowl-build-time-out$' | xargs -I % cp -r % ./
-    mkdir sysroot
-    ACTIVE_TOOLCHAIN="$(rustup show active-toolchain | awk '{ print $1 }')"
-    cp -r "$(rustc --print=sysroot)" sysroot/$ACTIVE_TOOLCHAIN
-    find sysroot -type f | grep -v -E '\.(rlib|so|dylib|dll)$' | xargs rm -rf
-    find sysroot -depth -type d -empty -exec rm -rf {} \;
+    ./target/"$(rustc --print=host-tuple)"/release/rustowl toolchain install --path sysroot/"$(rustup show active-toolchain | awk '{ print $1 }')" --skip-rustowl-toolchain
     install -d -m 755 "$pkgdir/opt/rustowl"
     cp -a sysroot/ "$pkgdir/opt/rustowl/"
     install -Dm0755 -t "$pkgdir/usr/bin/" "target/$(rustc --print=host-tuple)/release/rustowl"
