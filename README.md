@@ -187,5 +187,7 @@ Please see [Usage](docs/usage.md) for detailed usage instructions.
 
 ## Note
 
+We support the 5 latest versions of Rust (best effort).
+
 In this tool, due to the limitations of VS Code's decoration specifications, characters with descenders, such as g or parentheses, may occasionally not display underlines properly.
 Additionally, we observed that the `println!` macro sometimes produces extra output, though this does not affect usability in any significant way.
