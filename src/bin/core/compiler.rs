@@ -110,6 +110,26 @@ impl<'tcx> TyCtxt<'tcx> {
         result
     }
 
+    #[rustversion::since(1.94.0)]
+    pub fn source_info_from_span(&self, span: Span) -> SourceInfo {
+        let source_map = self.as_rustc().sess.source_map();
+        let file_name = source_map.span_to_filename(*span.as_rustc());
+        let source_file = source_map.get_source_file(&file_name).unwrap();
+        let offset = source_file.start_pos.0;
+
+        let file_name = source_map.path_mapping().to_real_filename(
+            &rustc_span::RealFileName::empty(),
+            file_name.into_local_path().unwrap(),
+        );
+        let path = file_name.into_local_path().unwrap().to_path_buf();
+        let source = std::fs::read_to_string(&path).unwrap();
+        SourceInfo {
+            offset,
+            path,
+            source,
+        }
+    }
+    #[rustversion::before(1.94.0)]
     pub fn source_info_from_span(&self, span: Span) -> SourceInfo {
         let source_map = self.as_rustc().sess.source_map();
         let file_name = source_map.span_to_filename(*span.as_rustc());
