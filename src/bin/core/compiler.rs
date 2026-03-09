@@ -118,10 +118,12 @@ impl<'tcx> TyCtxt<'tcx> {
         let offset = source_file.start_pos.0;
 
         let file_name = source_map.path_mapping().to_real_filename(
-            &rustc_span::RealFileName::empty(),
+            source_map.working_dir(),
             file_name.into_local_path().unwrap(),
         );
-        let path = file_name.into_local_path().unwrap().to_path_buf();
+        let (_work_dir, path) =
+            file_name.embeddable_name(rustc_span::RemapPathScopeComponents::DIAGNOSTICS);
+        let path = path.to_path_buf();
         let source = std::fs::read_to_string(&path).unwrap();
         SourceInfo {
             offset,
