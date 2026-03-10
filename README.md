@@ -103,7 +103,7 @@ Here we describe how to start using RustOwl.
   - You can install `cargo` using `rustup` from [this link](https://rustup.rs/).
 - Visual Studio Code (VS Code) installed
 
-We tested this guide on macOS Sequoia 15.3.2 on arm64 architecture with VS Code 1.99.3 and `cargo` 1.89.0.
+We tested this guide on macOS Sequoia 15.3.2 on arm64 architecture with VS Code 1.99.3 and `cargo` 1.90.0.
 
 ### VS Code
 
@@ -186,6 +186,8 @@ Please see [Installation](docs/installation.md) for detailed installation instru
 Please see [Usage](docs/usage.md) for detailed usage instructions.
 
 ## Note
+
+We support the 5 latest versions of Rust (best effort).
 
 In this tool, due to the limitations of VS Code's decoration specifications, characters with descenders, such as g or parentheses, may occasionally not display underlines properly.
 Additionally, we observed that the `println!` macro sometimes produces extra output, though this does not affect usability in any significant way.
