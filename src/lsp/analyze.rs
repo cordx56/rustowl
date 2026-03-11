@@ -254,6 +254,7 @@ pub struct AnalyzeEventIter {
 impl AnalyzeEventIter {
     pub async fn next_event(&mut self) -> Option<AnalyzerEvent> {
         tokio::select! {
+            biased;
             v = self.receiver.recv() => v,
             _ = self.notify.notified() => None,
         }
