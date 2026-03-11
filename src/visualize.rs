@@ -511,9 +511,8 @@ pub fn show_variable(
         let file_path = Path::new(file_path_str);
 
         // Get the file data for calculating decorations
-        let file = crate_data
-            .0
-            .get(file_path_str)
+        // Use find_file to normalize the path (handles UNC vs non-UNC paths on Windows)
+        let file = find_file(crate_data, file_path)
             .ok_or_else(|| VisualizeError::FileNotFound(file_path_str.clone()))?;
 
         // Read the source file
