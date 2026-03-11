@@ -419,7 +419,7 @@ impl<'a> CliRenderer<'a> {
 
 /// Find a file in the crate data by path.
 pub fn find_file<'a>(crate_data: &'a Crate, file_path: &Path) -> Option<&'a File> {
-    let file_path_str = file_path.to_string_lossy();
+    let file_path_str = normalize_file_path(file_path);
 
     // Try exact match first
     if let Some(file) = crate_data.0.get::<str>(&file_path_str) {
@@ -428,12 +428,30 @@ pub fn find_file<'a>(crate_data: &'a Crate, file_path: &Path) -> Option<&'a File
 
     // Try matching by file name or relative path
     for (path, file) in &crate_data.0 {
-        if path.ends_with(&*file_path_str) || file_path_str.ends_with(&**path) {
+        let normalized_path = normalize_file_path(Path::new(path));
+        if normalized_path.ends_with(&file_path_str) || file_path_str.ends_with(&normalized_path) {
             return Some(file);
         }
     }
 
     None
+}
+
+fn normalize_file_path(path: &Path) -> String {
+    let mut normalized = path.to_string_lossy().replace('\\', "/");
+
+    #[cfg(windows)]
+    {
+        if let Some(stripped) = normalized.strip_prefix("//?/") {
+            normalized = stripped.to_owned();
+        }
+        if let Some(stripped) = normalized.strip_prefix("//./") {
+            normalized = stripped.to_owned();
+        }
+        normalized.make_ascii_lowercase();
+    }
+
+    normalized
 }
 
 /// Main entry point for CLI visualization with optional file path.
@@ -547,4 +565,35 @@ fn print_legend() {
         DecoType::SHORT_OUTLIVE,
         DecoType::SHORT_SHARED,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_file;
+    use crate::models::{Crate, File};
+    use std::collections::HashMap;
+    use std::path::Path;
+
+    #[test]
+    fn find_file_matches_relative_suffix() {
+        let crate_data = Crate(HashMap::from([(
+            String::from("algo-tests/src/vec.rs"),
+            File { items: vec![] },
+        )]));
+
+        let file = find_file(&crate_data, Path::new("./algo-tests/src/vec.rs"));
+        assert!(file.is_some());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn find_file_matches_windows_verbatim_path() {
+        let crate_data = Crate(HashMap::from([(
+            String::from("C:/repo/algo-tests/src/vec.rs"),
+            File { items: vec![] },
+        )]));
+
+        let file = find_file(&crate_data, Path::new(r"\\?\C:\repo\algo-tests\src\vec.rs"));
+        assert!(file.is_some());
+    }
 }
