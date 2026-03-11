@@ -1,0 +1,6 @@
+[test-groups.serial-algorithm]
+max-threads = 1
+
+[[profile.default.overrides]]
+filter = "test(::test_f[0-9])"
+test-group = "serial-algorithm"
