@@ -438,6 +438,10 @@ pub fn find_file<'a>(crate_data: &'a Crate, file_path: &Path) -> Option<&'a File
 }
 
 fn normalize_file_path(path: &Path) -> String {
+    #[cfg(not(windows))]
+    let normalized = path.to_string_lossy().replace('\\', "/");
+
+    #[cfg(windows)]
     let mut normalized = path.to_string_lossy().replace('\\', "/");
 
     #[cfg(windows)]
