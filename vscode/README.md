@@ -1,8 +1,7 @@
 # RustOwl VSCode
 
-This is RustOwl extension for VSCode.
+This is RustOwl extension for VSCode. It will download the binaries and will do toolchain setup automatically.
 
-## Installing RustOwl
+## Configuring RustOwl
 
-Before using RustOwl VSCode, you need to install RustOwl.
-For detail, refer the [document](https://github.com/cordx56/rustowl/blob/main/README.md).
+For detail, refer to the [vscode configuration guide](https://github.com/cordx56/rustowl/blob/main/docs/vscode-configuration.md).
