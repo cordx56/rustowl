@@ -43,7 +43,7 @@ rustversion = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 simple_logger = { version = "5", features = ["stderr"] }
-tar = "0.4.44"
+tar = "0.4.45"
 tempfile = "3"
 tokio = { version = "1", features = [
   "fs",
@@ -77,7 +77,7 @@ regex = "1"
 tikv-jemalloc-sys = { version = "0.6", features = ["override_allocator_on_supported_platforms"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-zip = "8.2.0"
+zip = "8.3.1"
 
 [profile.release]
 opt-level = 3
