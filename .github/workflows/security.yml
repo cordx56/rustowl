@@ -33,7 +33,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: miri,rust-src,llvm-tools-preview,rustc-dev
-          # Automatically reads from rust-toolchain.toml
           cache: false
 
       - name: Install system dependencies (Linux)
