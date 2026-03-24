@@ -1,0 +1,3 @@
+#!/bin/sh
+[ -f /app/.prebuild ] && sh /app/.prebuild
+exec "$@"

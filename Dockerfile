@@ -29,4 +29,11 @@ COPY --from=builder /app/target/release/rustowlc /usr/local/bin/
 
 RUN rustowl toolchain install --skip-rustowl-toolchain
 
-ENTRYPOINT ["rustowl"]
+# prebuild-gc
+COPY .prebuild /app/.prebuild
+COPY .build_init /app/.build_init
+RUN chmod +x /app/.prebuild /app/.build_init
+ENTRYPOINT ["/app/.build_init"]
+CMD ["rustowl"]
+
+# prebuild-gc was: ENTRYPOINT ["rustowl"]
