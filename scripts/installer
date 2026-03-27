@@ -1,13 +1,7 @@
 #!/bin/sh -e
 
 # config
-DEFAULT_TOOLCHAIN_CHANNEL="1.94.0"
-DEFAULT_RUST_COMPONENTS="rustc,rust-std,cargo,rustc-dev,llvm-tools $RUST_COMPONENTS"
-DEFAULT_RUSTOWL_VERSION="latest"
-
-# script start
-TOOLCHAIN_CHANNEL="${TOOLCHAIN_CHANNEL:-"$DEFAULT_TOOLCHAIN_CHANNEL"}"
-INSTALL_COMPONENTS="${INSTALL_COMPONENTS:-"$DEFAULT_RUST_COMPONENTS"}"
+RUSTOWL_VERSION="${1:-"latest"}"
 
 # print host-tuple
 print_host_tuple() {
@@ -48,106 +42,27 @@ print_host_tuple() {
 
     echo "$TOOLCHAIN_ARCH-$TOOLCHAIN_OS"
 }
-print_toolchain() {
-    echo "${TOOLCHAIN_CHANNEL}-$(print_host_tuple)"
-}
 
-TOOLCHAIN="$(print_toolchain)"
-RUSTOWL_TOOLCHAIN="$TOOLCHAIN"
 HOST_TUPLE="$(print_host_tuple)"
-SYSROOT="${SYSROOT:-"$HOME/.rustowl/sysroot/$TOOLCHAIN"}"
-PATH="$SYSROOT/bin:$PATH"
-RUSTC_BOOTSTRAP="rustowlc"
-
-DATE="$(echo "$TOOLCHAIN_CHANNEL" | awk 'match($0, /[0-9]+-[0-9]+-[0-9]+/) { print substr($0, RSTART, RLENGTH) }')"
-
-component_filename() {
-    if [ "$1" = "rust-src" ]; then
-        file_postfix=""
-    else
-        file_postfix="-${HOST_TUPLE}"
-    fi
-    if [ -z "$DATE" ]; then
-        echo "$1-${TOOLCHAIN_CHANNEL}${file_postfix}"
-    else
-        echo "$1-nightly${file_postfix}"
-    fi
-}
-
-DIST_BASE="https://static.rust-lang.org/dist"
-download_component() {
-    file_ext=".${2:-"tar.gz"}"
-    if [ -z "$DATE" ]; then
-        url="${DIST_BASE}/$(component_filename "$1")${file_ext}"
-    else
-        url="${DIST_BASE}/${DATE}/$(component_filename "$1")${file_ext}"
-    fi
-    echo "Downloading from $url" 1>&2
-
-    curl -fsSL "$url"
-}
-
-# install_component <component> <sysroot-path>
-install_component() {
-    temp="$(mktemp -d)"
-    download_component "$1" | tar xzf - -C "$temp" > /dev/null
-    echo "Component $1 extracted" 1>&2
-
-    component="$(component_filename "$1")"
-    for com in $(cat "$temp/$component/components"); do
-        base="$temp/$component/$com"
-        (cd "$base" && find . -type f | while read -r f; do f="${f#./}"; mkdir -p "$2/$(dirname "$f")" && mv "$base/$f" "$2/$f"; done)
-    done
-
-    rm -rf "$temp"
-    echo "Component $1 installed." 1>&2
-    echo "$1" >> "$2/installed.txt"
-}
-# install_toolchain <sysroot-path>
-install_toolchain() {
-    mkdir -p "$1"
-    touch "$1/installed.txt"
-
-    components=$(echo "$INSTALL_COMPONENTS" | sed 's/,/ /g')
-    for component in $components; do
-        if ! grep -qxF "$component" "$1/installed.txt"; then
-            install_component "$component" "$1" &
-        fi
-    done
-    wait
-}
 
 #
 # main
 #
-if [ "$1" = "run" ]; then
-    install_toolchain "${SYSROOT}"
-    shift 1
-    exec "$@"
-elif [ "$1" = "install" ]; then
-    dest="$HOME/.rustowl"
-    mkdir -p "$dest"
-    case "$HOST_TUPLE" in
-        *windows*)
-            echo "Windows is not supported yet."
-            exit 1
-            ;;
-    esac
-    version="${2:-"$DEFAULT_RUSTOWL_VERSION"}"
-    if [ "$version" = "latest" ]; then
-        url="https://github.com/cordx56/rustowl/releases/latest/download/rustowl-$HOST_TUPLE.tar.gz"
-    else
-        url="https://github.com/cordx56/rustowl/releases/download/$version/rustowl-$HOST_TUPLE.tar.gz"
-    fi
-    curl -L "$url" | tar -xz -C "$dest"
-
-    "$dest/rustowl" toolchain install
-
-    echo 'Add $HOME/.rustowl to your PATH to complete the installation.'
+dest="$HOME/.rustowl"
+mkdir -p "$dest"
+case "$HOST_TUPLE" in
+    *windows*)
+        echo "Windows is not supported yet."
+        exit 1
+        ;;
+esac
+if [ "$RUSTOWL_VERSION" = "latest" ]; then
+    url="https://github.com/cordx56/rustowl/releases/latest/download/rustowl-$HOST_TUPLE.tar.gz"
 else
-    echo "Usage: $0 [COMMAND]"
-    echo "Commands:"
-    echo "  run <command>  Run a command with the toolchain specified by TOOLCHAIN_CHANNEL"
-    echo "  install        Install RustOwl from pre-built binary"
-    exit 1
+    url="https://github.com/cordx56/rustowl/releases/download/$RUSTOWL_VERSION/rustowl-$HOST_TUPLE.tar.gz"
 fi
+curl -L "$url" | tar -xz -C "$dest"
+
+"$dest/rustowl" toolchain install
+
+echo 'Add $HOME/.rustowl to your PATH to complete the installation.'
