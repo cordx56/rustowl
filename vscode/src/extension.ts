@@ -7,7 +7,7 @@ import {
   LanguageClientOptions,
 } from "vscode-languageclient/node";
 
-import { bootstrapRustowl } from "./bootstrap";
+import { bootstrapRustowl, UserCancelledError } from "./bootstrap";
 import { zInfer, zLspCursorResponse, zLspRange } from "./schemas";
 
 export let client: LanguageClient | undefined = undefined;
@@ -40,6 +40,9 @@ export async function activate(context: vscode.ExtensionContext) {
     );
     await client.start();
   } catch (error) {
+    if (error instanceof UserCancelledError) {
+      return;
+    }
     vscode.window.showErrorMessage(
       `Failed to start RustOwl\n${error instanceof Error ? error.message : String(error)}`,
     );
