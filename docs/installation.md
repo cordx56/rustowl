@@ -18,7 +18,13 @@
 
 ## Quick Start
 
-- Install via cargo-binstall (recommended):
+- Install using our script (recommended):
+
+```
+curl -L https://raw.githubusercontent.com/cordx56/rustowl/refs/heads/main/scripts/installer | sh
+```
+
+- Install via cargo-binstall:
 
 ```bash
 cargo binstall rustowl
