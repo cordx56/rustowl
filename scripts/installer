@@ -2,6 +2,7 @@
 
 # config
 RUSTOWL_VERSION="${1:-"latest"}"
+RUSTOWL_REPO_BASE_URL="https://github.com/cordx56/rustowl"
 
 # print host-tuple
 print_host_tuple() {
@@ -52,14 +53,15 @@ dest="$HOME/.rustowl"
 mkdir -p "$dest"
 case "$HOST_TUPLE" in
     *windows*)
-        echo "Windows is not supported yet."
+        echo "This script does not support Windows. Please use another method to install RustOwl."
         exit 1
         ;;
 esac
+bin_file="rustowl-$HOST_TUPLE.tar.gz"
 if [ "$RUSTOWL_VERSION" = "latest" ]; then
-    url="https://github.com/cordx56/rustowl/releases/latest/download/rustowl-$HOST_TUPLE.tar.gz"
+    url="$RUSTOWL_REPO_BASE_URL/releases/latest/download/$bin_file"
 else
-    url="https://github.com/cordx56/rustowl/releases/download/$RUSTOWL_VERSION/rustowl-$HOST_TUPLE.tar.gz"
+    url="$RUSTOWL_REPO_BASE_URL/releases/download/$RUSTOWL_VERSION/$bin_file"
 fi
 curl -L "$url" | tar -xz -C "$dest"
 
