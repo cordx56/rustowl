@@ -166,7 +166,7 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
           const urlProgress = new Map<string, number>();
           let lastReportedPercent = 0;
 
-          const progressPattern = /received from (.+?):\s+(\d+)%/;
+          const progressPattern = /received from (.+):\s+(\d+)%/;
 
           installer.stderr.addListener("data", (data) => {
             const dataStr = `${data}`;
