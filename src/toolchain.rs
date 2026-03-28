@@ -121,9 +121,13 @@ async fn download_tarball_and_extract(
     Ok(())
 }
 #[cfg(target_os = "windows")]
-async fn download_zip_and_extract(url: &str, dest: &Path) -> Result<(), ()> {
+async fn download_zip_and_extract(
+    url: &str,
+    dest: &Path,
+    progress_incr: impl Fn(usize),
+) -> Result<(), ()> {
     use zip::ZipArchive;
-    let data = download(url).await?;
+    let data = download(url, progress_incr).await?;
     let cursor = std::io::Cursor::new(&*data);
 
     let mut archive = match ZipArchive::new(cursor) {
