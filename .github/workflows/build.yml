@@ -54,9 +54,9 @@ jobs:
 
       - name: setup env
         run: |
-          host_tuple="$(./scripts/build/toolchain eval 'echo $HOST_TUPLE')"
+          host_tuple="$(./scripts/toolchain eval 'echo $HOST_TUPLE')"
           echo "host_tuple=$host_tuple" >> $GITHUB_ENV
-          toolchain="$(./scripts/build/toolchain eval 'echo $RUSTOWL_TOOLCHAIN')"
+          toolchain="$(./scripts/toolchain eval 'echo $RUSTOWL_TOOLCHAIN')"
           echo "toolchain=$toolchain" >> $GITHUB_ENV
 
           ([[ "$host_tuple" == *msvc* ]] && echo "exec_ext=.exe" || echo "exec_ext=") >> $GITHUB_ENV
@@ -72,10 +72,10 @@ jobs:
       - name: Build
         run: |
           if [[ "${{ env.is_linux }}" == "true" ]]; then
-            ./scripts/build/toolchain cargo install --locked cargo-zigbuild
-            ./scripts/build/toolchain cargo zigbuild --target ${{ env.host_tuple }}.2.17 --profile=${{ env.build_profile }}
+            ./scripts/toolchain cargo install --locked cargo-zigbuild
+            ./scripts/toolchain cargo zigbuild --target ${{ env.host_tuple }}.2.17 --profile=${{ env.build_profile }}
           else
-            ./scripts/build/toolchain cargo build --target ${{ env.host_tuple }} --profile=${{ env.build_profile }}
+            ./scripts/toolchain cargo build --target ${{ env.host_tuple }} --profile=${{ env.build_profile }}
           fi
 
       - name: Check the functionality

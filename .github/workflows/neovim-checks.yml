@@ -45,8 +45,8 @@ jobs:
 
       - name: Setup RustOwl
         run: |
-          ./scripts/build/toolchain cargo build --release
-          ./scripts/build/toolchain cargo install --path .
+          ./scripts/toolchain cargo build --release
+          ./scripts/toolchain cargo install --path .
 
       - name: Run Tests
         run: ./scripts/run_nvim_tests.sh
