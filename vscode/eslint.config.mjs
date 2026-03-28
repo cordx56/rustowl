@@ -183,7 +183,14 @@ export default tseslint.config(
       "@typescript-eslint/prefer-readonly": "warn",
 
       // TypeScript-specific import rules
-      "import-x/no-unused-modules": "warn",
+      "import-x/no-unused-modules": [
+        "warn",
+        {
+          suppressMissingFileEnumeratorAPIWarning: true,
+          unusedExports: true,
+          missingExports: true,
+        },
+      ],
       "import-x/no-deprecated": "warn",
       "import-x/consistent-type-specifier-style": ["warn", "prefer-top-level"],
       "import-x/no-empty-named-blocks": "warn",
