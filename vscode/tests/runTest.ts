@@ -19,11 +19,7 @@ async function main() {
       launchArgs: ["--disable-extensions"],
     });
   } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error(error);
-    // eslint-disable-next-line no-console
-    console.error("Failed to run tests");
-    throw new Error("Test execution failed");
+    throw new Error("Failed to run tests!", { cause: error });
   }
 }
 
