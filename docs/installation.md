@@ -6,8 +6,7 @@
 - [Installation](#installation)
   - [Table Of Contents](#table-of-contents)
   - [Quick Start](#quick-start)
-  - [Prerequisites](#prerequisites)
-  - [cargo-binstall (recommended)](#cargo-binstall-recommended)
+  - [cargo-binstall (recommended)](#cargo-binstall)
   - [Windows (winget)](#windows-winget)
   - [Arch Linux (AUR)](#arch-linux-aur)
   - [Nix flake](#nix-flake)
@@ -18,21 +17,13 @@
 
 ## Quick Start
 
-- Install via cargo-binstall (recommended):
+- Install using our script (recommended):
 
-```bash
-cargo binstall rustowl
+```
+curl -L https://raw.githubusercontent.com/cordx56/rustowl/refs/heads/main/scripts/installer | sh
 ```
 
-- Or install via your platform package manager (winget, AUR) or download from GitHub Releases. See below for full options.
-
-This document collects supported installation methods and examples.
-
-## Prerequisites
-
-- Rust toolchain (cargo). Install via rustup: https://rustup.rs/
-
-## cargo-binstall (recommended)
+## cargo-binstall
 
 Install the prebuilt binary using cargo-binstall:
 

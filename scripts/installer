@@ -1,15 +1,11 @@
 #!/bin/sh -e
 
-TOOLCHAIN_CHANNEL="${TOOLCHAIN_CHANNEL:-"$1"}"
-
-if [ -z "$TOOLCHAIN_CHANNEL" ]; then
-  echo "Usage: $0 <rust-version>"
-  echo "Example: $0 1.89.0"
-  exit 1
-fi
+# config
+RUSTOWL_VERSION="${1:-"latest"}"
+RUSTOWL_REPO_BASE_URL="https://github.com/cordx56/rustowl"
 
 # print host-tuple
-host_tuple() {
+print_host_tuple() {
     if [ -z "$TOOLCHAIN_OS" ]; then
         # Get OS
         case "$(uname -s)" in
@@ -48,20 +44,27 @@ host_tuple() {
     echo "$TOOLCHAIN_ARCH-$TOOLCHAIN_OS"
 }
 
-print_toolchain() {
-    echo "${TOOLCHAIN_CHANNEL}-$(host_tuple)"
-}
+HOST_TUPLE="$(print_host_tuple)"
 
+#
+# main
+#
+dest="$HOME/.rustowl"
+mkdir -p "$dest"
+case "$HOST_TUPLE" in
+    *windows*)
+        echo "This script does not support Windows. Please use another method to install RustOwl."
+        exit 1
+        ;;
+esac
+bin_file="rustowl-$HOST_TUPLE.tar.gz"
+if [ "$RUSTOWL_VERSION" = "latest" ]; then
+    url="$RUSTOWL_REPO_BASE_URL/releases/latest/download/$bin_file"
+else
+    url="$RUSTOWL_REPO_BASE_URL/releases/download/$RUSTOWL_VERSION/$bin_file"
+fi
+curl -L "$url" | tar -xz -C "$dest"
 
-print_env() {
-    echo "TOOLCHAIN_CHANNEL=${TOOLCHAIN_CHANNEL}"
-    toolchain="$(print_toolchain)"
-    echo "RUSTOWL_TOOLCHAIN=$toolchain"
-    echo "HOST_TUPLE=$(host_tuple)"
-    sysroot="${SYSROOT:-"$HOME/.rustowl/sysroot/$toolchain"}"
-    echo "SYSROOT=$sysroot"
-    echo "PATH=$sysroot/bin:$PATH"
-    echo "RUSTC_BOOTSTRAP=rustowlc"
-}
+"$dest/rustowl" toolchain install
 
-print_env
+echo 'Add $HOME/.rustowl to your PATH to complete the installation.'
