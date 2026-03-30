@@ -70,7 +70,7 @@ insta = "1.46"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 clap_complete_nushell = "4"
-clap_mangen = "0.2"
+clap_mangen = "0.3"
 regex = "1"
 rustc_version = "0.4"
 
