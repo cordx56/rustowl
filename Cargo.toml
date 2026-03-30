@@ -64,7 +64,7 @@ uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
-insta = "1.46"
+insta = "1.47"
 
 [build-dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -78,7 +78,7 @@ rustc_version = "0.4"
 tikv-jemalloc-sys = { version = "0.6", features = ["override_allocator_on_supported_platforms"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-zip = "8.3.1"
+zip = "8.4.0"
 
 [profile.release]
 opt-level = 3
