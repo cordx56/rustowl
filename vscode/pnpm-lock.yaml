@@ -88,8 +88,8 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0
       eslint-plugin-unicorn:
-        specifier: ^63.0.0
-        version: 63.0.0(eslint@10.1.0)
+        specifier: ^64.0.0
+        version: 64.0.0(eslint@10.1.0)
       glob:
         specifier: ^13.0.6
         version: 13.0.6
@@ -1130,8 +1130,8 @@ packages:
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
-  baseline-browser-mapping@2.10.10:
-    resolution: {integrity: sha512-sUoJ3IMxx4AyRqO4MLeHlnGDkyXRoUG0/AI9fjK+vS72ekpV0yWVY7O0BVjmBcRtkNcsAO2QDZ4tdKKGoI6YaQ==}
+  baseline-browser-mapping@2.10.12:
+    resolution: {integrity: sha512-qyq26DxfY4awP2gIRXhhLWfwzwI+N5Nxk6iQi8EFizIaWIjqicQTE4sLnZZVdeKPRcVNoJOkkpfzoIYuvCKaIQ==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -1223,8 +1223,8 @@ packages:
     resolution: {integrity: sha512-Gmy6FhYlCY7uOElZUSbxo2UCDH8owEk996gkbrpsgGtrJLM3J7jGxl9Ic7Qwwj4ivOE5AWZWRMecDdF7hqGjFA==}
     engines: {node: '>=10'}
 
-  caniuse-lite@1.0.30001781:
-    resolution: {integrity: sha512-RdwNCyMsNBftLjW6w01z8bKEvT6e/5tpPVEgtn22TiLGlstHOVecsX2KHFkD5e/vRnIE4EGzpuIODb3mtswtkw==}
+  caniuse-lite@1.0.30001782:
+    resolution: {integrity: sha512-dZcaJLJeDMh4rELYFw1tvSn1bhZWYFOt468FcbHHxx/Z/dFidd1I6ciyFdi3iwfQCyOjqo9upF6lGQYtMiJWxw==}
 
   chalk@4.1.2:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
@@ -1411,8 +1411,8 @@ packages:
     resolution: {integrity: sha512-UgGlf8IW75je7HZjNDpJdCv4cGJWIi6yumFdZ0R7A8/CIhQiWUjyGLCxdHpd8bmyD1gnkfUNK0oeOXqUS2cpfQ==}
     engines: {ecmascript: '>= es5', node: '>=4'}
 
-  electron-to-chromium@1.5.321:
-    resolution: {integrity: sha512-L2C7Q279W2D/J4PLZLk7sebOILDSWos7bMsMNN06rK482umHUrh/3lM8G7IlHFOYip2oAg5nha1rCMxr/rs6ZQ==}
+  electron-to-chromium@1.5.328:
+    resolution: {integrity: sha512-QNQ5l45DzYytThO21403XN3FvK0hOkWDG8viNf6jqS42msJ8I4tGDSpBCgvDRRPnkffafiwAym2X2eHeGD2V0w==}
 
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
@@ -1554,8 +1554,8 @@ packages:
     resolution: {integrity: sha512-tfuQT8K/Li1ZxhFzyD8wPIKtlzZxqBcPr9q0jFMQ77wWAbKBVEhaMPVQRTMTvCMUDhwBe5vPVqQPwAGk/ASfxQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  eslint-plugin-unicorn@63.0.0:
-    resolution: {integrity: sha512-Iqecl9118uQEXYh7adylgEmGfkn5es3/mlQTLLkd4pXkIk9CTGrAbeUux+YljSa2ohXCBmQQ0+Ej1kZaFgcfkA==}
+  eslint-plugin-unicorn@64.0.0:
+    resolution: {integrity: sha512-rNZwalHh8i0UfPlhNwg5BTUO1CMdKNmjqe+TgzOTZnpKoi8VBgsW7u9qCHIdpxEzZ1uwrJrPF0uRb7l//K38gA==}
     engines: {node: ^20.10.0 || >=21.0.0}
     peerDependencies:
       eslint: '>=9.38.0'
@@ -1747,10 +1747,6 @@ packages:
 
   globals@15.15.0:
     resolution: {integrity: sha512-7ACyT3wmyp3I61S4fG682L0VA2RGD9otkqGJIwNUMF1SWUombIIk+af1unuDYgMm082aHYwD+mzJvv9Iu8dsgg==}
-    engines: {node: '>=18'}
-
-  globals@16.5.0:
-    resolution: {integrity: sha512-c/c15i26VrJ4IRt5Z89DnIzCGDn9EcebibhAOjw5ibqEHsE1wLUgkPn9RDmNcUKyU87GeaL633nyJ+pplFR2ZQ==}
     engines: {node: '>=18'}
 
   globals@17.4.0:
@@ -3834,7 +3830,7 @@ snapshots:
   base64-js@1.5.1:
     optional: true
 
-  baseline-browser-mapping@2.10.10: {}
+  baseline-browser-mapping@2.10.12: {}
 
   binary-extensions@2.3.0: {}
 
@@ -3874,9 +3870,9 @@ snapshots:
 
   browserslist@4.28.1:
     dependencies:
-      baseline-browser-mapping: 2.10.10
-      caniuse-lite: 1.0.30001781
-      electron-to-chromium: 1.5.321
+      baseline-browser-mapping: 2.10.12
+      caniuse-lite: 1.0.30001782
+      electron-to-chromium: 1.5.328
       node-releases: 2.0.36
       update-browserslist-db: 1.2.3(browserslist@4.28.1)
 
@@ -3936,7 +3932,7 @@ snapshots:
 
   camelcase@6.3.0: {}
 
-  caniuse-lite@1.0.30001781: {}
+  caniuse-lite@1.0.30001782: {}
 
   chalk@4.1.2:
     dependencies:
@@ -4133,7 +4129,7 @@ snapshots:
     dependencies:
       version-range: 4.15.0
 
-  electron-to-chromium@1.5.321: {}
+  electron-to-chromium@1.5.328: {}
 
   emoji-regex@10.6.0: {}
 
@@ -4314,7 +4310,7 @@ snapshots:
     dependencies:
       safe-regex: 2.1.1
 
-  eslint-plugin-unicorn@63.0.0(eslint@10.1.0):
+  eslint-plugin-unicorn@64.0.0(eslint@10.1.0):
     dependencies:
       '@babel/helper-validator-identifier': 7.28.5
       '@eslint-community/eslint-utils': 4.9.1(eslint@10.1.0)
@@ -4324,7 +4320,7 @@ snapshots:
       core-js-compat: 3.49.0
       eslint: 10.1.0
       find-up-simple: 1.0.1
-      globals: 16.5.0
+      globals: 17.4.0
       indent-string: 5.0.0
       is-builtin-module: 5.0.0
       jsesc: 3.1.0
@@ -4549,8 +4545,6 @@ snapshots:
       path-scurry: 2.0.2
 
   globals@15.15.0: {}
-
-  globals@16.5.0: {}
 
   globals@17.4.0: {}
 
