@@ -100,7 +100,6 @@
     "typescript/require-array-sort-compare": "warn",
     "typescript/restrict-template-expressions": "warn",
     "typescript/triple-slash-reference": "warn",
-    "unicorn/better-regex": "warn",
     "unicorn/catch-error-name": "warn",
     "unicorn/consistent-destructuring": "warn",
     "unicorn/consistent-function-scoping": "warn",
