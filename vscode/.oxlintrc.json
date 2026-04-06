@@ -101,7 +101,6 @@
     "typescript/restrict-template-expressions": "warn",
     "typescript/triple-slash-reference": "warn",
     "unicorn/catch-error-name": "warn",
-    "unicorn/consistent-destructuring": "warn",
     "unicorn/consistent-function-scoping": "warn",
     "unicorn/custom-error-definition": "error",
     "unicorn/error-message": "warn",
@@ -119,7 +118,6 @@
     ],
     "unicorn/new-for-builtins": "warn",
     "unicorn/no-console-spaces": "warn",
-    "unicorn/no-for-loop": "warn",
     "unicorn/no-hex-escape": "warn",
     "unicorn/no-instanceof-array": "warn",
     "unicorn/no-lonely-if": "warn",
@@ -127,7 +125,6 @@
     "unicorn/no-null": "off", // TypeScript handles this better
     "unicorn/no-process-exit": "error",
     "unicorn/no-unreadable-array-destructuring": "warn",
-    "unicorn/better-regex": "error",
     "unicorn/no-instanceof-builtins": "warn",
     "unicorn/no-unused-properties": "warn",
     "unicorn/number-literal-case": "warn",
