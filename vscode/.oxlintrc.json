@@ -105,7 +105,6 @@
     "unicorn/custom-error-definition": "error",
     "unicorn/error-message": "warn",
     "unicorn/escape-case": "warn",
-    "unicorn/expiring-todo-comments": "warn",
     "unicorn/explicit-length-check": "warn",
     "unicorn/filename-case": [
       "warn",
@@ -126,7 +125,6 @@
     "unicorn/no-process-exit": "error",
     "unicorn/no-unreadable-array-destructuring": "warn",
     "unicorn/no-instanceof-builtins": "warn",
-    "unicorn/no-unused-properties": "warn",
     "unicorn/number-literal-case": "warn",
     "unicorn/prefer-array-find": "warn",
     "unicorn/prefer-array-flat-map": "warn",
