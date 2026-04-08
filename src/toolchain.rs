@@ -178,7 +178,8 @@ async fn install_components(
             let component_toolchain = format!("{component}-{TOOLCHAIN_CHANNEL}-{HOST_TUPLE}");
             let tarball_url = format!("{base_url}/{component_toolchain}.tar.gz");
 
-            download_tarball_and_extract(&tarball_url, &temp_path, |v| pb.set_position(v as u64)).await?;
+            download_tarball_and_extract(&tarball_url, &temp_path, |v| pb.set_position(v as u64))
+                .await?;
 
             let extracted_path = temp_path.join(&component_toolchain);
             let components = read_to_string(extracted_path.join("components"))
@@ -263,8 +264,10 @@ pub async fn setup_rustowl_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
             "https://github.com/cordx56/rustowl/releases/download/v{}/rustowl-{HOST_TUPLE}.tar.gz",
             clap::crate_version!(),
         );
-        download_tarball_and_extract(&rustowl_tarball_url, dest.as_ref(), |v| pb.set_position(v as u64))
-            .await
+        download_tarball_and_extract(&rustowl_tarball_url, dest.as_ref(), |v| {
+            pb.set_position(v as u64)
+        })
+        .await
     };
     #[cfg(target_os = "windows")]
     let rustowl_toolchain_result = {
@@ -272,7 +275,10 @@ pub async fn setup_rustowl_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
             "https://github.com/cordx56/rustowl/releases/download/v{}/rustowl-{HOST_TUPLE}.zip",
             clap::crate_version!(),
         );
-        download_zip_and_extract(&rustowl_zip_url, dest.as_ref(), |v| pb.set_position(v as u64)).await
+        download_zip_and_extract(&rustowl_zip_url, dest.as_ref(), |v| {
+            pb.set_position(v as u64)
+        })
+        .await
     };
     pb.finish_and_clear();
     if rustowl_toolchain_result.is_ok() {
