@@ -8,6 +8,13 @@ import packageJson from "../package.json";
 
 const version: string = packageJson.version;
 
+export class UserCancelledError extends Error {
+  constructor() {
+    super("RustOwl installation was cancelled by the user");
+    this.name = "UserCancelledError";
+  }
+}
+
 export const hostTuple = (): string | null => {
   let arch = null;
   if (process.arch === "arm64") {
@@ -100,6 +107,20 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
       spawnSync(rustowlCommand, ["--version", "--quiet"]).stdout?.toString(),
     ))
   ) {
+    const isUpdate = rustowlCommand !== null;
+    const message = isUpdate
+      ? `RustOwl v${version} is available. Do you want to update?`
+      : `RustOwl is not installed. Do you want to install RustOwl v${version}?`;
+    const actionLabel = isUpdate ? "Update" : "Install";
+    const selection = await vscode.window.showInformationMessage(
+      message,
+      actionLabel,
+      "Cancel",
+    );
+    if (selection !== actionLabel) {
+      throw new UserCancelledError();
+    }
+
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     await fs.mkdir(dirPath, { recursive: true });
     // download rustowl binary
@@ -138,19 +159,38 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
           const installedCommand = rustowlCommand;
           const installer = spawn(installedCommand, ["toolchain", "install"], {
             stdio: ["ignore", "ignore", "pipe"],
+            env: { ...process.env, RUST_LOG: "debug" },
           });
 
           let stderrOutput = "";
+          const urlProgress = new Map<string, number>();
+          let lastReportedPercent = 0;
+
+          const progressPattern = /received from (.+):\s+(\d+)%/;
 
           installer.stderr.addListener("data", (data) => {
             const dataStr = `${data}`;
             stderrOutput += dataStr;
 
-            if (dataStr.includes("%")) {
-              progress.report({
-                message: "toolchain downloading",
-                increment: 0.25, // downloads 4 toolchain components
-              });
+            for (const line of dataStr.split("\n")) {
+              const match = progressPattern.exec(line);
+              if (match !== null) {
+                const url = match[1];
+                const percent = parseInt(match[2], 10);
+                urlProgress.set(url, percent);
+
+                const totalPercent =
+                  [...urlProgress.values()].reduce((a, b) => a + b, 0) /
+                  urlProgress.size;
+                const increment = totalPercent - lastReportedPercent;
+                if (increment > 0) {
+                  progress.report({
+                    message: "toolchain downloading",
+                    increment,
+                  });
+                  lastReportedPercent = totalPercent;
+                }
+              }
             }
           });
 

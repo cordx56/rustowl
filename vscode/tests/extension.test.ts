@@ -21,10 +21,14 @@ describe("Extension Test Suite", () => {
   let clientStartStub: sinon.SinonStub;
   let clientStopStub: sinon.SinonStub;
   let sendRequestStub: sinon.SinonStub;
+  let bootstrapStub: sinon.SinonStub;
   let decorationType: any;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    bootstrapStub = sandbox
+      .stub(bootstrap, "bootstrapRustowl")
+      .resolves("rustowl");
     commandStub = sandbox.stub(vscode.commands, "registerCommand");
 
     activeEditor = {
@@ -71,9 +75,6 @@ describe("Extension Test Suite", () => {
 
   /* ---------- activation ---------- */
   it("activates and boots successfully", async () => {
-    const bootstrapStub = sandbox
-      .stub(bootstrap, "bootstrapRustowl")
-      .resolves("rustowl");
     await extension.activate(context);
     assert.equal(bootstrapStub.callCount, 1);
     assert.equal(clientStartStub.callCount, 1);
@@ -81,7 +82,6 @@ describe("Extension Test Suite", () => {
 
   it("deactivates cleanly", async () => {
     // Set up client first
-    sandbox.stub(bootstrap, "bootstrapRustowl").resolves("rustowl");
     await extension.activate(context);
 
     // Now deactivate

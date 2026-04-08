@@ -35,6 +35,7 @@ describe("Bootstrap Tests", () => {
           .stub()
           .callsFake(async (_opts, task) => task(progressStub)),
         showErrorMessage: sandbox.stub(),
+        showInformationMessage: sandbox.stub().resolves("Install"),
       },
       ProgressLocation: { Notification: 15 },
     };
