@@ -54,9 +54,9 @@ jobs:
 
       - name: setup env
         run: |
-          host_tuple="$(./scripts/toolchain eval 'echo $HOST_TUPLE')"
+          host_tuple="$(./scripts/toolchain /bin/bash -c 'echo $HOST_TUPLE')"
           echo "host_tuple=$host_tuple" >> $GITHUB_ENV
-          toolchain="$(./scripts/toolchain eval 'echo $RUSTOWL_TOOLCHAIN')"
+          toolchain="$(./scripts/toolchain /bin/bash -c 'echo $RUSTOWL_TOOLCHAIN')"
           echo "toolchain=$toolchain" >> $GITHUB_ENV
 
           ([[ "$host_tuple" == *msvc* ]] && echo "exec_ext=.exe" || echo "exec_ext=") >> $GITHUB_ENV
