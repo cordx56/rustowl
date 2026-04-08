@@ -276,9 +276,9 @@ build_rustowl() {
     fi
     
     if [[ "$SHOW_OUTPUT" == "true" ]]; then
-        ./scripts/build/toolchain cargo build --release
+        ./scripts/toolchain cargo build --release
     else
-        ./scripts/build/toolchain cargo build --release --quiet
+        ./scripts/toolchain cargo build --release --quiet
     fi
     
     if [[ "$SHOW_OUTPUT" == "true" ]]; then

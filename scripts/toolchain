@@ -1,0 +1,123 @@
+#!/bin/sh -e
+
+# config
+DEFAULT_TOOLCHAIN_CHANNEL="1.94.0"
+DEFAULT_RUST_COMPONENTS="rustc,rust-std,cargo,rustc-dev,llvm-tools $RUST_COMPONENTS"
+
+# script start
+export TOOLCHAIN_CHANNEL="${TOOLCHAIN_CHANNEL:-"$DEFAULT_TOOLCHAIN_CHANNEL"}"
+INSTALL_COMPONENTS="${INSTALL_COMPONENTS:-"$DEFAULT_RUST_COMPONENTS"}"
+
+# print host-tuple
+print_host_tuple() {
+    if [ -z "$TOOLCHAIN_OS" ]; then
+        # Get OS
+        case "$(uname -s)" in
+            Linux)
+                TOOLCHAIN_OS="unknown-linux-gnu"
+                ;;
+            Darwin)
+                TOOLCHAIN_OS="apple-darwin"
+                ;;
+            CYGWIN*|MINGW32*|MSYS*|MINGW*)
+                TOOLCHAIN_OS="pc-windows-msvc"
+                ;;
+            *)
+                echo "Unsupported OS: $(uname -s)" >&2
+                exit 1
+                ;;
+        esac
+    fi
+
+    if [ -z "$TOOLCHAIN_ARCH" ]; then
+        # Get architecture
+        case "$(uname -m)" in
+            arm64|aarch64)
+                TOOLCHAIN_ARCH="aarch64"
+                ;;
+            x86_64|amd64)
+                TOOLCHAIN_ARCH="x86_64"
+                ;;
+            *)
+                echo "Unsupported architecture: $(uname -m)" >&2
+                exit 1
+                ;;
+        esac
+    fi
+
+    echo "$TOOLCHAIN_ARCH-$TOOLCHAIN_OS"
+}
+print_toolchain() {
+    echo "${TOOLCHAIN_CHANNEL}-$(print_host_tuple)"
+}
+
+export TOOLCHAIN="$(print_toolchain)"
+export RUSTOWL_TOOLCHAIN="$TOOLCHAIN"
+export HOST_TUPLE="$(print_host_tuple)"
+export SYSROOT="${SYSROOT:-"$HOME/.rustowl/sysroot/$TOOLCHAIN"}"
+export PATH="$SYSROOT/bin:$PATH"
+export RUSTC_BOOTSTRAP="rustowlc"
+
+export DATE="$(echo "$TOOLCHAIN_CHANNEL" | awk 'match($0, /[0-9]+-[0-9]+-[0-9]+/) { print substr($0, RSTART, RLENGTH) }')"
+
+component_filename() {
+    if [ "$1" = "rust-src" ]; then
+        file_postfix=""
+    else
+        file_postfix="-${HOST_TUPLE}"
+    fi
+    if [ -z "$DATE" ]; then
+        echo "$1-${TOOLCHAIN_CHANNEL}${file_postfix}"
+    else
+        echo "$1-nightly${file_postfix}"
+    fi
+}
+
+DIST_BASE="https://static.rust-lang.org/dist"
+download_component() {
+    file_ext=".${2:-"tar.gz"}"
+    if [ -z "$DATE" ]; then
+        url="${DIST_BASE}/$(component_filename "$1")${file_ext}"
+    else
+        url="${DIST_BASE}/${DATE}/$(component_filename "$1")${file_ext}"
+    fi
+    echo "Downloading from $url" 1>&2
+
+    curl -fsSL "$url"
+}
+
+# install_component <component> <sysroot-path>
+install_component() {
+    temp="$(mktemp -d)"
+    download_component "$1" | tar xzf - -C "$temp" > /dev/null
+    echo "Component $1 extracted" 1>&2
+
+    component="$(component_filename "$1")"
+    for com in $(cat "$temp/$component/components"); do
+        base="$temp/$component/$com"
+        (cd "$base" && find . -type f | while read -r f; do f="${f#./}"; mkdir -p "$2/$(dirname "$f")" && mv "$base/$f" "$2/$f"; done)
+    done
+
+    rm -rf "$temp"
+    echo "Component $1 installed." 1>&2
+    echo "$1" >> "$2/installed.txt"
+}
+# install_toolchain <sysroot-path>
+install_toolchain() {
+    mkdir -p "$1"
+    touch "$1/installed.txt"
+
+    components=$(echo "$INSTALL_COMPONENTS" | sed 's/,/ /g')
+    for component in $components; do
+        if ! grep -qxF "$component" "$1/installed.txt"; then
+            install_component "$component" "$1" &
+        fi
+    done
+    wait
+}
+
+#
+# main
+#
+install_toolchain "${SYSROOT}"
+exec "$@"
