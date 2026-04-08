@@ -73,7 +73,7 @@ fn progress_bar_style() -> Result<indicatif::ProgressStyle, ()> {
     )
 }
 
-async fn download(url: &str, progress_incr: impl Fn(usize)) -> Result<Vec<u8>, ()> {
+async fn download(url: &str, set_progress: impl Fn(usize)) -> Result<Vec<u8>, ()> {
     log::debug!("start downloading {url}...");
     let mut resp = match reqwest::get(url).await.and_then(|v| v.error_for_status()) {
         Ok(v) => v,
@@ -98,8 +98,8 @@ async fn download(url: &str, progress_incr: impl Fn(usize)) -> Result<Vec<u8>, (
         data.extend_from_slice(&chunk);
         let current = data.len() * 100 / content_length;
         if received != current {
-            progress_incr(current - received);
-            log::debug!("received from {url}: {received:3}%");
+            set_progress(current);
+            log::debug!("received from {url}: {current:3}%");
             received = current;
         }
     }
@@ -109,9 +109,9 @@ async fn download(url: &str, progress_incr: impl Fn(usize)) -> Result<Vec<u8>, (
 async fn download_tarball_and_extract(
     url: &str,
     dest: &Path,
-    progress_incr: impl Fn(usize),
+    set_progress: impl Fn(usize),
 ) -> Result<(), ()> {
-    let data = download(url, progress_incr).await?;
+    let data = download(url, set_progress).await?;
     let decoder = GzDecoder::new(&*data);
     let mut archive = Archive::new(decoder);
     archive.unpack(dest).map_err(|_| {
@@ -124,10 +124,10 @@ async fn download_tarball_and_extract(
 async fn download_zip_and_extract(
     url: &str,
     dest: &Path,
-    progress_incr: impl Fn(usize),
+    set_progress: impl Fn(usize),
 ) -> Result<(), ()> {
     use zip::ZipArchive;
-    let data = download(url, progress_incr).await?;
+    let data = download(url, set_progress).await?;
     let cursor = std::io::Cursor::new(&*data);
 
     let mut archive = match ZipArchive::new(cursor) {
@@ -178,7 +178,7 @@ async fn install_components(
             let component_toolchain = format!("{component}-{TOOLCHAIN_CHANNEL}-{HOST_TUPLE}");
             let tarball_url = format!("{base_url}/{component_toolchain}.tar.gz");
 
-            download_tarball_and_extract(&tarball_url, &temp_path, |v| pb.inc(v as u64)).await?;
+            download_tarball_and_extract(&tarball_url, &temp_path, |v| pb.set_position(v as u64)).await?;
 
             let extracted_path = temp_path.join(&component_toolchain);
             let components = read_to_string(extracted_path.join("components"))
@@ -263,7 +263,7 @@ pub async fn setup_rustowl_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
             "https://github.com/cordx56/rustowl/releases/download/v{}/rustowl-{HOST_TUPLE}.tar.gz",
             clap::crate_version!(),
         );
-        download_tarball_and_extract(&rustowl_tarball_url, dest.as_ref(), |v| pb.inc(v as u64))
+        download_tarball_and_extract(&rustowl_tarball_url, dest.as_ref(), |v| pb.set_position(v as u64))
             .await
     };
     #[cfg(target_os = "windows")]
@@ -272,7 +272,7 @@ pub async fn setup_rustowl_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
             "https://github.com/cordx56/rustowl/releases/download/v{}/rustowl-{HOST_TUPLE}.zip",
             clap::crate_version!(),
         );
-        download_zip_and_extract(&rustowl_zip_url, dest.as_ref(), |v| pb.inc(v as u64)).await
+        download_zip_and_extract(&rustowl_zip_url, dest.as_ref(), |v| pb.set_position(v as u64)).await
     };
     pb.finish_and_clear();
     if rustowl_toolchain_result.is_ok() {
