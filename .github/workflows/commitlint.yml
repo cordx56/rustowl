@@ -22,7 +22,7 @@ jobs:
           node-version: lts/*
 
       - name: Setup PNPM And Install dependencies
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6
         with:
           package_json_file: ./scripts/package.json
           run_install: |
