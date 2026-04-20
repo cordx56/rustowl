@@ -33,11 +33,14 @@ macro_rules! impl_as_rustc {
 #[macro_use]
 mod borrowck;
 #[macro_use]
+mod dataflow_analysis;
+#[macro_use]
 mod hash;
 #[macro_use]
 mod transform;
 
 pub use borrowck::*;
+pub use dataflow_analysis::*;
 pub use hash::Hasher;
 pub use transform::*;
 
