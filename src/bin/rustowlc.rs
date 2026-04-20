@@ -11,6 +11,7 @@ pub extern crate rustc_driver;
 pub extern crate rustc_hir;
 pub extern crate rustc_interface;
 pub extern crate rustc_middle;
+pub extern crate rustc_mir_dataflow;
 pub extern crate rustc_query_system;
 pub extern crate rustc_session;
 pub extern crate rustc_span;
