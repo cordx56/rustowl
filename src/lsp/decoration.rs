@@ -549,6 +549,7 @@ impl utils::MirVisitor for CalcDecos {
             storage_range,
             name,
             drop,
+            maybe_live_at,
         ) = match decl {
             MirDecl::User {
                 local,
@@ -560,6 +561,7 @@ impl utils::MirVisitor for CalcDecos {
                 must_live_at,
                 storage_range,
                 drop,
+                maybe_live_at,
                 ..
             } => (
                 *local,
@@ -571,6 +573,7 @@ impl utils::MirVisitor for CalcDecos {
                 storage_range,
                 Some(name),
                 drop,
+                maybe_live_at,
             ),
             MirDecl::Other {
                 local,
@@ -581,6 +584,7 @@ impl utils::MirVisitor for CalcDecos {
                 must_live_at,
                 storage_range,
                 drop,
+                maybe_live_at,
                 ..
             } => (
                 *local,
@@ -592,6 +596,7 @@ impl utils::MirVisitor for CalcDecos {
                 storage_range,
                 None,
                 drop,
+                maybe_live_at,
             ),
         };
         self.current_fn_id = local.fn_id;
@@ -606,9 +611,12 @@ impl utils::MirVisitor for CalcDecos {
             // - drop variables (Non-Copy): intersection of drop_range and storage_range
             // - non-drop variables (Copy): union of lives and storage_range
             let drop_copy_live = if *drop {
-                utils::intersect_ranges(drop_range.clone(), storage_range.clone())
+                //utils::intersect_ranges(drop_range.clone(), storage_range.clone())
+                //lives.clone()
+                maybe_live_at.clone()
             } else {
-                utils::union_ranges(lives.clone(), storage_range.clone())
+                maybe_live_at.clone()
+                //utils::union_ranges(lives.clone(), storage_range.clone())
             };
             for range in &drop_copy_live {
                 self.decorations.push(Deco::Lifetime {
