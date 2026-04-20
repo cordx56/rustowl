@@ -108,7 +108,9 @@ impl MirAnalyzer {
             let input = facts.polonius_input();
             let location_table = facts.location_table();
 
-            let maybe_live_range = dataflow_analyzer::get_maybe_lives(tcx, &body, &basic_blocks);
+            //let maybe_live_range = dataflow_analyzer::get_maybe_lives(tcx, &body, &basic_blocks);
+            let maybe_live_range =
+                dataflow_analyzer::get_maybe_initialized(tcx, &body, &basic_blocks);
 
             let analyzer = Box::pin(async move {
                 log::debug!("start re-computing borrow check with dump: true");
