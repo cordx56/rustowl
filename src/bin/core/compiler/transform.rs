@@ -51,12 +51,19 @@ impl<'tcx> TyCtxt<'tcx> {
                     .filter(|stmt| stmt.source_info.span.is_visible(source_map))
                     .collect();
                 let statements = statements
-                    .par_iter()
+                    .iter()
                     .filter_map(|statement| {
                         let span = AsRustc::from_rustc(statement.source_info.span);
+                        let range = range_from_span(&source_info.source, span, source_info.offset);
+                        if let Some(r) = range {
+                            if 20 < r.size() {
+                                eprintln!("{:?}, {:?}", statement, range);
+                            }
+                        }
+                        let pass = range.filter(|v| v.size() < 15);
                         match &statement.kind {
                             StatementKind::StorageLive(local) => {
-                                range_from_span(&source_info.source, span, source_info.offset).map(
+                                pass.map(
                                     |range| MirStatement::StorageLive {
                                         target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
                                         range,
@@ -64,7 +71,7 @@ impl<'tcx> TyCtxt<'tcx> {
                                 )
                             }
                             StatementKind::StorageDead(local) => {
-                                range_from_span(&source_info.source, span, source_info.offset).map(
+                                pass.map(
                                     |range| MirStatement::StorageDead {
                                         target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
                                         range,
@@ -77,11 +84,7 @@ impl<'tcx> TyCtxt<'tcx> {
                                 let rv = match rval {
                                     Rvalue::Use(Operand::Move(p)) => {
                                         let local = p.local;
-                                        range_from_span(
-                                            &source_info.source,
-                                            span,
-                                            source_info.offset,
-                                        )
+                                        pass
                                         .map(|range| {
                                             MirRval::Move {
                                                 target_local: FnLocal::new(
@@ -96,11 +99,7 @@ impl<'tcx> TyCtxt<'tcx> {
                                         let mutable = matches!(kind, BorrowKind::Mut { .. });
                                         let local = place.local;
                                         let outlive = None;
-                                        range_from_span(
-                                            &source_info.source,
-                                            span,
-                                            source_info.offset,
-                                        )
+                                        pass
                                         .map(|range| {
                                             MirRval::Borrow {
                                                 target_local: FnLocal::new(
@@ -115,7 +114,7 @@ impl<'tcx> TyCtxt<'tcx> {
                                     }
                                     _ => None,
                                 };
-                                range_from_span(&source_info.source, span, source_info.offset).map(
+                                pass.map(
                                     |range| MirStatement::Assign {
                                         target_local: FnLocal::new(
                                             target_local_index,
@@ -133,9 +132,10 @@ impl<'tcx> TyCtxt<'tcx> {
                     .collect();
                 let terminator = bb_data.terminator.as_ref().and_then(|terminator| {
                     let span = AsRustc::from_rustc(terminator.source_info.span);
+                    let pass = range_from_span(&source_info.source, span, source_info.offset).filter(|v| if v.size() < 15 {true} else {eprintln!("{:?}, {:?}", terminator.kind, v);false});
                     match &terminator.kind {
                         TerminatorKind::Drop { place, .. } => {
-                            range_from_span(&source_info.source, span, source_info.offset).map(
+                            pass.map(
                                 |range| MirTerminator::Drop {
                                     local: FnLocal::new(place.local.as_u32(), fn_id.as_u32()),
                                     range,
@@ -146,19 +146,15 @@ impl<'tcx> TyCtxt<'tcx> {
                             destination,
                             fn_span,
                             ..
-                        } => range_from_span(
-                            &source_info.source,
-                            AsRustc::from_rustc(*fn_span),
-                            source_info.offset,
-                        )
-                        .map(|fn_span| MirTerminator::Call {
+                        } =>
+                        pass.map(|fn_span| MirTerminator::Call {
                             destination_local: FnLocal::new(
                                 destination.local.as_u32(),
                                 fn_id.as_u32(),
                             ),
                             fn_span,
                         }),
-                        _ => range_from_span(&source_info.source, span, source_info.offset)
+                        _ => pass
                             .map(|range| MirTerminator::Other { range }),
                     }
                 });

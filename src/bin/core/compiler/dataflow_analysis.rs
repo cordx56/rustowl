@@ -133,6 +133,114 @@ impl<'a, 'tcx> ResultsVisitor<'tcx, <MaybeInitializedPlaces<'a, 'tcx> as AsRustc
     }
 }
 
+impl_as_rustc!(
+    MaybeUninitializedPlaces<'a, 'tcx>,
+    rustc_mir_dataflow::impls::MaybeUninitializedPlaces<'a, 'tcx>,
+);
+impl<'a, 'tcx> MaybeUninitializedPlaces<'a, 'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, move_data: &'a MoveData<'tcx>) -> Self {
+        Self(<Self as AsRustc>::Rustc::new(
+            tcx.into_rustc(),
+            body.as_rustc(),
+            move_data.as_rustc(),
+        ))
+    }
+    pub fn get_maybe_uninitialized(
+        self,
+        tcx: TyCtxt<'tcx>,
+        body: &Body<'tcx>,
+        move_data: &'a MoveData<'tcx>,
+    ) -> HashMap<LocalId, Vec<RichLocation>> {
+        let mut visitor = UninitializedPlacesVisitor::new(move_data);
+        let results =
+            self.into_rustc()
+                .iterate_to_fixpoint(tcx.into_rustc(), body.as_rustc(), None);
+        visit_reachable_results(body.as_rustc(), &results, &mut visitor);
+        visitor.collect()
+    }
+}
+
+struct UninitializedPlacesVisitor<'a, 'tcx> {
+    move_data: &'a MoveData<'tcx>,
+    loc_maybe_initialized: Vec<(RichLocation, LocalId)>,
+}
+impl<'a, 'tcx> UninitializedPlacesVisitor<'a, 'tcx> {
+    fn new(move_data: &'a MoveData<'tcx>) -> Self {
+        Self {
+            move_data,
+            loc_maybe_initialized: Default::default(),
+        }
+    }
+    fn push(&mut self, rich_location: RichLocation, move_path_index: MovePathIndex) {
+        let local = self.move_data.base_local(move_path_index);
+        self.loc_maybe_initialized.push((rich_location, local));
+    }
+    fn collect(self) -> HashMap<LocalId, Vec<RichLocation>> {
+        let mut result = HashMap::new();
+        for (rich_location, local_id) in self.loc_maybe_initialized {
+            result
+                .entry(local_id)
+                .or_insert_with(Vec::new)
+                .push(rich_location);
+        }
+        result
+    }
+}
+
+impl<'a, 'tcx> ResultsVisitor<'tcx, <MaybeUninitializedPlaces<'a, 'tcx> as AsRustc>::Rustc>
+    for UninitializedPlacesVisitor<'a, 'tcx>
+{
+    fn visit_after_early_statement_effect(
+        &mut self,
+        _analysis: &<MaybeUninitializedPlaces<'a, 'tcx> as AsRustc>::Rustc,
+        state: &<<MaybeUninitializedPlaces<'a, 'tcx> as AsRustc>::Rustc as Analysis<'tcx>>::Domain,
+        _statement: &rustc_middle::mir::Statement<'tcx>,
+        location: rustc_middle::mir::Location,
+    ) {
+        for mpi in state.iter() {
+            self.push(RichLocation::Start(AsRustc::from_rustc(location)), mpi);
+        }
+    }
+    fn visit_after_primary_statement_effect(
+        &mut self,
+        _analysis: &<MaybeUninitializedPlaces<'a, 'tcx> as AsRustc>::Rustc,
+        state: &<<MaybeUninitializedPlaces<'a, 'tcx> as AsRustc>::Rustc as Analysis<'tcx>>::Domain,
+        statement: &rustc_middle::mir::Statement<'tcx>,
+        location: rustc_middle::mir::Location,
+    ) {
+            for mpi in state.iter() {
+                self.push(RichLocation::Mid(AsRustc::from_rustc(location)), mpi);
+            }
+    }
+    fn visit_after_early_terminator_effect(
+        &mut self,
+        _analysis: &<MaybeUninitializedPlaces<'a, 'tcx> as AsRustc>::Rustc,
+        state: &<<MaybeUninitializedPlaces<'a, 'tcx> as AsRustc>::Rustc as Analysis<'tcx>>::Domain,
+        statement: &rustc_middle::mir::Terminator<'tcx>,
+        location: rustc_middle::mir::Location,
+    ) {
+        if !matches!(statement.kind, rustc_middle::mir::TerminatorKind::UnwindResume) {
+        for mpi in state.iter() {
+            self.push(RichLocation::Start(AsRustc::from_rustc(location)), mpi);
+        }
+        }
+    }
+    fn visit_after_primary_terminator_effect(
+        &mut self,
+        _analysis: &<MaybeUninitializedPlaces<'a, 'tcx> as AsRustc>::Rustc,
+        state: &<<MaybeUninitializedPlaces<'a, 'tcx> as AsRustc>::Rustc as Analysis<'tcx>>::Domain,
+        statement: &rustc_middle::mir::Terminator<'tcx>,
+        location: rustc_middle::mir::Location,
+    ) {
+        if !matches!(statement.kind, rustc_middle::mir::TerminatorKind::UnwindResume) {
+        for mpi in state.iter() {
+            self.push(RichLocation::Mid(AsRustc::from_rustc(location)), mpi);
+        }
+        }
+    }
+}
+
+// Maybe live
 impl_as_rustc!(MaybeLiveLocals, rustc_mir_dataflow::impls::MaybeLiveLocals);
 impl MaybeLiveLocals {
     pub fn new() -> Self {
