@@ -41,6 +41,8 @@ pub struct MirAnalyzer {
     drop_range: HashMap<LocalId, Vec<Range>>,
     storage_range: HashMap<LocalId, Vec<Range>>,
     maybe_live_range: HashMap<LocalId, Vec<Range>>,
+    maybe_init_range: HashMap<LocalId, Vec<Range>>,
+    maybe_uninit_range: HashMap<LocalId, Vec<Range>>,
 }
 impl MirAnalyzer {
     /// initialize analyzer
@@ -108,9 +110,12 @@ impl MirAnalyzer {
             let input = facts.polonius_input();
             let location_table = facts.location_table();
 
-            //let maybe_live_range = dataflow_analyzer::get_maybe_lives(tcx, &body, &basic_blocks);
             let maybe_live_range =
+                dataflow_analyzer::get_maybe_lives(tcx, &body, &basic_blocks);
+            let maybe_init_range =
                 dataflow_analyzer::get_maybe_initialized(tcx, &body, &basic_blocks);
+            let maybe_uninit_range =
+                dataflow_analyzer::get_maybe_uninitialized(tcx, &body, &basic_blocks);
 
             let analyzer = Box::pin(async move {
                 log::debug!("start re-computing borrow check with dump: true");
@@ -155,6 +160,8 @@ impl MirAnalyzer {
                     drop_range,
                     storage_range,
                     maybe_live_range,
+                    maybe_init_range,
+                    maybe_uninit_range,
                 }
             });
             result.insert(fn_id, MirAnalyzerInitResult::Analyzer(analyzer));
@@ -183,11 +190,18 @@ impl MirAnalyzer {
                 let drop_range = drop_range.get(local).cloned().unwrap_or(Vec::new());
                 let storage_range = storage_range.get(local).cloned().unwrap_or(Vec::new());
                 let fn_local = FnLocal::new(local.as_u32(), self.fn_id.as_u32());
-                let maybe_live_at = self
-                    .maybe_live_range
-                    .get(local)
-                    .cloned()
-                    .unwrap_or(Vec::new());
+                let maybe_live_at = rustowl::utils::exclude_ranges(
+                    self.maybe_live_range
+                    //self.maybe_init_range
+                        .get(local)
+                        .cloned()
+                        .unwrap_or(Vec::new()),
+                    self.maybe_uninit_range
+                        .get(local)
+                        .cloned()
+                        .unwrap_or(Vec::new()),
+                );
+                //let maybe_live_at = self.maybe_uninit_range.get(local).cloned().unwrap_or(Vec::new());
                 if let Some((span, name)) = user_vars.get(local).cloned() {
                     MirDecl::User {
                         local: fn_local,

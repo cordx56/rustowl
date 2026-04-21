@@ -9,7 +9,7 @@ pub fn common_range(r1: Range, r2: Range) -> Option<Range> {
     if r2.from() < r1.from() {
         return common_range(r2, r1);
     }
-    if r1.until() < r2.from() {
+    if r1.until() <= r2.from() {
         return None;
     }
     let from = r2.from();
