@@ -324,7 +324,7 @@ impl DefId {
 impl_as_rustc!(
     /// Local ID type
     /// corresponds to function local (variable) ID
-    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
     LocalId,
     rustc_middle::mir::Local,
 );

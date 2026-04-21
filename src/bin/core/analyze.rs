@@ -201,6 +201,7 @@ impl MirAnalyzer {
                         .cloned()
                         .unwrap_or(Vec::new()),
                 );
+                let maybe_live_at = self.maybe_uninit_range.get(local).cloned().unwrap_or(Vec::new());
                 //let maybe_live_at = self.maybe_uninit_range.get(local).cloned().unwrap_or(Vec::new());
                 if let Some((span, name)) = user_vars.get(local).cloned() {
                     MirDecl::User {

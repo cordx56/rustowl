@@ -1,9 +1,144 @@
 use super::*;
 
+use rustc_data_structures::indexmap::{IndexMap, IndexSet};
+use rustc_index::bit_set::MixedBitSet;
+use rustc_middle::mir::visit::Visitor;
 use rustc_mir_dataflow::{
-    Analysis, MaybeReachable, ResultsVisitor, move_paths::MovePathIndex, visit_reachable_results,
+    Analysis, GenKill, MaybeReachable, ResultsVisitor, move_paths::MovePathIndex,
+    visit_reachable_results,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+
+#[derive(Debug)]
+pub struct MoveDropTransferFunction<'a>(&'a mut MixedBitSet<rustc_middle::mir::Local>);
+impl<'tcx> Visitor<'tcx> for MoveDropTransferFunction<'_> {
+    fn visit_operand(
+        &mut self,
+        operand: &rustc_middle::mir::Operand<'tcx>,
+        _location: rustc_middle::mir::Location,
+    ) {
+        if let rustc_middle::mir::Operand::Move(place) = operand
+            && let Some(local) = place.as_local()
+        {
+            self.0.gen_(local);
+        }
+    }
+    fn visit_terminator(
+        &mut self,
+        terminator: &rustc_middle::mir::Terminator<'tcx>,
+        _location: rustc_middle::mir::Location,
+    ) {
+        if let rustc_middle::mir::TerminatorKind::Drop { place, .. } = &terminator.kind
+            && let Some(local) = place.as_local()
+        {
+            self.0.gen_(local);
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum LocalStateVariant {
+    Uninitialized = 1,
+    Initialized,
+    Moved,
+}
+
+pub struct MaybeMovedOrDroppedLocals;
+impl MaybeMovedOrDroppedLocals {
+    pub fn get_maybe_moved_or_dropped<'tcx>(
+        self,
+        tcx: TyCtxt<'tcx>,
+        body: &Body<'tcx>,
+    ) -> HashMap<LocalId, Vec<RichLocation>> {
+        let mut visitor = MaybeMovedOrDroppedVisitor::new();
+        let results =
+            MaybeMovedOrDroppedLocals.iterate_to_fixpoint(tcx.into_rustc(), body.as_rustc(), None);
+        visit_reachable_results(body.as_rustc(), &results, &mut visitor);
+        visitor.collect()
+    }
+}
+impl<'tcx> Analysis<'tcx> for MaybeMovedOrDroppedLocals {
+    type Domain = MixedBitSet<rustc_middle::mir::Local>;
+    const NAME: &'static str = "maybe_moved_dropped";
+
+    fn bottom_value(&self, body: &rustc_middle::mir::Body<'tcx>) -> Self::Domain {
+        MixedBitSet::new_empty(body.local_decls.len())
+    }
+
+    fn initialize_start_block(
+        &self,
+        body: &rustc_middle::mir::Body<'tcx>,
+        state: &mut Self::Domain,
+    ) {
+    }
+
+    fn apply_primary_statement_effect(
+        &self,
+        state: &mut Self::Domain,
+        statement: &rustc_middle::mir::Statement<'tcx>,
+        location: rustc_middle::mir::Location,
+    ) {
+        MoveDropTransferFunction(state).visit_statement(statement, location);
+    }
+    fn apply_primary_terminator_effect<'mir>(
+        &self,
+        state: &mut Self::Domain,
+        terminator: &'mir rustc_middle::mir::Terminator<'tcx>,
+        location: rustc_middle::mir::Location,
+    ) -> rustc_middle::mir::TerminatorEdges<'mir, 'tcx> {
+        MoveDropTransferFunction(state).visit_terminator(terminator, location);
+        terminator.edges()
+    }
+}
+#[derive(Default)]
+struct MaybeMovedOrDroppedVisitor {
+    loc_maybe_moved_or_dropped: Vec<(RichLocation, LocalId)>,
+}
+impl<'a, 'tcx> MaybeMovedOrDroppedVisitor {
+    fn new() -> Self {
+        Self::default()
+    }
+    fn push(&mut self, rich_location: RichLocation, local_id: LocalId) {
+        self.loc_maybe_moved_or_dropped
+            .push((rich_location, local_id));
+    }
+    fn collect(self) -> HashMap<LocalId, Vec<RichLocation>> {
+        let mut result = HashMap::new();
+        for (rich_location, local_id) in self.loc_maybe_moved_or_dropped {
+            result
+                .entry(local_id)
+                .or_insert_with(Vec::new)
+                .push(rich_location);
+        }
+        result
+    }
+}
+impl<'tcx> ResultsVisitor<'tcx, MaybeMovedOrDroppedLocals>
+    for MaybeMovedOrDroppedVisitor
+{
+    fn visit_after_primary_statement_effect(
+        &mut self,
+        _analysis: &MaybeMovedOrDroppedLocals,
+        _state: &<MaybeMovedOrDroppedLocals as Analysis>::Domain,
+        _statement: &rustc_middle::mir::Statement<'tcx>,
+        _location: rustc_middle::mir::Location,
+    ) {
+    }
+    fn visit_after_primary_terminator_effect(
+        &mut self,
+        _analysis: &MaybeMovedOrDroppedLocals,
+        state: &<MaybeMovedOrDroppedLocals as Analysis>::Domain,
+        _terminator: &rustc_middle::mir::Terminator<'tcx>,
+        location: rustc_middle::mir::Location,
+    ) {
+        for local in state.iter() {
+            self.push(
+                RichLocation::Mid(AsRustc::from_rustc(location)),
+                AsRustc::from_rustc(local),
+            );
+        }
+    }
+}
 
 impl_as_rustc!(
     MoveData<'tcx>,
@@ -208,9 +343,9 @@ impl<'a, 'tcx> ResultsVisitor<'tcx, <MaybeUninitializedPlaces<'a, 'tcx> as AsRus
         statement: &rustc_middle::mir::Statement<'tcx>,
         location: rustc_middle::mir::Location,
     ) {
-            for mpi in state.iter() {
-                self.push(RichLocation::Mid(AsRustc::from_rustc(location)), mpi);
-            }
+        for mpi in state.iter() {
+            self.push(RichLocation::Mid(AsRustc::from_rustc(location)), mpi);
+        }
     }
     fn visit_after_early_terminator_effect(
         &mut self,
@@ -219,10 +354,13 @@ impl<'a, 'tcx> ResultsVisitor<'tcx, <MaybeUninitializedPlaces<'a, 'tcx> as AsRus
         statement: &rustc_middle::mir::Terminator<'tcx>,
         location: rustc_middle::mir::Location,
     ) {
-        if !matches!(statement.kind, rustc_middle::mir::TerminatorKind::UnwindResume) {
-        for mpi in state.iter() {
-            self.push(RichLocation::Start(AsRustc::from_rustc(location)), mpi);
-        }
+        if !matches!(
+            statement.kind,
+            rustc_middle::mir::TerminatorKind::UnwindResume
+        ) {
+            for mpi in state.iter() {
+                self.push(RichLocation::Start(AsRustc::from_rustc(location)), mpi);
+            }
         }
     }
     fn visit_after_primary_terminator_effect(
@@ -232,10 +370,13 @@ impl<'a, 'tcx> ResultsVisitor<'tcx, <MaybeUninitializedPlaces<'a, 'tcx> as AsRus
         statement: &rustc_middle::mir::Terminator<'tcx>,
         location: rustc_middle::mir::Location,
     ) {
-        if !matches!(statement.kind, rustc_middle::mir::TerminatorKind::UnwindResume) {
-        for mpi in state.iter() {
-            self.push(RichLocation::Mid(AsRustc::from_rustc(location)), mpi);
-        }
+        if !matches!(
+            statement.kind,
+            rustc_middle::mir::TerminatorKind::UnwindResume
+        ) {
+            for mpi in state.iter() {
+                self.push(RichLocation::Mid(AsRustc::from_rustc(location)), mpi);
+            }
         }
     }
 }
