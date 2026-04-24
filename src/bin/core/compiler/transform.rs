@@ -132,7 +132,7 @@ impl<'tcx> TyCtxt<'tcx> {
                     .collect();
                 let terminator = bb_data.terminator.as_ref().and_then(|terminator| {
                     let span = AsRustc::from_rustc(terminator.source_info.span);
-                    let pass = range_from_span(&source_info.source, span, source_info.offset).filter(|v| if v.size() < 15 {true} else {eprintln!("{:?}, {:?}", terminator.kind, v);false});
+                    let pass = range_from_span(&source_info.source, span, source_info.offset).filter(|v| if v.size() < 30 {true} else {eprintln!("{:?}, {:?}", terminator.kind, v);false});
                     match &terminator.kind {
                         TerminatorKind::Drop { place, .. } => {
                             pass.map(

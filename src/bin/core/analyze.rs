@@ -116,6 +116,8 @@ impl MirAnalyzer {
                 dataflow_analyzer::get_maybe_initialized(tcx, &body, &basic_blocks);
             let maybe_uninit_range =
                 dataflow_analyzer::get_maybe_uninitialized(tcx, &body, &basic_blocks);
+            let maybe_uninit_range =
+                dataflow_analyzer::get_maybe_initialized(tcx, &body, &basic_blocks);
 
             let analyzer = Box::pin(async move {
                 log::debug!("start re-computing borrow check with dump: true");
