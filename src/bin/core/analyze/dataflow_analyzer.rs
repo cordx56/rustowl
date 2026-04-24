@@ -18,6 +18,7 @@ pub fn get_maybe_lives<'tcx>(
         .collect()
 }
 
+/*
 pub fn get_maybe_initialized<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &Body<'tcx>,
@@ -35,6 +36,7 @@ pub fn get_maybe_initialized<'tcx>(
         })
         .collect()
 }
+*/
 
 pub fn get_maybe_uninitialized<'tcx>(
     tcx: TyCtxt<'tcx>,
@@ -64,4 +66,24 @@ pub fn get_maybe_uninitialized<'tcx>(
         })
         .collect()
     */
+}
+
+pub fn get_maybe_initialized<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    basic_blocks: &[MirBasicBlock],
+) -> HashMap<LocalId, Vec<Range>> {
+    let mut result = HashMap::new();
+    for (location, states) in walk_cfg(body) {
+        for (local, state) in states.iter() {
+            if state.len() == 1 && state.contains(&LocalStateVariant::Initialized) {
+                let range = rich_locations_to_ranges(basic_blocks, &[RichLocation::Mid(location)]);
+                result
+                    .entry(*local)
+                    .or_insert_with(Vec::new)
+                    .extend_from_slice(&range);
+            }
+        }
+    }
+    result
 }
