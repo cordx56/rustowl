@@ -1,5 +1,5 @@
 use rustowl::models::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 
@@ -32,14 +32,12 @@ macro_rules! impl_as_rustc {
 #[macro_use]
 mod borrowck;
 #[macro_use]
-mod dataflow_analysis;
-#[macro_use]
 mod hash;
 #[macro_use]
 mod transform;
 
 pub use borrowck::*;
-pub use dataflow_analysis::*;
+//pub use dataflow_analysis::*;
 pub use hash::Hasher;
 pub use transform::*;
 
@@ -113,25 +111,24 @@ impl<'tcx> TyCtxt<'tcx> {
     }
 
     #[rustversion::since(1.94.0)]
-    pub fn source_info_from_span(&self, span: Span) -> SourceInfo {
+    pub fn source_info_from_span(&self, span: Span) -> Option<SourceInfo> {
         let source_map = self.as_rustc().sess.source_map();
         let file_name = source_map.span_to_filename(*span.as_rustc());
         let source_file = source_map.get_source_file(&file_name).unwrap();
         let offset = source_file.start_pos.0;
 
-        let file_name = source_map.path_mapping().to_real_filename(
-            source_map.working_dir(),
-            file_name.into_local_path().unwrap(),
-        );
+        let file_name = source_map
+            .path_mapping()
+            .to_real_filename(source_map.working_dir(), file_name.into_local_path()?);
         let (_work_dir, path) =
             file_name.embeddable_name(rustc_span::RemapPathScopeComponents::DIAGNOSTICS);
         let path = path.to_path_buf();
         let source = std::fs::read_to_string(&path).unwrap();
-        SourceInfo {
+        Some(SourceInfo {
             offset,
             path,
             source,
-        }
+        })
     }
     #[rustversion::before(1.94.0)]
     pub fn source_info_from_span(&self, span: Span) -> SourceInfo {
@@ -172,7 +169,7 @@ impl_as_rustc!(
 );
 
 impl<'tcx> Body<'tcx> {
-    pub fn get_local_decls(&self) -> HashMap<LocalId, String> {
+    pub fn get_local_decls(&self) -> BTreeMap<LocalId, String> {
         self.0
             .local_decls
             .iter_enumerated()
@@ -183,7 +180,7 @@ impl<'tcx> Body<'tcx> {
     pub fn collect_user_variables(
         &self,
         source_info: &SourceInfo,
-    ) -> HashMap<LocalId, (Range, String)> {
+    ) -> BTreeMap<LocalId, (Range, String)> {
         self.0
             .var_debug_info
             // this cannot be par_iter since body cannot send

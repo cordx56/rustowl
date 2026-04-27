@@ -403,7 +403,9 @@ impl utils::MirVisitor for SelectLocal {
         if let MirTerminator::Call {
             destination_local,
             fn_span,
+            ..
         } = term
+            && let Some(fn_span) = fn_span
         {
             self.select(SelectReason::Call, *destination_local, *fn_span);
         }
@@ -809,12 +811,14 @@ impl utils::MirVisitor for CalcDecos {
         if let MirTerminator::Call {
             destination_local,
             fn_span,
+            ..
         } = term
             && self.locals.contains(destination_local)
         {
             let mut i = 0;
             for deco in &self.decorations {
                 if let Deco::Call { range, .. } = deco
+                    && let Some(fn_span) = fn_span
                     && utils::is_super_range(*fn_span, *range)
                 {
                     return;
@@ -826,6 +830,7 @@ impl utils::MirVisitor for CalcDecos {
                     _ => None,
                 };
                 if let Some(range) = range
+                    && let Some(fn_span) = fn_span
                     && utils::is_super_range(*range, *fn_span)
                 {
                     self.decorations.remove(i);
@@ -833,12 +838,14 @@ impl utils::MirVisitor for CalcDecos {
                 }
                 i += 1;
             }
-            self.decorations.push(Deco::Call {
-                local: *destination_local,
-                range: *fn_span,
-                hover_text: "function call".to_string(),
-                overlapped: false,
-            });
+            if let Some(fn_span) = fn_span {
+                self.decorations.push(Deco::Call {
+                    local: *destination_local,
+                    range: *fn_span,
+                    hover_text: "function call".to_string(),
+                    overlapped: false,
+                });
+            }
         }
     }
 }
