@@ -126,6 +126,17 @@ pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
     }
 }
 
+pub fn range_is_multiline(s: &str, range: Range) -> bool {
+    let source_clean = s.replace('\r', "");
+    let from = range.from().0 as usize;
+    let until = range.until().0 as usize;
+    source_clean
+        .chars()
+        .enumerate()
+        .filter(|(i, _)| from <= *i && *i < until)
+        .any(|(_, c)| c == '\n')
+}
+
 pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
     let mut line = 0;
     let mut col = 0;

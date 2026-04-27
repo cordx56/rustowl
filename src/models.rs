@@ -285,7 +285,8 @@ pub enum MirDecl {
         mutable_borrow: Vec<Range>,
         drop: bool,
         drop_range: Vec<Range>,
-        maybe_live_at: Vec<Range>,
+        certainly_live_at: Vec<Range>,
+        maybe_init_at: Vec<Range>,
         must_live_at: Vec<Range>,
         /// Range from StorageLive to StorageDead for this variable
         storage_range: Vec<Range>,
@@ -298,7 +299,8 @@ pub enum MirDecl {
         mutable_borrow: Vec<Range>,
         drop: bool,
         drop_range: Vec<Range>,
-        maybe_live_at: Vec<Range>,
+        certainly_live_at: Vec<Range>,
+        maybe_init_at: Vec<Range>,
         must_live_at: Vec<Range>,
         /// Range from StorageLive to StorageDead for this variable
         storage_range: Vec<Range>,

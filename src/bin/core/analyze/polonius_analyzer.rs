@@ -7,7 +7,7 @@ use super::*;
 pub fn get_accurate_live(
     datafrog: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
-    basic_blocks: &[MirBasicBlock],
+    location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
     get_range(
         datafrog
@@ -15,7 +15,7 @@ pub fn get_accurate_live(
             .iter()
             .map(|(p, v)| (*p, v.iter().copied())),
         location_table,
-        basic_blocks,
+        location_ranges,
     )
 }
 
@@ -24,7 +24,7 @@ pub fn get_borrow_live(
     datafrog: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
     borrow_map: &BorrowMap,
-    basic_blocks: &[MirBasicBlock],
+    location_ranges: &LocationRanges,
 ) -> (HashMap<LocalId, Vec<Range>>, HashMap<LocalId, Vec<Range>>) {
     let output = datafrog;
     let mut shared_borrows = HashMap::new();
@@ -55,7 +55,7 @@ pub fn get_borrow_live(
             .map(|(local, locations)| {
                 (
                     local,
-                    utils::eliminated_ranges(rich_locations_to_ranges(basic_blocks, &locations)),
+                    utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, &locations)),
                 )
             })
             .collect(),
@@ -64,7 +64,7 @@ pub fn get_borrow_live(
             .map(|(local, locations)| {
                 (
                     local,
-                    utils::eliminated_ranges(rich_locations_to_ranges(basic_blocks, &locations)),
+                    utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, &locations)),
                 )
             })
             .collect(),
@@ -75,7 +75,7 @@ pub fn get_must_live(
     output: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
     borrow_map: &BorrowMap,
-    basic_blocks: &[MirBasicBlock],
+    location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
     // obtain a map that borrow index -> local
     let mut borrow_local = HashMap::new();
@@ -158,7 +158,7 @@ pub fn get_must_live(
         (
             *local,
             utils::eliminated_ranges(rich_locations_to_ranges(
-                basic_blocks,
+                location_ranges,
                 &locations
                     .iter()
                     .map(|v| location_table.get_rich_location(v))
@@ -172,7 +172,7 @@ pub fn get_must_live(
 pub fn drop_range(
     datafrog: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
-    basic_blocks: &[MirBasicBlock],
+    location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
     get_range(
         datafrog
@@ -180,14 +180,14 @@ pub fn drop_range(
             .iter()
             .map(|(p, v)| (*p, v.iter().copied())),
         location_table,
-        basic_blocks,
+        location_ranges,
     )
 }
 
 pub fn get_range(
     live_on_entry: impl Iterator<Item = (Point, impl Iterator<Item = LocalId>)>,
     location_table: &PoloniusLocationTable,
-    basic_blocks: &[MirBasicBlock],
+    location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
     let mut local_locs = HashMap::new();
     for (point, locals) in live_on_entry {
@@ -204,7 +204,7 @@ pub fn get_range(
         .map(|(local, locations)| {
             (
                 local,
-                utils::eliminated_ranges(rich_locations_to_ranges(basic_blocks, &locations)),
+                utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, &locations)),
             )
         })
         .collect()
