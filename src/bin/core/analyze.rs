@@ -4,7 +4,7 @@ mod polonius_analyzer;
 use super::cache;
 pub use super::compiler::*;
 use rustowl::models::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -26,8 +26,8 @@ pub enum MirAnalyzerInitResult {
 
 pub struct MirAnalyzer {
     file_path: PathBuf,
-    local_decls: HashMap<LocalId, String>,
-    user_vars: HashMap<LocalId, (Range, String)>,
+    local_decls: BTreeMap<LocalId, String>,
+    user_vars: BTreeMap<LocalId, (Range, String)>,
     input: PoloniusInput,
     basic_blocks: Vec<MirBasicBlock>,
     fn_id: DefId,
@@ -50,7 +50,11 @@ impl MirAnalyzer {
 
         let facts = tcx.get_borrowck_facts(fn_id);
         for (fn_id, mut facts) in facts {
-            let source_info = tcx.source_info_from_span(facts.body().span());
+            let source_info = if let Some(v) = tcx.source_info_from_span(facts.body().span()) {
+                v
+            } else {
+                continue;
+            };
             let name = tcx.def_name(fn_id);
             log::debug!("facts of {fn_id:?} ({name}) prepared; start analyze...");
 
@@ -113,10 +117,6 @@ impl MirAnalyzer {
             let input = facts.polonius_input();
             let location_table = facts.location_table();
 
-            log::warn!("start CFG based liveness check: {fn_id:?}");
-            let cfg_analysis_output = CfgAnalyzer::walk_cfg(&body);
-            log::warn!("CFG based liveness check finished");
-
             let analyzer = Box::pin(async move {
                 log::debug!("start re-computing borrow check with dump: true");
                 // compute accurate region, which may eliminate invalid region
@@ -147,6 +147,10 @@ impl MirAnalyzer {
                     polonius_analyzer::drop_range(&output, &location_table, &location_ranges);
 
                 // CFG based liveness analysis
+                log::warn!("start CFG based liveness check");
+                let cfg_analysis_output =
+                    dataflow_analyzer::CfgAnalyzer::walk_cfg(&basic_blocks, &local_decls);
+                log::warn!("CFG based liveness check finished");
                 let certainly_live_range =
                     dataflow_analyzer::get_lives(&cfg_analysis_output, &location_ranges);
                 let maybe_init_range = dataflow_analyzer::get_maybe_initialized(
@@ -159,7 +163,7 @@ impl MirAnalyzer {
                     local_decls,
                     input,
                     user_vars,
-                    basic_blocks,
+                    basic_blocks: basic_blocks.values().cloned().collect(),
                     fn_id,
                     name,
                     file_hash,

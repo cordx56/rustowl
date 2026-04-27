@@ -1,6 +1,7 @@
 use super::*;
 use rustowl::utils;
 
+use rustc_data_structures::indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
 /// RegionEraser to erase region variables from MIR body
@@ -38,7 +39,7 @@ impl<'tcx> TyCtxt<'tcx> {
         body: &Body<'tcx>,
         source_info: &SourceInfo,
         location_ranges: &LocationRanges,
-    ) -> Vec<MirBasicBlock> {
+    ) -> IndexMap<BasicBlockId, MirBasicBlock> {
         use rustc_middle::mir::*;
 
         body.as_rustc()
@@ -49,7 +50,7 @@ impl<'tcx> TyCtxt<'tcx> {
                 let statements = statements
                     .iter()
                     .enumerate()
-                    .filter_map(|(statement_index, statement)| {
+                    .map(|(statement_index, statement)| {
                         let location = Location {
                             block,
                             statement_index,
@@ -58,18 +59,14 @@ impl<'tcx> TyCtxt<'tcx> {
                             .get(&AsRustc::from_rustc(location))
                             .map(|v| *v);
                         match &statement.kind {
-                            StatementKind::StorageLive(local) => {
-                                range.map(|range| MirStatement::StorageLive {
-                                    target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
-                                    range,
-                                })
-                            }
-                            StatementKind::StorageDead(local) => {
-                                range.map(|range| MirStatement::StorageDead {
-                                    target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
-                                    range,
-                                })
-                            }
+                            StatementKind::StorageLive(local) => MirStatement::StorageLive {
+                                target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
+                                range,
+                            },
+                            StatementKind::StorageDead(local) => MirStatement::StorageDead {
+                                target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
+                                range,
+                            },
                             StatementKind::Assign(v) => {
                                 let (place, rval) = &**v;
                                 let target_local_index = place.local.as_u32();
@@ -100,17 +97,17 @@ impl<'tcx> TyCtxt<'tcx> {
                                     }
                                     _ => None,
                                 };
-                                range.map(|range| MirStatement::Assign {
+                                MirStatement::Assign {
                                     target_local: FnLocal::new(target_local_index, fn_id.as_u32()),
                                     range,
                                     rval: rv,
-                                })
+                                }
                             }
-                            _ => range.map(|range| MirStatement::Other { range }),
+                            _ => MirStatement::Other { range },
                         }
                     })
                     .collect();
-                let terminator = bb_data.terminator.as_ref().and_then(|terminator| {
+                let terminator = bb_data.terminator.as_ref().map(|terminator| {
                     let location = Location {
                         block,
                         statement_index: bb_data.statements.len(),
@@ -118,38 +115,45 @@ impl<'tcx> TyCtxt<'tcx> {
                     let range = location_ranges
                         .get(&AsRustc::from_rustc(location))
                         .map(|v| *v);
+                    let successors = terminator
+                        .successors()
+                        .map(|v| BasicBlockId(v.as_usize()))
+                        .collect();
                     match &terminator.kind {
-                        TerminatorKind::Drop { place, .. } => {
-                            range.map(|range| MirTerminator::Drop {
-                                local: FnLocal::new(place.local.as_u32(), fn_id.as_u32()),
-                                range,
-                            })
-                        }
+                        TerminatorKind::Drop { place, .. } => MirTerminator::Drop {
+                            local: FnLocal::new(place.local.as_u32(), fn_id.as_u32()),
+                            range,
+                            successors,
+                        },
                         TerminatorKind::Call {
                             destination,
                             fn_span,
                             ..
                         } => {
-                            let range = range_from_span(
+                            let fn_span = range_from_span(
                                 source_info.source(),
                                 AsRustc::from_rustc(*fn_span),
                                 source_info.offset,
                             );
-                            range.map(|fn_span| MirTerminator::Call {
+                            MirTerminator::Call {
                                 destination_local: FnLocal::new(
                                     destination.local.as_u32(),
                                     fn_id.as_u32(),
                                 ),
                                 fn_span,
-                            })
+                                successors,
+                            }
                         }
-                        _ => range.map(|range| MirTerminator::Other { range }),
+                        _ => MirTerminator::Other { range, successors },
                     }
                 });
-                MirBasicBlock {
-                    statements,
-                    terminator,
-                }
+                (
+                    BasicBlockId(block.as_usize()),
+                    MirBasicBlock {
+                        statements,
+                        terminator,
+                    },
+                )
             })
             .collect()
     }
