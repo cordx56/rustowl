@@ -1,108 +1,47 @@
 use super::*;
-use rustc_span::Pos;
 use rustowl::utils;
+use std::collections::{HashMap, HashSet};
 
-pub fn get_maybe_lives<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &Body<'tcx>,
-    basic_blocks: &[MirBasicBlock],
+/// Returns ranges where the given local is certainly initialized.
+pub fn get_lives<'tcx>(
+    cfg_analysis_output: &CfgAnalysisOutput,
+    location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
-    MaybeLiveLocals::new()
-        .get_maybe_lives(tcx, body)
-        .into_iter()
-        .map(|(local_id, rich_locations)| {
-            (
-                local_id,
-                utils::eliminated_ranges(rich_locations_to_ranges(basic_blocks, &rich_locations)),
-            )
-        })
-        .collect()
+    check_cfg_analysis_result(cfg_analysis_output, location_ranges, |state| {
+        state.len() == 1 && state.contains(&LocalStateVariant::Initialized)
+    })
 }
 
-/*
+/// Returns ranges where the given local is provably initialized
+/// (not moved, dropped, or uninitialized) on every reaching path.
+///
+/// This will be useful for inspecting variables' resource available range.
 pub fn get_maybe_initialized<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &Body<'tcx>,
-    basic_blocks: &[MirBasicBlock],
+    cfg_analysis_output: &CfgAnalysisOutput,
+    location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
-    let move_data = MoveData::gather_moves(tcx, body);
-    MaybeInitializedPlaces::new(tcx, body, &move_data)
-        .get_maybe_initialized(tcx, body, &move_data)
-        .into_iter()
-        .map(|(local_id, rich_locations)| {
-            (
-                local_id,
-                utils::eliminated_ranges(rich_locations_to_ranges(basic_blocks, &rich_locations)),
-            )
-        })
-        .collect()
-}
-*/
-
-pub fn get_maybe_uninitialized<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &Body<'tcx>,
-    basic_blocks: &[MirBasicBlock],
-) -> HashMap<LocalId, Vec<Range>> {
-    MaybeMovedOrDroppedLocals
-        .get_maybe_moved_or_dropped(tcx, body)
-        .into_iter()
-        .map(|(local_id, rich_locations)| {
-            (
-                local_id,
-                utils::eliminated_ranges(rich_locations_to_ranges(basic_blocks, &rich_locations)),
-            )
-        })
-        .collect()
-    /*
-    let move_data = MoveData::gather_moves(tcx, body);
-    MaybeUninitializedPlaces::new(tcx, body, &move_data)
-        .get_maybe_uninitialized(tcx, body, &move_data)
-        .into_iter()
-        .map(|(local_id, rich_locations)| {
-            (
-                local_id,
-                utils::eliminated_ranges(rich_locations_to_ranges(basic_blocks, &rich_locations)),
-            )
-        })
-        .collect()
-    */
+    check_cfg_analysis_result(cfg_analysis_output, location_ranges, |state| {
+        state.contains(&LocalStateVariant::Initialized)
+    })
 }
 
-pub fn get_maybe_initialized<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &Body<'tcx>,
-    basic_blocks: &[MirBasicBlock],
+fn check_cfg_analysis_result(
+    cfg_analysis_output: &CfgAnalysisOutput,
+    location_ranges: &LocationRanges,
+    eval: impl Fn(&HashSet<LocalStateVariant>) -> bool,
 ) -> HashMap<LocalId, Vec<Range>> {
-    //let mut result = HashMap::new();
-    let mut var_initialized = HashMap::new();
-    for (location, states) in walk_cfg(body) {
+    let mut var_initialized: HashMap<LocalId, Vec<Range>> = HashMap::new();
+    for (location, states) in cfg_analysis_output {
         for (local, state) in states.iter() {
-            if state.len() == 1 && state.contains(&LocalStateVariant::Initialized) {
-                var_initialized
-                    .entry(*local)
-                    .or_insert_with(Vec::new)
-                    .push(RichLocation::Mid(location));
-                /*
-                let range = rich_locations_to_ranges(basic_blocks, &[RichLocation::Mid(location)]);
-                let span = body.as_rustc().source_info(location.into_rustc()).span;
-                let loc_low = Loc::new()
-                if let Some(range) = Range::new(span.lo().to_u32().into(), span.hi().to_u32().into()) {
-                    eprintln!("{range:?}");
-                    if range.size() < 180 {
-                result
-                    .entry(*local)
-                    .or_insert_with(Vec::new)
-                    .push(range);
-                    }
-                }
-                */
+            if eval(state)
+                && let Some(range) = location_ranges.get(location)
+            {
+                var_initialized.entry(*local).or_default().push(*range);
             }
         }
     }
     var_initialized
-        .iter()
-        .map(|(var, locs)| (*var, rich_locations_to_ranges(basic_blocks, locs)))
+        .into_iter()
+        .map(|(var, ranges)| (var, utils::eliminated_ranges(ranges)))
         .collect()
-    //result
 }

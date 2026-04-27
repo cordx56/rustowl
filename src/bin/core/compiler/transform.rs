@@ -1,4 +1,5 @@
 use super::*;
+use rustowl::utils;
 
 use std::collections::{HashMap, HashSet};
 
@@ -36,50 +37,38 @@ impl<'tcx> TyCtxt<'tcx> {
         fn_id: DefId,
         body: &Body<'tcx>,
         source_info: &SourceInfo,
+        location_ranges: &LocationRanges,
     ) -> Vec<MirBasicBlock> {
         use rustc_middle::mir::*;
 
-        let source_map = self.as_rustc().sess.source_map();
         body.as_rustc()
             .basic_blocks
             .iter_enumerated()
             .map(|(block, bb_data)| {
-                let statements: Vec<_> = bb_data
-                    .statements
-                    .iter()
-                    // `source_map` is not Send
-                    //.filter(|stmt| stmt.source_info.span.is_visible(source_map))
-                    .collect();
+                let statements: Vec<_> = bb_data.statements.iter().collect();
                 let statements = statements
                     .iter()
                     .enumerate()
                     .filter_map(|(statement_index, statement)| {
-                        let location = rustc_middle::mir::Location {block, statement_index};
-                        let span = body.as_rustc().source_info(location).span;
-                        //let span = AsRustc::from_rustc(statement.source_info.span);
-                        let mut range = range_from_span(&source_info.source, AsRustc::from_rustc(span), source_info.offset);
-                        if let Some(r) = range {
-                            if 20 < r.size() {
-                                eprintln!("{:?}, {:?}", statement, range);
-                                range = None;
-                            }
-                        }
+                        let location = Location {
+                            block,
+                            statement_index,
+                        };
+                        let range = location_ranges
+                            .get(&AsRustc::from_rustc(location))
+                            .map(|v| *v);
                         match &statement.kind {
                             StatementKind::StorageLive(local) => {
-                                range.map(
-                                    |range| MirStatement::StorageLive {
-                                        target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
-                                        range,
-                                    },
-                                )
+                                range.map(|range| MirStatement::StorageLive {
+                                    target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
+                                    range,
+                                })
                             }
                             StatementKind::StorageDead(local) => {
-                                range.map(
-                                    |range| MirStatement::StorageDead {
-                                        target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
-                                        range,
-                                    },
-                                )
+                                range.map(|range| MirStatement::StorageDead {
+                                    target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
+                                    range,
+                                })
                             }
                             StatementKind::Assign(v) => {
                                 let (place, rval) = &**v;
@@ -87,78 +76,74 @@ impl<'tcx> TyCtxt<'tcx> {
                                 let rv = match rval {
                                     Rvalue::Use(Operand::Move(p)) => {
                                         let local = p.local;
-                                        range
-                                        .map(|range| {
-                                            MirRval::Move {
-                                                target_local: FnLocal::new(
-                                                    local.as_u32(),
-                                                    fn_id.as_u32(),
-                                                ),
-                                                range,
-                                            }
+                                        range.map(|range| MirRval::Move {
+                                            target_local: FnLocal::new(
+                                                local.as_u32(),
+                                                fn_id.as_u32(),
+                                            ),
+                                            range,
                                         })
                                     }
                                     Rvalue::Ref(_region, kind, place) => {
                                         let mutable = matches!(kind, BorrowKind::Mut { .. });
                                         let local = place.local;
                                         let outlive = None;
-                                        range
-                                        .map(|range| {
-                                            MirRval::Borrow {
-                                                target_local: FnLocal::new(
-                                                    local.as_u32(),
-                                                    fn_id.as_u32(),
-                                                ),
-                                                range,
-                                                mutable,
-                                                outlive,
-                                            }
+                                        range.map(|range| MirRval::Borrow {
+                                            target_local: FnLocal::new(
+                                                local.as_u32(),
+                                                fn_id.as_u32(),
+                                            ),
+                                            range,
+                                            mutable,
+                                            outlive,
                                         })
                                     }
                                     _ => None,
                                 };
-                                range.map(
-                                    |range| MirStatement::Assign {
-                                        target_local: FnLocal::new(
-                                            target_local_index,
-                                            fn_id.as_u32(),
-                                        ),
-                                        range,
-                                        rval: rv,
-                                    },
-                                )
+                                range.map(|range| MirStatement::Assign {
+                                    target_local: FnLocal::new(target_local_index, fn_id.as_u32()),
+                                    range,
+                                    rval: rv,
+                                })
                             }
-                            _ => range
-                                .map(|range| MirStatement::Other { range }),
+                            _ => range.map(|range| MirStatement::Other { range }),
                         }
                     })
                     .collect();
                 let terminator = bb_data.terminator.as_ref().and_then(|terminator| {
-                    let span = AsRustc::from_rustc(terminator.source_info.span);
-                    let range = range_from_span(&source_info.source, span, source_info.offset).filter(|v| if v.size() < 15 {true} else {eprintln!("{:?}, {:?}", terminator.kind, v);false});
+                    let location = Location {
+                        block,
+                        statement_index: bb_data.statements.len(),
+                    };
+                    let range = location_ranges
+                        .get(&AsRustc::from_rustc(location))
+                        .map(|v| *v);
                     match &terminator.kind {
                         TerminatorKind::Drop { place, .. } => {
-                            range.map(
-                                |range| MirTerminator::Drop {
-                                    local: FnLocal::new(place.local.as_u32(), fn_id.as_u32()),
-                                    range,
-                                },
-                            )
+                            range.map(|range| MirTerminator::Drop {
+                                local: FnLocal::new(place.local.as_u32(), fn_id.as_u32()),
+                                range,
+                            })
                         }
                         TerminatorKind::Call {
                             destination,
                             fn_span,
                             ..
-                        } =>
-                        range.map(|fn_span| MirTerminator::Call {
-                            destination_local: FnLocal::new(
-                                destination.local.as_u32(),
-                                fn_id.as_u32(),
-                            ),
-                            fn_span,
-                        }),
-                        _ => range
-                            .map(|range| MirTerminator::Other { range }),
+                        } => {
+                            let range = range_from_span(
+                                source_info.source(),
+                                AsRustc::from_rustc(*fn_span),
+                                source_info.offset,
+                            );
+                            range.map(|fn_span| MirTerminator::Call {
+                                destination_local: FnLocal::new(
+                                    destination.local.as_u32(),
+                                    fn_id.as_u32(),
+                                ),
+                                fn_span,
+                            })
+                        }
+                        _ => range.map(|range| MirTerminator::Other { range }),
                     }
                 });
                 MirBasicBlock {
@@ -220,48 +205,86 @@ pub enum RichLocation {
     Mid(Location),
 }
 
-fn statement_location_to_range(
-    basic_blocks: &[MirBasicBlock],
-    basic_block: u32,
-    statement: u32,
-) -> Option<Range> {
-    basic_blocks.get(basic_block as usize).and_then(|bb| {
-        if (statement as usize) < bb.statements.len() {
-            /*
-            if let Some(stmt) = bb.statements.get(statement as usize) {
-                eprintln!("{stmt:?}");
+/// [`Location`] to [`Range`] map
+pub struct LocationRanges {
+    map: HashMap<Location, Range>,
+}
+impl LocationRanges {
+    /// Build a [`Location`] -> source [`Range`] map from the MIR body.
+    pub fn compute(body: &Body, source_info: &SourceInfo) -> Self {
+        use rustc_middle::mir::{StatementKind, TerminatorKind};
+
+        let user_locals = body.collect_user_variables(source_info);
+        let mut map = HashMap::new();
+        for (block, bb_data) in body.as_rustc().basic_blocks.iter_enumerated() {
+            let stmt_count = bb_data.statements.len();
+            let total = stmt_count + bb_data.terminator.as_ref().map(|_| 1).unwrap_or(0);
+            for statement_index in 0..total {
+                let location = rustc_middle::mir::Location {
+                    block,
+                    statement_index,
+                };
+                let span = body.as_rustc().source_info(location).span.source_callsite();
+                let Some(range) = range_from_span(
+                    &source_info.source,
+                    AsRustc::from_rustc(span),
+                    source_info.offset,
+                ) else {
+                    continue;
+                };
+
+                // check whether the statement touches a user local variable
+                let touches_user_local = if statement_index < stmt_count {
+                    match &bb_data.statements[statement_index].kind {
+                        StatementKind::StorageLive(local) | StatementKind::StorageDead(local) => {
+                            user_locals.contains_key(&AsRustc::from_rustc(*local))
+                        }
+                        StatementKind::Assign(boxed) => {
+                            user_locals.contains_key(&AsRustc::from_rustc(boxed.0.local))
+                        }
+                        _ => false,
+                    }
+                } else {
+                    match bb_data.terminator.as_ref().map(|t| &t.kind) {
+                        Some(TerminatorKind::Drop { place, .. }) => {
+                            user_locals.contains_key(&AsRustc::from_rustc(place.local))
+                        }
+                        Some(TerminatorKind::Call { .. }) => {
+                            // A return value of method call can be important if it is assigned to
+                            // a temporary variable, so we always visualize them.
+                            true
+                        }
+                        _ => false,
+                    }
+                };
+
+                // If a range spans multiple lines, we ignore the range which may be annoying,
+                // except for a user variable related one.
+                if !touches_user_local && utils::range_is_multiline(&source_info.source, range) {
+                    continue;
+                }
+
+                map.insert(AsRustc::from_rustc(location), range);
             }
-            match bb.statements.get(statement as usize) {
-                Some(MirStatement::Other { range }) => {
-                    //eprintln!("{range:?}");
-                    Some(*range)},
-                _ => None,
-            }
-            */
-            bb.statements.get(statement as usize).map(|v| v.range())
-        } else {
-            match bb.terminator.as_ref() {
-                Some(MirTerminator::Drop { range, .. }) => Some(*range),
-                Some(MirTerminator::Call { fn_span, .. }) => Some(*fn_span),
-                _ => None,
-            }
-            //bb.terminator.as_ref().map(|v| v.range())
         }
-    })
+        Self { map }
+    }
+    pub fn get(&self, location: &Location) -> Option<&Range> {
+        self.map.get(location)
+    }
 }
 
 pub fn rich_locations_to_ranges(
-    basic_blocks: &[MirBasicBlock],
+    location_ranges: &LocationRanges,
     locations: &[RichLocation],
 ) -> Vec<Range> {
-    // Convert each RichLocation to its statement's range and collect all ranges
     locations
-        .par_iter()
+        .iter()
         .filter_map(|rich| {
             let loc = match rich {
                 RichLocation::Start(l) | RichLocation::Mid(l) => l,
             };
-            statement_location_to_range(basic_blocks, loc.block(), loc.statement())
+            location_ranges.get(loc).copied()
         })
         .collect()
 }

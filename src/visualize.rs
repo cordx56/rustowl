@@ -222,6 +222,8 @@ enum DecoType {
     Call,
     SharedMut,
     Outlive,
+    CertainlyLive,
+    MaybeInitialized,
 }
 
 impl DecoType {
@@ -242,6 +244,8 @@ impl DecoType {
             DecoType::Call => Self::COLOR_CALL,
             DecoType::SharedMut => Self::COLOR_SHARED,
             DecoType::Outlive => Self::COLOR_OUTLIVE,
+            DecoType::CertainlyLive => Self::COLOR_LIFETIME,
+            DecoType::MaybeInitialized => Self::COLOR_LIFETIME,
         }
     }
 
@@ -262,6 +266,25 @@ impl DecoType {
             DecoType::Call => Self::SHORT_CALL,
             DecoType::SharedMut => Self::SHORT_SHARED,
             DecoType::Outlive => Self::SHORT_OUTLIVE,
+            DecoType::CertainlyLive => Self::SHORT_LIFETIME,
+            DecoType::MaybeInitialized => Self::SHORT_LIFETIME,
+        }
+    }
+
+    const UNDERLINE_WAVY: char = '~';
+    const UNDERLINE_SOLID: char = '-';
+
+    fn underline_type(&self) -> char {
+        match self {
+            DecoType::Lifetime => Self::UNDERLINE_WAVY,
+            DecoType::ImmBorrow => Self::UNDERLINE_WAVY,
+            DecoType::MutBorrow => Self::UNDERLINE_WAVY,
+            DecoType::Move => Self::UNDERLINE_WAVY,
+            DecoType::Call => Self::UNDERLINE_WAVY,
+            DecoType::SharedMut => Self::UNDERLINE_WAVY,
+            DecoType::Outlive => Self::UNDERLINE_WAVY,
+            DecoType::CertainlyLive => Self::UNDERLINE_WAVY,
+            DecoType::MaybeInitialized => Self::UNDERLINE_SOLID,
         }
     }
 }
@@ -308,6 +331,8 @@ impl<'a> CliRenderer<'a> {
                 Deco::Call { range, .. } => (*range, DecoType::Call),
                 Deco::SharedMut { range, .. } => (*range, DecoType::SharedMut),
                 Deco::Outlive { range, .. } => (*range, DecoType::Outlive),
+                Deco::CertainlyLive { range, .. } => (*range, DecoType::CertainlyLive),
+                Deco::MaybeInitialized { range, .. } => (*range, DecoType::MaybeInitialized),
             };
 
             let (start_line, start_col) = utils::index_to_line_char(self.source, range.from());
@@ -389,6 +414,10 @@ impl<'a> CliRenderer<'a> {
 
         // Print each decoration type on its own line
         for deco_type in types {
+            // now lifetime is replaced by certainly live
+            if matches!(deco_type, DecoType::Lifetime) {
+                continue;
+            }
             let ranges = &by_type[&deco_type];
             let mut sorted_ranges = ranges.clone();
             sorted_ranges.sort_by_key(|(start, _)| *start);
@@ -399,7 +428,7 @@ impl<'a> CliRenderer<'a> {
 
             for (start, end) in &sorted_ranges {
                 for i in (*start as usize)..=(*end as usize).min(underline_chars.len() - 1) {
-                    underline_chars[i] = '~';
+                    underline_chars[i] = deco_type.underline_type();
                 }
             }
 
@@ -540,6 +569,7 @@ pub fn show_variable(
 fn print_legend() {
     let cyan = colors::CYAN;
     let lifetime = DecoType::COLOR_LIFETIME;
+    let maybe_init = DecoType::COLOR_LIFETIME;
     let immutable = DecoType::COLOR_IMMUTABLE;
     let mutable = DecoType::COLOR_MUTABLE;
     let mov = DecoType::COLOR_MOVE;
@@ -547,7 +577,11 @@ fn print_legend() {
 
     println!("{cyan}Legend:{cyan:#}");
     println!(
-        "  {lifetime}~~~{lifetime:#} lifetime ({})",
+        "  {lifetime}~~~{lifetime:#} certainly lives (lifetime) ({})",
+        DecoType::SHORT_LIFETIME,
+    );
+    println!(
+        "  {maybe_init}---{maybe_init:#} maybe lives ({})",
         DecoType::SHORT_LIFETIME,
     );
     println!(

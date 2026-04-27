@@ -1,4 +1,3 @@
-use rayon::prelude::*;
 use rustowl::models::*;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -206,6 +205,10 @@ impl<'tcx> Body<'tcx> {
 
     pub fn span(&self) -> Span {
         AsRustc::from_rustc(self.0.span)
+    }
+
+    pub fn get_location_ranges(&self, source_info: &SourceInfo) -> LocationRanges {
+        LocationRanges::compute(&self, source_info)
     }
 
     /// Extract StorageLive and StorageDead information from MIR body.
