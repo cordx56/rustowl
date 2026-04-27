@@ -79,7 +79,7 @@ rustc_version = "0.4"
 tikv-jemalloc-sys = { version = "0.6", features = ["override_allocator_on_supported_platforms"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-zip = "8.5.0"
+zip = "8.6.0"
 
 [profile.release]
 opt-level = 3
