@@ -43,27 +43,30 @@ impl<'tcx> TyCtxt<'tcx> {
         body.as_rustc()
             .basic_blocks
             .iter_enumerated()
-            .map(|(_bb, bb_data)| {
+            .map(|(block, bb_data)| {
                 let statements: Vec<_> = bb_data
                     .statements
                     .iter()
                     // `source_map` is not Send
-                    .filter(|stmt| stmt.source_info.span.is_visible(source_map))
+                    //.filter(|stmt| stmt.source_info.span.is_visible(source_map))
                     .collect();
                 let statements = statements
                     .iter()
-                    .filter_map(|statement| {
-                        let span = AsRustc::from_rustc(statement.source_info.span);
-                        let range = range_from_span(&source_info.source, span, source_info.offset);
+                    .enumerate()
+                    .filter_map(|(statement_index, statement)| {
+                        let location = rustc_middle::mir::Location {block, statement_index};
+                        let span = body.as_rustc().source_info(location).span;
+                        //let span = AsRustc::from_rustc(statement.source_info.span);
+                        let mut range = range_from_span(&source_info.source, AsRustc::from_rustc(span), source_info.offset);
                         if let Some(r) = range {
                             if 20 < r.size() {
                                 eprintln!("{:?}, {:?}", statement, range);
+                                range = None;
                             }
                         }
-                        let pass = range.filter(|v| v.size() < 15);
                         match &statement.kind {
                             StatementKind::StorageLive(local) => {
-                                pass.map(
+                                range.map(
                                     |range| MirStatement::StorageLive {
                                         target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
                                         range,
@@ -71,7 +74,7 @@ impl<'tcx> TyCtxt<'tcx> {
                                 )
                             }
                             StatementKind::StorageDead(local) => {
-                                pass.map(
+                                range.map(
                                     |range| MirStatement::StorageDead {
                                         target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
                                         range,
@@ -84,7 +87,7 @@ impl<'tcx> TyCtxt<'tcx> {
                                 let rv = match rval {
                                     Rvalue::Use(Operand::Move(p)) => {
                                         let local = p.local;
-                                        pass
+                                        range
                                         .map(|range| {
                                             MirRval::Move {
                                                 target_local: FnLocal::new(
@@ -99,7 +102,7 @@ impl<'tcx> TyCtxt<'tcx> {
                                         let mutable = matches!(kind, BorrowKind::Mut { .. });
                                         let local = place.local;
                                         let outlive = None;
-                                        pass
+                                        range
                                         .map(|range| {
                                             MirRval::Borrow {
                                                 target_local: FnLocal::new(
@@ -114,7 +117,7 @@ impl<'tcx> TyCtxt<'tcx> {
                                     }
                                     _ => None,
                                 };
-                                pass.map(
+                                range.map(
                                     |range| MirStatement::Assign {
                                         target_local: FnLocal::new(
                                             target_local_index,
@@ -125,17 +128,17 @@ impl<'tcx> TyCtxt<'tcx> {
                                     },
                                 )
                             }
-                            _ => range_from_span(&source_info.source, span, source_info.offset)
+                            _ => range
                                 .map(|range| MirStatement::Other { range }),
                         }
                     })
                     .collect();
                 let terminator = bb_data.terminator.as_ref().and_then(|terminator| {
                     let span = AsRustc::from_rustc(terminator.source_info.span);
-                    let pass = range_from_span(&source_info.source, span, source_info.offset).filter(|v| if v.size() < 30 {true} else {eprintln!("{:?}, {:?}", terminator.kind, v);false});
+                    let range = range_from_span(&source_info.source, span, source_info.offset).filter(|v| if v.size() < 15 {true} else {eprintln!("{:?}, {:?}", terminator.kind, v);false});
                     match &terminator.kind {
                         TerminatorKind::Drop { place, .. } => {
-                            pass.map(
+                            range.map(
                                 |range| MirTerminator::Drop {
                                     local: FnLocal::new(place.local.as_u32(), fn_id.as_u32()),
                                     range,
@@ -147,14 +150,14 @@ impl<'tcx> TyCtxt<'tcx> {
                             fn_span,
                             ..
                         } =>
-                        pass.map(|fn_span| MirTerminator::Call {
+                        range.map(|fn_span| MirTerminator::Call {
                             destination_local: FnLocal::new(
                                 destination.local.as_u32(),
                                 fn_id.as_u32(),
                             ),
                             fn_span,
                         }),
-                        _ => pass
+                        _ => range
                             .map(|range| MirTerminator::Other { range }),
                     }
                 });
@@ -224,9 +227,25 @@ fn statement_location_to_range(
 ) -> Option<Range> {
     basic_blocks.get(basic_block as usize).and_then(|bb| {
         if (statement as usize) < bb.statements.len() {
+            /*
+            if let Some(stmt) = bb.statements.get(statement as usize) {
+                eprintln!("{stmt:?}");
+            }
+            match bb.statements.get(statement as usize) {
+                Some(MirStatement::Other { range }) => {
+                    //eprintln!("{range:?}");
+                    Some(*range)},
+                _ => None,
+            }
+            */
             bb.statements.get(statement as usize).map(|v| v.range())
         } else {
-            bb.terminator.as_ref().map(|v| v.range())
+            match bb.terminator.as_ref() {
+                Some(MirTerminator::Drop { range, .. }) => Some(*range),
+                Some(MirTerminator::Call { fn_span, .. }) => Some(*fn_span),
+                _ => None,
+            }
+            //bb.terminator.as_ref().map(|v| v.range())
         }
     })
 }
