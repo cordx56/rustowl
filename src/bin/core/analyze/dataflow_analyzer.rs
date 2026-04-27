@@ -1,4 +1,5 @@
 use super::*;
+use rustc_span::Pos;
 use rustowl::utils;
 
 pub fn get_maybe_lives<'tcx>(
@@ -73,17 +74,35 @@ pub fn get_maybe_initialized<'tcx>(
     body: &Body<'tcx>,
     basic_blocks: &[MirBasicBlock],
 ) -> HashMap<LocalId, Vec<Range>> {
-    let mut result = HashMap::new();
+    //let mut result = HashMap::new();
+    let mut var_initialized = HashMap::new();
     for (location, states) in walk_cfg(body) {
         for (local, state) in states.iter() {
             if state.len() == 1 && state.contains(&LocalStateVariant::Initialized) {
+                var_initialized
+                    .entry(*local)
+                    .or_insert_with(Vec::new)
+                    .push(RichLocation::Mid(location));
+                /*
                 let range = rich_locations_to_ranges(basic_blocks, &[RichLocation::Mid(location)]);
+                let span = body.as_rustc().source_info(location.into_rustc()).span;
+                let loc_low = Loc::new()
+                if let Some(range) = Range::new(span.lo().to_u32().into(), span.hi().to_u32().into()) {
+                    eprintln!("{range:?}");
+                    if range.size() < 180 {
                 result
                     .entry(*local)
                     .or_insert_with(Vec::new)
-                    .extend_from_slice(&range);
+                    .push(range);
+                    }
+                }
+                */
             }
         }
     }
-    result
+    var_initialized
+        .iter()
+        .map(|(var, locs)| (*var, rich_locations_to_ranges(basic_blocks, locs)))
+        .collect()
+    //result
 }
