@@ -140,10 +140,10 @@ impl CfgAnalyzer {
         basic_blocks: &IndexMap<BasicBlockId, MirBasicBlock>,
         locals: &BTreeMap<LocalId, String>,
     ) -> IndexMap<Location, LocalStates> {
-        let mut locals = LocalStates::init_from_locals(locals.keys().map(|v| *v));
+        let mut locals = LocalStates::init_from_locals(locals.keys().copied());
         let location_local_state: IndexMap<Location, LocalStates> = basic_blocks
             .iter()
-            .map(|(block, bb_data)| {
+            .flat_map(|(block, bb_data)| {
                 let locals = locals.clone();
                 let statement_len =
                     bb_data.statements.len() + bb_data.terminator.as_ref().map(|_| 1).unwrap_or(0);
@@ -157,7 +157,6 @@ impl CfgAnalyzer {
                     )
                 })
             })
-            .flatten()
             .collect();
 
         let block = match basic_blocks.first() {
@@ -199,7 +198,9 @@ impl CfgAnalyzer {
                     if let Some(current_states) = check.states_at(&location) {
                         prev_states = current_states.clone();
                     }
-                    check.visited(&location).map(|v| *v += 1);
+                    if let Some(v) = check.visited(&location) {
+                        *v += 1;
+                    }
                 }
                 if let Some(terminator) = &bb_data.terminator {
                     let statement_index = bb_data.statements.len();
@@ -214,7 +215,9 @@ impl CfgAnalyzer {
                     if let Some(current_states) = check.states_at(&location) {
                         prev_states = current_states.clone();
                     }
-                    check.visited(&location).map(|v| *v += 1);
+                    if let Some(v) = check.visited(&location) {
+                        *v += 1;
+                    }
 
                     for successor in terminator.successors() {
                         next_blocks.push_back((successor, prev_states.clone()));
@@ -229,7 +232,7 @@ impl CfgAnalyzer {
 }
 
 /// Returns ranges where the given local is certainly initialized.
-pub fn get_lives<'tcx>(
+pub fn get_lives(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
@@ -242,7 +245,7 @@ pub fn get_lives<'tcx>(
 /// (not moved, dropped, or uninitialized) on every reaching path.
 ///
 /// This will be useful for inspecting variables' resource available range.
-pub fn get_maybe_initialized<'tcx>(
+pub fn get_maybe_initialized(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
