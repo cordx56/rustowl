@@ -211,7 +211,7 @@ impl<'tcx> Body<'tcx> {
     }
 
     pub fn get_location_ranges(&self, source_info: &SourceInfo) -> LocationRanges {
-        LocationRanges::compute(&self, source_info)
+        LocationRanges::compute(self, source_info)
     }
 
     /// Extract StorageLive and StorageDead information from MIR body.

@@ -55,9 +55,7 @@ impl<'tcx> TyCtxt<'tcx> {
                             block,
                             statement_index,
                         };
-                        let range = location_ranges
-                            .get(&AsRustc::from_rustc(location))
-                            .map(|v| *v);
+                        let range = location_ranges.get(&AsRustc::from_rustc(location)).copied();
                         match &statement.kind {
                             StatementKind::StorageLive(local) => MirStatement::StorageLive {
                                 target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
@@ -112,9 +110,7 @@ impl<'tcx> TyCtxt<'tcx> {
                         block,
                         statement_index: bb_data.statements.len(),
                     };
-                    let range = location_ranges
-                        .get(&AsRustc::from_rustc(location))
-                        .map(|v| *v);
+                    let range = location_ranges.get(&AsRustc::from_rustc(location)).copied();
                     let successors = terminator
                         .successors()
                         .map(|v| BasicBlockId(v.as_usize()))
@@ -265,7 +261,7 @@ impl LocationRanges {
                 // If a range spans multiple lines, we ignore the range which may be annoying,
                 // except for a user variable related one.
                 if !touches_user_local
-                    && utils::range_is_multiline(&source_info.cleaned_source(), range)
+                    && utils::range_is_multiline(source_info.cleaned_source(), range)
                 {
                     continue;
                 }

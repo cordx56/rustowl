@@ -143,7 +143,7 @@ pub fn range_is_multiline(s: &str, range: Range) -> bool {
     if !is_source_clean(s) {
         cleaned = clean_source(s);
     }
-    let source_clean = if cleaned.len() == 0 { s } else { &cleaned };
+    let source_clean = if cleaned.is_empty() { s } else { &cleaned };
 
     let from = range.from().0 as usize;
     let until = range.until().0 as usize;
@@ -160,7 +160,7 @@ pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
     if !is_source_clean(s) {
         cleaned = clean_source(s);
     }
-    let source_clean = if cleaned.len() == 0 { s } else { &cleaned };
+    let source_clean = if cleaned.is_empty() { s } else { &cleaned };
 
     let mut line = 0;
     let mut col = 0;
