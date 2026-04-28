@@ -1,4 +1,4 @@
-use rustowl::models::*;
+use rustowl::{models::*, utils};
 use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
@@ -51,6 +51,7 @@ pub struct SourceInfo {
     offset: u32,
     path: PathBuf,
     source: String,
+    cleaned_source: String,
 }
 impl SourceInfo {
     pub fn path(&self) -> &Path {
@@ -58,6 +59,9 @@ impl SourceInfo {
     }
     pub fn source(&self) -> &str {
         &self.source
+    }
+    pub fn cleaned_source(&self) -> &str {
+        &self.cleaned_source
     }
 }
 
@@ -124,10 +128,12 @@ impl<'tcx> TyCtxt<'tcx> {
             file_name.embeddable_name(rustc_span::RemapPathScopeComponents::DIAGNOSTICS);
         let path = path.to_path_buf();
         let source = std::fs::read_to_string(&path).unwrap();
+        let cleaned_source = utils::clean_source(&source);
         Some(SourceInfo {
             offset,
             path,
             source,
+            cleaned_source,
         })
     }
     #[rustversion::before(1.94.0)]
