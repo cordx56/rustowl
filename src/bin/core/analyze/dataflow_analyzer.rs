@@ -53,32 +53,48 @@ impl CfgAnalyzer {
     }
 
     pub fn visit_statement(&mut self, statement: &MirStatement, location: Location) {
-        if let MirStatement::Assign {
-            target_local, rval, ..
-        } = statement
-            && let Some(local_states) = self.states.get_mut(&location)
-        {
-            if let Some(MirRval::Move { target_local, .. }) = rval
-                && let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                    rustc_middle::mir::Local::from_u32(target_local.id),
-                ))
-            {
-                if let Some(visited) = self.visited.get(&location)
-                    && *visited == 0
-                {
-                    state.clear();
+        if let Some(local_states) = self.states.get_mut(&location) {
+            match statement {
+                MirStatement::Assign {
+                    target_local, rval, ..
+                } => {
+                    if let Some(MirRval::Move { target_local, .. }) = rval
+                        && let Some(state) =
+                            local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
+                                rustc_middle::mir::Local::from_u32(target_local.id),
+                            ))
+                    {
+                        if let Some(visited) = self.visited.get(&location)
+                            && *visited == 0
+                        {
+                            state.clear();
+                        }
+                        state.insert(LocalStateVariant::Moved);
+                    }
+                    if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
+                        rustc_middle::mir::Local::from_u32(target_local.id),
+                    )) {
+                        if let Some(visited) = self.visited.get(&location)
+                            && *visited == 0
+                        {
+                            state.clear();
+                        }
+                        state.insert(LocalStateVariant::Initialized);
+                    }
                 }
-                state.insert(LocalStateVariant::Moved);
-            }
-            if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                rustc_middle::mir::Local::from_u32(target_local.id),
-            )) {
-                if let Some(visited) = self.visited.get(&location)
-                    && *visited == 0
-                {
-                    state.clear();
+                MirStatement::StorageDead { target_local, .. } => {
+                    if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
+                        rustc_middle::mir::Local::from_u32(target_local.id),
+                    )) {
+                        if let Some(visited) = self.visited.get(&location)
+                            && *visited == 0
+                        {
+                            state.clear();
+                        }
+                        state.insert(LocalStateVariant::Uninitialized);
+                    }
                 }
-                state.insert(LocalStateVariant::Initialized);
+                _ => {}
             }
         }
     }
@@ -169,11 +185,11 @@ impl CfgAnalyzer {
                         statement_index,
                     });
 
-                    let visited = check.visited(&location).map(|v| 0 < *v).unwrap_or(false);
+                    let visited = check.visited(&location).map(|v| *v).unwrap_or(0);
                     if let Some(current_states) = check.states_at(&location) {
                         // Skip check if the location is already visited and the states does not
                         // changed.
-                        if visited && *current_states == prev_states {
+                        if 0 < visited && *current_states == prev_states {
                             continue 'outer;
                         }
 

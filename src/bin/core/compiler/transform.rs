@@ -264,7 +264,9 @@ impl LocationRanges {
 
                 // If a range spans multiple lines, we ignore the range which may be annoying,
                 // except for a user variable related one.
-                if !touches_user_local && utils::range_is_multiline(&source_info.source, range) {
+                if !touches_user_local
+                    && utils::range_is_multiline(&source_info.cleaned_source(), range)
+                {
                     continue;
                 }
 

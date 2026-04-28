@@ -147,10 +147,10 @@ impl MirAnalyzer {
                     polonius_analyzer::drop_range(&output, &location_table, &location_ranges);
 
                 // CFG based liveness analysis
-                log::warn!("start CFG based liveness check");
+                log::debug!("start CFG based liveness check");
                 let cfg_analysis_output =
                     dataflow_analyzer::CfgAnalyzer::walk_cfg(&basic_blocks, &local_decls);
-                log::warn!("CFG based liveness check finished");
+                log::debug!("CFG based liveness check finished");
                 let certainly_live_range =
                     dataflow_analyzer::get_lives(&cfg_analysis_output, &location_ranges);
                 let maybe_init_range = dataflow_analyzer::get_maybe_initialized(

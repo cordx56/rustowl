@@ -429,8 +429,8 @@ impl CalcDecos {
     fn get_deco_order(deco: &Deco) -> u8 {
         match deco {
             Deco::Lifetime { .. } => 0,
-            Deco::CertainlyLive { .. } => 1,
-            Deco::MaybeInitialized { .. } => 2,
+            Deco::MaybeInitialized { .. } => 1,
+            Deco::CertainlyLive { .. } => 2,
             Deco::ImmBorrow { .. } => 3,
             Deco::MutBorrow { .. } => 4,
             Deco::Move { .. } => 5,
