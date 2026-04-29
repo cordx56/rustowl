@@ -38,7 +38,7 @@ pub struct CfgAnalyzer {
     visited: IndexMap<Location, usize>,
 }
 impl CfgAnalyzer {
-    pub fn new(states: IndexMap<Location, LocalStates>) -> Self {
+    fn init(states: IndexMap<Location, LocalStates>) -> Self {
         let visited = states.iter().map(|(location, _)| (*location, 0)).collect();
         Self { states, visited }
     }
@@ -132,10 +132,7 @@ impl CfgAnalyzer {
         }
     }
 
-    /// Precise lifetime analysis of variables.
-    ///
-    /// Note: This code should use our wrapped types, but there are many methods in rustc to use.
-    ///       For now we implement this using rustc methods.
+    /// Precise lifetime analysis for variables.
     pub fn walk_cfg(
         basic_blocks: &IndexMap<BasicBlockId, MirBasicBlock>,
         locals: &BTreeMap<LocalId, String>,
@@ -172,7 +169,7 @@ impl CfgAnalyzer {
         let mut next_blocks = VecDeque::new();
         // use the last states at the previous block when start walking the new block.
         next_blocks.push_back((block, locals));
-        let mut check = Self::new(location_local_state);
+        let mut check = Self::init(location_local_state);
         // FIXME: Does this loop always stop?
         'outer: for _ in 0..(5 * basic_blocks.len()) {
             if let Some((block, mut prev_states)) = next_blocks.pop_front()
@@ -232,7 +229,7 @@ impl CfgAnalyzer {
 }
 
 /// Returns ranges where the given local is certainly initialized.
-pub fn get_lives(
+pub fn get_certainly_lives(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
@@ -242,9 +239,9 @@ pub fn get_lives(
 }
 
 /// Returns ranges where the given local is provably initialized
-/// (not moved, dropped, or uninitialized) on every reaching path.
+/// (maybe moved, dropped, or uninitialized) on every reachable locations.
 ///
-/// This will be useful for inspecting variables' resource available range.
+/// This will be useful for variables' resource management.
 pub fn get_maybe_initialized(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,

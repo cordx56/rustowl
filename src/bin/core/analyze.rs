@@ -152,7 +152,7 @@ impl MirAnalyzer {
                     dataflow_analyzer::CfgAnalyzer::walk_cfg(&basic_blocks, &local_decls);
                 log::debug!("CFG based liveness check finished");
                 let certainly_live_range =
-                    dataflow_analyzer::get_lives(&cfg_analysis_output, &location_ranges);
+                    dataflow_analyzer::get_certainly_lives(&cfg_analysis_output, &location_ranges);
                 let maybe_init_range = dataflow_analyzer::get_maybe_initialized(
                     &cfg_analysis_output,
                     &location_ranges,
