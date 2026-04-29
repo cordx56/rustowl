@@ -67,7 +67,18 @@ else
   echo "Warning: aur/PKGBUILD-BIN not found"
 fi
 
-# 5. Create a git tag
+# 5. Update Emacs only for stable
+if [ "$IS_PRERELEASE" = false ] && [ -f Eask ] && [ -f rustowl.el ]; then
+  echo "Updating Eask And rustowl..."
+  $sed -i "4s/.*/$VERSION_WITHOUT_V/" Eask
+  $sed -i "8s/.*/;; Version: $VERSION_WITHOUT_V/" rustowl.el
+elif [ -f Eask ] && [ -f rustowl.el ]; then
+  echo "Skipping Eask and rustowl.el update for pre-release version"
+else
+  echo "Warning: Eask or rustowl.el not found"
+fi
+
+# 6. Create a git tag
 echo "Creating git tag: $VERSION"
 git tag $VERSION
 
