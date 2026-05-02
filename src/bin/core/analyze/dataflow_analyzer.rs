@@ -1,5 +1,5 @@
 use super::*;
-use rustc_data_structures::indexmap::IndexMap;
+use indexmap::IndexMap;
 use rustowl::utils;
 use std::collections::{BTreeSet, HashMap, VecDeque};
 

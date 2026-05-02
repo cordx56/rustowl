@@ -1,7 +1,7 @@
 use super::*;
 use rustowl::utils;
 
-use rustc_data_structures::indexmap::IndexMap;
+use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
 /// RegionEraser to erase region variables from MIR body
