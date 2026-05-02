@@ -108,11 +108,7 @@ impl CfgAnalyzer {
                     if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
                         rustc_middle::mir::Local::from_u32(destination_local.id),
                     )) {
-                        if let Some(visited) = self.visited.get(&location)
-                            && *visited == 0
-                        {
-                            state.clear();
-                        }
+                        state.clear();
                         state.insert(LocalStateVariant::Initialized);
                     }
                 }

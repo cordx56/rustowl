@@ -241,30 +241,16 @@ impl LocationRanges {
                     block,
                     statement_index,
                 };
-                // default is precise span
-                let span_default = body.as_rustc().source_info(location).span;
-                // source_callsite is wide, but comprehensive
+                // source_callsite is wide, for macro invocation
                 let span_callsite = body.as_rustc().source_info(location).span.source_callsite();
-                let range = {
-                    let Some(callsite) = range_from_span(
-                        &source_info.source,
-                        AsRustc::from_rustc(span_callsite),
-                        source_info.offset,
-                    ) else {
-                        continue;
-                    };
-                    // use default unless the size of default range is <0
-                    if let Some(default) = range_from_span(
-                        &source_info.source,
-                        AsRustc::from_rustc(span_default),
-                        source_info.offset,
-                    ) && 0 < default.size()
-                    {
-                        //default
-                        callsite
-                    } else {
-                        callsite
-                    }
+                let range = if let Some(v) = range_from_span(
+                    &source_info.source,
+                    AsRustc::from_rustc(span_callsite),
+                    source_info.offset,
+                ) {
+                    v
+                } else {
+                    continue;
                 };
 
                 // check whether the statement touches a user local variable

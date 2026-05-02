@@ -148,8 +148,9 @@ impl MirAnalyzer {
 
                 // CFG based liveness analysis
                 log::debug!("start CFG based liveness check");
-                let cfg_analysis_output =
-                    dataflow_analyzer::CfgAnalyzer::walk_cfg(&basic_blocks, &local_decls);
+                let cfg_analysis_output = rustowl::utils::time("walk_cfg", || {
+                    dataflow_analyzer::CfgAnalyzer::walk_cfg(&basic_blocks, &local_decls)
+                });
                 log::debug!("CFG based liveness check finished");
                 let certainly_live_range =
                     dataflow_analyzer::get_certainly_lives(&cfg_analysis_output, &location_ranges);
