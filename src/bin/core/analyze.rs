@@ -40,7 +40,7 @@ pub struct MirAnalyzer {
     mutable_live: HashMap<LocalId, Vec<Range>>,
     drop_range: HashMap<LocalId, Vec<Range>>,
     storage_range: HashMap<LocalId, Vec<Range>>,
-    certainly_live_range: HashMap<LocalId, Vec<Range>>,
+    definitely_live_range: HashMap<LocalId, Vec<Range>>,
     maybe_init_range: HashMap<LocalId, Vec<Range>>,
 }
 impl MirAnalyzer {
@@ -148,12 +148,11 @@ impl MirAnalyzer {
 
                 // CFG based liveness analysis
                 log::debug!("start CFG based liveness check");
-                let cfg_analysis_output = rustowl::utils::time("walk_cfg", || {
-                    dataflow_analyzer::CfgAnalyzer::walk_cfg(&basic_blocks, &local_decls)
-                });
+                let cfg_analysis_output =
+                    dataflow_analyzer::CfgAnalyzer::walk_cfg(&basic_blocks, &local_decls);
                 log::debug!("CFG based liveness check finished");
-                let certainly_live_range =
-                    dataflow_analyzer::get_certainly_lives(&cfg_analysis_output, &location_ranges);
+                let definitely_live_range =
+                    dataflow_analyzer::get_definitely_lives(&cfg_analysis_output, &location_ranges);
                 let maybe_init_range = dataflow_analyzer::get_maybe_initialized(
                     &cfg_analysis_output,
                     &location_ranges,
@@ -175,7 +174,7 @@ impl MirAnalyzer {
                     mutable_live,
                     drop_range,
                     storage_range,
-                    certainly_live_range,
+                    definitely_live_range,
                     maybe_init_range,
                 }
             });
@@ -207,8 +206,8 @@ impl MirAnalyzer {
                 let fn_local = FnLocal::new(local.as_u32(), self.fn_id.as_u32());
 
                 // liveness range based on CFG analysis
-                let certainly_live_at = self
-                    .certainly_live_range
+                let definitely_live_at = self
+                    .definitely_live_range
                     .get(local)
                     .cloned()
                     .unwrap_or_default();
@@ -231,7 +230,7 @@ impl MirAnalyzer {
                         drop,
                         drop_range,
                         storage_range,
-                        certainly_live_at,
+                        definitely_live_at,
                         maybe_init_at,
                     }
                 } else {
@@ -245,7 +244,7 @@ impl MirAnalyzer {
                         drop_range,
                         must_live_at,
                         storage_range,
-                        certainly_live_at,
+                        definitely_live_at,
                         maybe_init_at,
                     }
                 }

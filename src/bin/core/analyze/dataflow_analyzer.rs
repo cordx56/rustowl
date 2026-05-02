@@ -225,8 +225,8 @@ impl CfgAnalyzer {
     }
 }
 
-/// Returns ranges where the given local is certainly initialized.
-pub fn get_certainly_lives(
+/// Returns ranges where the given local is definitely initialized.
+pub fn get_definitely_lives(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
