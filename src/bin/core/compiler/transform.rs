@@ -122,6 +122,7 @@ impl<'tcx> TyCtxt<'tcx> {
                             successors,
                         },
                         TerminatorKind::Call {
+                            args,
                             destination,
                             fn_span,
                             ..
@@ -131,7 +132,19 @@ impl<'tcx> TyCtxt<'tcx> {
                                 AsRustc::from_rustc(*fn_span),
                                 source_info.offset,
                             );
+                            let args: Vec<_> = args
+                                .iter()
+                                .map(|v| {
+                                    if let Operand::Move(p) = &v.node {
+                                        p.as_local()
+                                            .map(|v| FnLocal::new(v.as_u32(), fn_id.as_u32()))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
                             MirTerminator::Call {
+                                args,
                                 destination_local: FnLocal::new(
                                     destination.local.as_u32(),
                                     fn_id.as_u32(),
@@ -179,6 +192,10 @@ impl Location {
     }
     pub fn statement(&self) -> u32 {
         self.as_rustc().statement_index as u32
+    }
+    pub fn successor(&self) -> Self {
+        let next_location = self.into_rustc();
+        AsRustc::from_rustc(next_location.successor_within_block())
     }
 }
 
@@ -243,7 +260,8 @@ impl LocationRanges {
                         source_info.offset,
                     ) && 0 < default.size()
                     {
-                        default
+                        //default
+                        callsite
                     } else {
                         callsite
                     }

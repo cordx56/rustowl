@@ -250,6 +250,7 @@ pub enum MirTerminator {
         successors: Vec<BasicBlockId>,
     },
     Call {
+        args: Vec<Option<FnLocal>>,
         destination_local: FnLocal,
         fn_span: Option<Range>,
         successors: Vec<BasicBlockId>,

@@ -76,6 +76,7 @@ pub struct AnalyzerCallback;
 impl rustc_driver::Callbacks for AnalyzerCallback {
     fn config(&mut self, config: &mut interface::Config) {
         config.using_internal_features = &ATOMIC_TRUE;
+        config.opts.optimize = config::OptLevel::No;
         config.opts.unstable_opts.mir_opt_level = Some(0);
         config.opts.unstable_opts.polonius = config::Polonius::Next;
         config.opts.incremental = None;

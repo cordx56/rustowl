@@ -64,21 +64,13 @@ impl CfgAnalyzer {
                                 rustc_middle::mir::Local::from_u32(target_local.id),
                             ))
                     {
-                        if let Some(visited) = self.visited.get(&location)
-                            && *visited == 0
-                        {
-                            state.clear();
-                        }
+                        state.clear();
                         state.insert(LocalStateVariant::Moved);
                     }
                     if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
                         rustc_middle::mir::Local::from_u32(target_local.id),
                     )) {
-                        if let Some(visited) = self.visited.get(&location)
-                            && *visited == 0
-                        {
-                            state.clear();
-                        }
+                        state.clear();
                         state.insert(LocalStateVariant::Initialized);
                     }
                 }
@@ -86,11 +78,7 @@ impl CfgAnalyzer {
                     if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
                         rustc_middle::mir::Local::from_u32(target_local.id),
                     )) {
-                        if let Some(visited) = self.visited.get(&location)
-                            && *visited == 0
-                        {
-                            state.clear();
-                        }
+                        state.clear();
                         state.insert(LocalStateVariant::Uninitialized);
                     }
                 }
@@ -102,8 +90,21 @@ impl CfgAnalyzer {
         if let Some(local_states) = self.states.get_mut(&location) {
             match &terminator {
                 MirTerminator::Call {
-                    destination_local, ..
+                    args,
+                    destination_local,
+                    ..
                 } => {
+                    for arg in args {
+                        if let Some(moved) = arg
+                            && let Some(state) =
+                                local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
+                                    rustc_middle::mir::Local::from_u32(moved.id),
+                                ))
+                        {
+                            state.clear();
+                            state.insert(LocalStateVariant::Moved);
+                        }
+                    }
                     if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
                         rustc_middle::mir::Local::from_u32(destination_local.id),
                     )) {
@@ -119,11 +120,7 @@ impl CfgAnalyzer {
                     if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
                         rustc_middle::mir::Local::from_u32(local.id),
                     )) {
-                        if let Some(visited) = self.visited.get(&location)
-                            && *visited == 0
-                        {
-                            state.clear();
-                        }
+                        state.remove(&LocalStateVariant::Initialized);
                         state.insert(LocalStateVariant::Dropped);
                     }
                 }
@@ -171,7 +168,7 @@ impl CfgAnalyzer {
         next_blocks.push_back((block, locals));
         let mut check = Self::init(location_local_state);
         // FIXME: Does this loop always stop?
-        'outer: for _ in 0..(5 * basic_blocks.len()) {
+        'outer: for _ in 0..(10 * basic_blocks.len()) {
             if let Some((block, mut prev_states)) = next_blocks.pop_front()
                 && let Some(bb_data) = basic_blocks.get(&block)
             {
@@ -182,6 +179,10 @@ impl CfgAnalyzer {
                     });
 
                     let visited = check.visited(&location).map(|v| *v).unwrap_or(0);
+                    // Skip check if same location is visited many times (circuit breaker)
+                    if 10 <= visited {
+                        continue 'outer;
+                    }
                     if let Some(current_states) = check.states_at(&location) {
                         // Skip check if the location is already visited and the states does not
                         // changed.
