@@ -53,6 +53,8 @@ When you save Rust source code, it is analyzed, and the ownership and lifetimes 
 RustOwl visualizes those by using underlines:
 
 - 🟩 green: variable's actual lifetime
+  - **definitely live**: the variable is provably initialized on every path reaching this point
+  - **maybe live**: the variable is initialized on some paths but may have been moved, dropped, or be uninitialized on others
 - 🟦 blue: immutable borrowing
 - 🟪 purple: mutable borrowing
 - 🟧 orange: value moved / function call

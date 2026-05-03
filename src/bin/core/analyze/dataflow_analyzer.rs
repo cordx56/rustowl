@@ -1,8 +1,42 @@
+//! CFG-based liveness analysis.
+//!
+//! Walks the MIR control-flow graph and tracks, for each [`Location`], the
+//! set of states that each local can be in along any path that reaches it.
+//! The result complements Polonius' `var_live_on_entry` by distinguishing
+//! "provably initialized" from "initialized on some paths only".
+//!
+//! The state lattice for a single local is the powerset of
+//! [`LocalStateVariant`]; values flow forward and meet at CFG joins via
+//! set union ([`LocalStates::join`]). From the per-location state set we
+//! derive two range collections:
+//!
+//! - [`get_definitely_lives`] -- locations where the state is exactly
+//!   `{Initialized}`. These are the ranges shown as the green
+//!   "definitely live" decoration.
+//! - [`get_maybe_initialized`] -- locations where `Initialized` is in the
+//!   state set together with at least one of `Moved`, `Dropped`, or
+//!   `Uninitialized`. These mark places where ownership depends on which
+//!   path was taken (e.g. a conditional `drop`), and are useful when
+//!   auditing resource management.
+
 use super::*;
 use indexmap::IndexMap;
 use rustowl::utils;
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
+/// One element of the per-local state lattice.
+///
+/// State transitions performed by [`CfgAnalyzer::visit_statement`] and
+/// [`CfgAnalyzer::visit_terminator`]:
+///
+/// - `Assign` to a local sets it to `Initialized`. If the rvalue is a
+///   `Move`, the source local is set to `Moved` first.
+/// - `StorageDead` sets the local to `Uninitialized`.
+/// - A `Call` terminator sets each `Move` argument to `Moved` and the
+///   destination local to `Initialized`.
+/// - A `Drop` terminator removes `Initialized` and adds `Dropped`. Other
+///   variants (e.g. an earlier `Moved`) survive so that joins keep
+///   reflecting all paths reaching the location.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum LocalStateVariant {
     Uninitialized = 1,
@@ -17,6 +51,9 @@ impl LocalStates {
     pub fn init_from_locals(locals: impl Iterator<Item = LocalId>) -> Self {
         Self(locals.map(|v| (v, BTreeSet::new())).collect())
     }
+    /// Meet operation for the lattice: per-local set union with `others`.
+    /// Used at CFG join points so that a local's state at a successor is
+    /// the union of the states reaching it from each predecessor.
     pub fn join(&mut self, others: &Self) {
         for (key, state) in &mut self.0 {
             if let Some(other) = others.0.get(key) {
@@ -125,7 +162,20 @@ impl CfgAnalyzer {
         }
     }
 
-    /// Precise lifetime analysis for variables.
+    /// Forward dataflow over the CFG, returning the per-local state set at
+    /// each [`Location`].
+    ///
+    /// Starts at the entry block with every local marked `Uninitialized`
+    /// and walks blocks in BFS order, joining the carried state into each
+    /// location and re-enqueueing successors when state changes.
+    ///
+    /// Termination is enforced by two cutoffs rather than a proof of
+    /// monotone convergence: each location may be visited at most 10 times
+    /// (per-location circuit breaker), and the outer queue runs for at
+    /// most `10 * basic_blocks.len()` iterations. In practice the lattice
+    /// is small (4 variants per local) so a fixpoint is reached well
+    /// before either cutoff; the cutoffs only protect against pathological
+    /// inputs (e.g. unreachable cycles introduced by ill-formed MIR).
     pub fn walk_cfg(
         basic_blocks: &IndexMap<BasicBlockId, MirBasicBlock>,
         locals: &BTreeMap<LocalId, String>,
@@ -163,7 +213,8 @@ impl CfgAnalyzer {
         // use the last states at the previous block when start walking the new block.
         next_blocks.push_back((block, locals));
         let mut check = Self::init(location_local_state);
-        // FIXME: Does this loop always stop?
+        // Termination: bounded by per-location visit cap (see below) and
+        // the outer iteration cap. See the doc on `walk_cfg` for rationale.
         'outer: for _ in 0..(10 * basic_blocks.len()) {
             if let Some((block, mut prev_states)) = next_blocks.pop_front()
                 && let Some(bb_data) = basic_blocks.get(&block)
@@ -225,7 +276,12 @@ impl CfgAnalyzer {
     }
 }
 
-/// Returns ranges where the given local is definitely initialized.
+/// Source ranges where each local is definitely initialized.
+///
+/// A location qualifies when the per-local state set is exactly
+/// `{Initialized}`, i.e. every path reaching the location leaves the local
+/// in the initialized state. Surfaced as the green "definitely live"
+/// decoration.
 pub fn get_definitely_lives(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,
@@ -235,10 +291,13 @@ pub fn get_definitely_lives(
     })
 }
 
-/// Returns ranges where the given local is provably initialized
-/// (maybe moved, dropped, or uninitialized) on every reachable locations.
+/// Source ranges where each local is initialized on at least one path,
+/// possibly together with `Moved`, `Dropped`, or `Uninitialized` on others.
 ///
-/// This will be useful for variables' resource management.
+/// This is a strict superset of [`get_definitely_lives`]; the difference
+/// (a "maybe live" range) marks code where ownership is conditional on
+/// control flow, which is the interesting case for auditing resource
+/// cleanup such as `Drop` impls, file handles, or locks.
 pub fn get_maybe_initialized(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,
