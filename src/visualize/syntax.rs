@@ -84,31 +84,28 @@ impl Highlighter {
         }
     }
 
-    /// Compute a per-character `Style` for each character in `line`.
-    ///
-    /// The returned vector has one entry per `char` of `line` (not byte),
-    /// so callers can compose it with character-indexed decorations.
-    pub fn highlight_styles(&mut self, line: &str) -> Vec<Style> {
-        // (byte_offset, char) so we can map tree-sitter byte ranges to char indices.
-        let chars: Vec<(usize, char)> = line.char_indices().collect();
-        let mut styles = vec![Style::new(); chars.len()];
+    /// Highlight a line of Rust code.
+    pub fn highlight(&mut self, line: &str) -> String {
+        use std::fmt::Write;
 
         let Ok(events) = self
             .highlighter
             .highlight(&self.config, line.as_bytes(), None, |_| None)
         else {
-            return styles;
+            return line.to_string();
         };
 
+        let mut result = String::with_capacity(line.len() * 2);
         let mut style_stack: Vec<Style> = Vec::new();
+
         for event in events.flatten() {
             match event {
                 HighlightEvent::Source { start, end } => {
-                    let style = style_stack.last().copied().unwrap_or_default();
-                    for (i, (bi, _)) in chars.iter().enumerate() {
-                        if *bi >= start && *bi < end {
-                            styles[i] = style;
-                        }
+                    let text = &line[start..end];
+                    if let Some(&style) = style_stack.last() {
+                        let _ = write!(result, "{style}{text}{style:#}");
+                    } else {
+                        result.push_str(text);
                     }
                 }
                 HighlightEvent::HighlightStart(highlight) => {
@@ -121,18 +118,18 @@ impl Highlighter {
             }
         }
 
-        styles
+        result
     }
 }
 
-/// Compute a per-character `Style` for each character in `line`.
+/// Highlight a line of Rust code.
 ///
-/// Convenience wrapper using a thread-local highlighter; for many lines,
-/// instantiate [`Highlighter`] once and reuse it.
-pub fn highlight_styles(line: &str) -> Vec<Style> {
+/// This is a convenience function that uses a thread-local highlighter.
+/// For better performance when highlighting multiple lines, use [`Highlighter`] directly.
+pub fn highlight(line: &str) -> String {
     thread_local! {
         static HIGHLIGHTER: std::cell::RefCell<Highlighter> = std::cell::RefCell::new(Highlighter::new());
     }
 
-    HIGHLIGHTER.with(|h| h.borrow_mut().highlight_styles(line))
+    HIGHLIGHTER.with(|h| h.borrow_mut().highlight(line))
 }

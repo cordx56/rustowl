@@ -211,22 +211,7 @@ impl MirVisitor for FindVariablesByName<'_> {
     }
 }
 
-/// Type of decoration for a range.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum DecoType {
-    // Order matches the legend display order
-    Lifetime,
-    ImmBorrow,
-    MutBorrow,
-    Move,
-    Call,
-    SharedMut,
-    Outlive,
-    DefinitelyLive,
-    MaybeInitialized,
-}
-
-impl DecoType {
+impl Deco {
     const COLOR_LIFETIME: anstyle::Style = colors::GREEN;
     const COLOR_IMMUTABLE: anstyle::Style = colors::CYAN;
     const COLOR_MUTABLE: anstyle::Style = colors::PURPLE;
@@ -237,56 +222,32 @@ impl DecoType {
 
     fn color(&self) -> anstyle::Style {
         match self {
-            DecoType::Lifetime => Self::COLOR_LIFETIME,
-            DecoType::ImmBorrow => Self::COLOR_IMMUTABLE,
-            DecoType::MutBorrow => Self::COLOR_MUTABLE,
-            DecoType::Move => Self::COLOR_MOVE,
-            DecoType::Call => Self::COLOR_CALL,
-            DecoType::SharedMut => Self::COLOR_SHARED,
-            DecoType::Outlive => Self::COLOR_OUTLIVE,
-            DecoType::DefinitelyLive => Self::COLOR_LIFETIME,
-            DecoType::MaybeInitialized => Self::COLOR_LIFETIME,
+            Deco::Lifetime { .. } => Self::COLOR_LIFETIME,
+            Deco::DefinitelyLive { .. } => Self::COLOR_LIFETIME,
+            Deco::MaybeInitialized { .. } => Self::COLOR_LIFETIME,
+            Deco::ImmBorrow { .. } => Self::COLOR_IMMUTABLE,
+            Deco::MutBorrow { .. } => Self::COLOR_MUTABLE,
+            Deco::Move { .. } => Self::COLOR_MOVE,
+            Deco::Call { .. } => Self::COLOR_CALL,
+            Deco::SharedMut { .. } => Self::COLOR_SHARED,
+            Deco::Outlive { .. } => Self::COLOR_OUTLIVE,
         }
     }
 
-    const SHORT_LIFETIME: &'static str = "l";
-    const SHORT_IMMUTABLE: &'static str = "i";
-    const SHORT_MUTABLE: &'static str = "m";
-    const SHORT_MOVE: &'static str = "v";
-    const SHORT_CALL: &'static str = "c";
-    const SHORT_SHARED: &'static str = "s";
-    const SHORT_OUTLIVE: &'static str = "o";
+    const LINE_SOLID: char = '-';
+    const LINE_WAVY: char = '~';
 
-    /// Terminal underline effect for this decoration: curly for most,
-    /// straight for `MaybeInitialized` (matches the prior `~` vs `-` distinction).
-    fn underline_effect(&self) -> anstyle::Effects {
+    fn underline_char(&self) -> char {
         match self {
-            DecoType::MaybeInitialized => anstyle::Effects::UNDERLINE,
-            _ => anstyle::Effects::CURLY_UNDERLINE,
-        }
-    }
-
-    /// Combined style applied to the source character: keeps the syntax
-    /// foreground color, adds the decoration underline effect, and sets
-    /// the underline color from the decoration's palette.
-    fn apply_to(&self, base: anstyle::Style) -> anstyle::Style {
-        base.effects(base.get_effects() | self.underline_effect())
-            .underline_color(self.color().get_fg_color())
-    }
-
-    /// Visualization priority. Higher value overlays lower when stacked.
-    /// Mirrors `CalcDecos::get_deco_order` so error-like decorations win.
-    fn priority(&self) -> u8 {
-        match self {
-            DecoType::Lifetime => 0,
-            DecoType::MaybeInitialized => 1,
-            DecoType::DefinitelyLive => 2,
-            DecoType::ImmBorrow => 3,
-            DecoType::MutBorrow => 4,
-            DecoType::Move => 5,
-            DecoType::Call => 6,
-            DecoType::SharedMut => 7,
-            DecoType::Outlive => 8,
+            Deco::Lifetime { .. } => Self::LINE_WAVY,
+            Deco::DefinitelyLive { .. } => Self::LINE_SOLID,
+            Deco::MaybeInitialized { .. } => Self::LINE_WAVY,
+            Deco::ImmBorrow { .. } => Self::LINE_SOLID,
+            Deco::MutBorrow { .. } => Self::LINE_SOLID,
+            Deco::Move { .. } => Self::LINE_SOLID,
+            Deco::Call { .. } => Self::LINE_SOLID,
+            Deco::SharedMut { .. } => Self::LINE_WAVY,
+            Deco::Outlive { .. } => Self::LINE_WAVY,
         }
     }
 }
@@ -322,20 +283,41 @@ impl<'a> CliRenderer<'a> {
         );
 
         // Group decorations by line
-        let mut line_decos: HashMap<u32, Vec<(u32, u32, DecoType)>> = HashMap::new();
+        let mut line_decos: HashMap<u32, Vec<(u32, u32, Deco)>> = HashMap::new();
 
         for deco in decos {
-            let (range, deco_type) = match deco {
-                Deco::Lifetime { range, .. } => (*range, DecoType::Lifetime),
-                Deco::ImmBorrow { range, .. } => (*range, DecoType::ImmBorrow),
-                Deco::MutBorrow { range, .. } => (*range, DecoType::MutBorrow),
-                Deco::Move { range, .. } => (*range, DecoType::Move),
-                Deco::Call { range, .. } => (*range, DecoType::Call),
-                Deco::SharedMut { range, .. } => (*range, DecoType::SharedMut),
-                Deco::Outlive { range, .. } => (*range, DecoType::Outlive),
-                Deco::DefinitelyLive { range, .. } => (*range, DecoType::DefinitelyLive),
-                Deco::MaybeInitialized { range, .. } => (*range, DecoType::MaybeInitialized),
+            let (range, overlapped) = match deco {
+                Deco::Lifetime {
+                    range, overlapped, ..
+                }
+                | Deco::DefinitelyLive {
+                    range, overlapped, ..
+                }
+                | Deco::MaybeInitialized {
+                    range, overlapped, ..
+                }
+                | Deco::ImmBorrow {
+                    range, overlapped, ..
+                }
+                | Deco::MutBorrow {
+                    range, overlapped, ..
+                }
+                | Deco::Move {
+                    range, overlapped, ..
+                }
+                | Deco::Call {
+                    range, overlapped, ..
+                }
+                | Deco::SharedMut {
+                    range, overlapped, ..
+                }
+                | Deco::Outlive {
+                    range, overlapped, ..
+                } => (*range, *overlapped),
             };
+            if overlapped {
+                continue;
+            }
 
             let (start_line, start_col) = utils::index_to_line_char(self.source, range.from());
             let (end_line, end_col) = utils::index_to_line_char(self.source, range.until());
@@ -345,7 +327,7 @@ impl<'a> CliRenderer<'a> {
                 line_decos
                     .entry(start_line)
                     .or_default()
-                    .push((start_col, end_col, deco_type));
+                    .push((start_col, end_col, deco.clone()));
             } else {
                 // Handle multi-line decorations by adding to each line
                 for line in start_line..=end_line {
@@ -361,7 +343,7 @@ impl<'a> CliRenderer<'a> {
                     line_decos
                         .entry(line)
                         .or_default()
-                        .push((col_start, col_end, deco_type));
+                        .push((col_start, col_end, deco.clone()));
                 }
             }
         }
@@ -380,76 +362,50 @@ impl<'a> CliRenderer<'a> {
         let display_start = min_line.saturating_sub(context);
         let display_end = (max_line + context).min(self.lines.len() as u32 - 1);
 
-        // Print each line with decorations rendered as terminal underlines on the source.
+        // Print lines with decorations
         for line_num in display_start..=display_end {
             if let Some(line_content) = self.lines.get(line_num as usize) {
+                // Print line number and syntax-highlighted content
                 let dim = colors::DIM;
-                let rendered =
-                    self.render_line(line_content, line_decos.get(&line_num).map(Vec::as_slice));
-                println!("{dim}{:4} |{dim:#} {rendered}", line_num + 1);
+                println!(
+                    "{dim}{:4} |{dim:#} {}",
+                    line_num + 1,
+                    syntax::highlight(line_content),
+                );
+
+                // Print decorations for this line
+                if let Some(decos_for_line) = line_decos.get_mut(&line_num) {
+                    self.print_decorations(decos_for_line);
+                }
             }
         }
 
         println!();
     }
 
-    /// Build a single styled line that overlays decorations onto the
-    /// syntax-highlighted source via terminal underline effects (curly /
-    /// straight) plus per-character underline colors.
-    fn render_line(&self, line_content: &str, decos: Option<&[(u32, u32, DecoType)]>) -> String {
-        let chars: Vec<char> = line_content.chars().collect();
-        let syntax_styles = syntax::highlight_styles(line_content);
+    /// Print decoration underlines for a single line.
+    /// Groups decorations of the same type on the same output line.
+    fn print_decorations(&self, decos: &mut [(u32, u32, Deco)]) {
+        decos.sort_by(|(start, _, _), (end, _, _)| start.cmp(end));
 
-        // Map each character column to the highest-priority decoration covering it.
-        // Lifetime is intentionally skipped (replaced by DefinitelyLive elsewhere).
-        let mut deco_at: Vec<Option<DecoType>> = vec![None; chars.len()];
-        if let Some(decos) = decos
-            && !chars.is_empty()
-        {
-            let mut sorted: Vec<&(u32, u32, DecoType)> = decos
-                .iter()
-                .filter(|(_, _, t)| !matches!(t, DecoType::Lifetime))
-                .collect();
-            sorted.sort_by_key(|(_, _, t)| t.priority());
-            for (start, end, deco_type) in sorted {
-                let s = (*start as usize).min(chars.len());
-                let e = (*end as usize).min(chars.len() - 1);
-                if s > e {
-                    continue;
-                }
-                for slot in deco_at.iter_mut().take(e + 1).skip(s) {
-                    *slot = Some(*deco_type);
-                }
-            }
-        }
+        // print header
+        let dim = colors::DIM;
+        print!("{dim}     |{dim:#} ");
 
-        // Compose syntax + decoration per character, grouping runs of identical
-        // styles to keep ANSI escape noise to a minimum.
-        let mut out = String::with_capacity(line_content.len() * 2);
-        let mut prev = anstyle::Style::new();
-        for (i, ch) in chars.iter().enumerate() {
-            let mut style = syntax_styles
-                .get(i)
-                .copied()
-                .unwrap_or_else(anstyle::Style::new);
-            if let Some(deco) = deco_at.get(i).copied().flatten() {
-                style = deco.apply_to(style);
+        let mut printed = 0;
+        for (start, end, deco) in decos {
+            if printed < *start {
+                let space: String = (printed..*start).map(|_| ' ').collect();
+                print!("{space}");
             }
-            if style != prev {
-                if !prev.is_plain() {
-                    out.push_str(&format!("{prev:#}"));
-                }
-                if !style.is_plain() {
-                    out.push_str(&format!("{style}"));
-                }
-                prev = style;
-            }
-            out.push(*ch);
+
+            let color = deco.color();
+            let line: String = (*start..*end).map(|_| deco.underline_char()).collect();
+            print!("{color}{line}{color:#}");
+
+            printed = *end;
         }
-        if !prev.is_plain() {
-            out.push_str(&format!("{prev:#}"));
-        }
-        out
+        println!();
     }
 }
 
@@ -573,51 +529,51 @@ pub fn show_variable(
 }
 
 /// Print a color legend for the different decoration types.
-///
-/// Each sample text is styled with the same terminal underline effect
-/// (curly or straight) and underline color used for actual decorations,
-/// so the legend visually matches inline rendering.
 fn print_legend() {
-    let cyan = colors::CYAN;
+    let cyan = Deco::COLOR_IMMUTABLE;
+    let lifetime = Deco::COLOR_LIFETIME;
+    let immutable = Deco::COLOR_IMMUTABLE;
+    let mutable = Deco::COLOR_MUTABLE;
+    let mov = Deco::COLOR_MOVE;
+    let red = Deco::COLOR_OUTLIVE;
+
     println!("{cyan}Legend:{cyan:#}");
-
-    let lifetime_short = DecoType::SHORT_LIFETIME;
-    let imm_short = DecoType::SHORT_IMMUTABLE;
-    let mut_short = DecoType::SHORT_MUTABLE;
-    let move_short = DecoType::SHORT_MOVE;
-    let call_short = DecoType::SHORT_CALL;
-    let out_short = DecoType::SHORT_OUTLIVE;
-    let shared_short = DecoType::SHORT_SHARED;
-
-    let entries: &[(DecoType, String)] = &[
-        (
-            DecoType::DefinitelyLive,
-            format!("definitely lives (lifetime) ({lifetime_short})"),
-        ),
-        (
-            DecoType::MaybeInitialized,
-            format!("maybe lives ({lifetime_short})"),
-        ),
-        (
-            DecoType::ImmBorrow,
-            format!("immutable borrow ({imm_short})"),
-        ),
-        (DecoType::MutBorrow, format!("mutable borrow ({mut_short})")),
-        (
-            DecoType::Move,
-            format!("move ({move_short}) / call ({call_short})"),
-        ),
-        (
-            DecoType::Outlive,
-            format!("outlive ({out_short}) / shared mutable ({shared_short})"),
-        ),
-    ];
-
-    let sample = "   ";
-    for (deco, desc) in entries {
-        let style = deco.apply_to(anstyle::Style::new());
-        println!("  {style}{sample}{style:#} {desc}");
-    }
+    println!(
+        "  {lifetime}{}{}{}{lifetime:#} definitely live (lifetime)",
+        Deco::LINE_SOLID,
+        Deco::LINE_SOLID,
+        Deco::LINE_SOLID,
+    );
+    println!(
+        "  {lifetime}{}{}{}{lifetime:#} maybe live",
+        Deco::LINE_WAVY,
+        Deco::LINE_WAVY,
+        Deco::LINE_WAVY,
+    );
+    println!(
+        "  {immutable}{}{}{}{immutable:#} immutable borrow",
+        Deco::LINE_SOLID,
+        Deco::LINE_SOLID,
+        Deco::LINE_SOLID,
+    );
+    println!(
+        "  {mutable}{}{}{}{mutable:#} mutable borrow",
+        Deco::LINE_SOLID,
+        Deco::LINE_SOLID,
+        Deco::LINE_SOLID,
+    );
+    println!(
+        "  {mov}{}{}{}{mov:#} move / call",
+        Deco::LINE_SOLID,
+        Deco::LINE_SOLID,
+        Deco::LINE_SOLID,
+    );
+    println!(
+        "  {red}{}{}{}{red:#} outlive / shared mutable",
+        Deco::LINE_WAVY,
+        Deco::LINE_WAVY,
+        Deco::LINE_WAVY,
+    );
 }
 
 #[cfg(test)]
