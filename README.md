@@ -25,7 +25,7 @@
     <p>
       <font size="4">
           <a href="https://marketplace.visualstudio.com/items?itemName=cordx56.rustowl-vscode">
-              <img alt="Visual Studio Marketplace Version" src="https://img.shields.io/visual-studio-marketplace/v/cordx56.rustowl-vscode?style=for-the-badge&label=VS%20Code">
+              <img alt="VS Code Static Badge" src="https://img.shields.io/badge/VS_Code-Marketplace-%234daafc?style=for-the-badge">
           </a>
           <a href="https://open-vsx.org/extension/cordx56/rustowl-vscode">
               <img alt="Open VSX Version" src="https://img.shields.io/open-vsx/v/cordx56/rustowl-vscode?style=for-the-badge">
