@@ -54,7 +54,12 @@
         "rustowl.lifetimeColor": {
           "type": "string",
           "default": "hsla(125, 80%, 60%, 0.6)",
-          "description": "The color of the lifetime"
+          "description": "The color of the lifetime (definitely live)"
+        },
+        "rustowl.maybeInitColor": {
+          "type": "string",
+          "default": "hsla(125, 80%, 60%, 0.6)",
+          "description": "The color of the maybe initialized"
         },
         "rustowl.moveCallColor": {
           "type": "string",

@@ -104,6 +104,8 @@ export const zLspLocation = z.object({
 export const zLspRange = z.object({ start: zLspLocation, end: zLspLocation });
 export const zLspType = z.union([
   z.literal("lifetime"),
+  z.literal("definitely_live"),
+  z.literal("maybe_initialized"),
   z.literal("imm_borrow"),
   z.literal("mut_borrow"),
   z.literal("move"),
