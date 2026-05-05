@@ -13,8 +13,7 @@
 ---@field idle_time? number
 ---
 ---The highlight style to use for underlines ('undercurl' or 'underline')
----Default: `'undercurl'`
----@field highlight_style? string
+---@field highlight_styles? rustowl.HighlightStyles
 ---
 ---Custom colors for different highlight types
 ---@field colors? rustowl.Colors
@@ -22,10 +21,36 @@
 ---The LSP client config (This can also be set using |vim.lsp.config()|).
 ---@field client? rustowl.ClientConfig
 
+---@class rustowl.HighlightStyles
+---
+---Highlight style for lifetime (default: 'underline')
+---@field definitely_live? string
+---
+---Highlight style for maybe initialized (default: 'undercurl')
+---@field maybe_initialized? string
+---
+---Highlight style for immutable borrow (default: 'underline')
+---@field imm_borrow? string
+---
+---Highlight style for mutable borrow (default: 'underline')
+---@field mut_borrow? string
+---
+---Highlight style for move (default: 'underline')
+---@field move? string
+---
+---Highlight style for function call (default: 'underline')
+---@field call? string
+---
+---Highlight style for outlive (default: 'undercurl')
+---@field outlive? string
+
 ---@class rustowl.Colors
 ---
 ---Color for lifetime highlights (default: '#00cc00')
----@field lifetime? string
+---@field definitely_live? string
+---
+---Color for maybe initialized highlights (default: '#00cc00')
+---@field maybe_initialized? string
 ---
 ---Color for immutable borrow highlights (default: '#0000cc')
 ---@field imm_borrow? string
@@ -65,12 +90,21 @@ local default_config = {
   ---@type number
   idle_time = 500,
 
-  ---@type string
-  highlight_style = 'undercurl',
+  ---@type rustowl.HighlightStyles
+  highlight_styles = {
+    definitely_live = 'underline',
+    maybe_initialized = 'undercurl',
+    imm_borrow = 'underline',
+    mut_borrow = 'underline',
+    move = 'underline',
+    call = 'underline',
+    outlive = 'undercurl',
+  },
 
   ---@type rustowl.Colors
   colors = {
-    lifetime = '#00cc00',
+    definitely_live = '#00cc00',
+    maybe_initialized = '#00cc00',
     imm_borrow = '#0000cc',
     mut_borrow = '#cc00cc',
     move = '#cccc00',
@@ -108,17 +142,20 @@ vim.validate {
   auto_enable = { config.auto_enable, 'boolean' },
   idle_time = { config.idle_time, 'number' },
   client = { config.client, { 'table' } },
-  highlight_style = { config.highlight_style, 'string' },
+  highlight_styles = { config.highlight_styles, 'table' },
   colors = { config.colors, 'table' },
 }
 
 -- validation for highlight_style to ensure undercurl or underline
-if config.highlight_style ~= 'undercurl' and config.highlight_style ~= 'underline' then
-  vim.notify(
-    "Rustowl: Invalid highlight_style '" .. config.highlight_style .. "'. Using default 'undercurl'.",
-    vim.log.levels.WARN
-  )
-  config.highlight_style = 'undercurl'
+for key, style in pairs(config.highlight_styles) do
+  if style ~= 'undercurl' and style ~= 'underline' then
+    local default = default_config[key]
+    vim.notify(
+      "Rustowl: Invalid highlight_style '" .. style .. "'. Using default '" .. default .."'.",
+      vim.log.levels.WARN
+    )
+    config.highlight_styles[key] = default
+  end
 end
 config.client.name = 'rustowl'
 

@@ -28,7 +28,8 @@ T['default colors'] = function()
   vim.g.rustowl = {}
   local config = require('rustowl.config')
 
-  expect.equality(config.colors.lifetime, '#00cc00')
+  expect.equality(config.colors.definitely_live, '#00cc00')
+  expect.equality(config.colors.maybe_initialized, '#00cc00')
   expect.equality(config.colors.imm_borrow, '#0000cc')
   expect.equality(config.colors.mut_borrow, '#cc00cc')
   expect.equality(config.colors.move, '#cccc00')
@@ -39,7 +40,8 @@ end
 T['custom colors'] = function()
   vim.g.rustowl = {
     colors = {
-      lifetime = '#32cd32',
+      definitely_live = '#32cd32',
+      maybe_initialized = '#32cd56',
       imm_borrow = '#4169e1',
       mut_borrow = '#ff69b4',
       move = '#ffa500',
@@ -49,7 +51,8 @@ T['custom colors'] = function()
   }
   local config = require('rustowl.config')
 
-  expect.equality(config.colors.lifetime, '#32cd32')
+  expect.equality(config.colors.definitely_live, '#32cd32')
+  expect.equality(config.colors.maybe_initialized, '#32cd56')
   expect.equality(config.colors.imm_borrow, '#4169e1')
   expect.equality(config.colors.mut_borrow, '#ff69b4')
   expect.equality(config.colors.move, '#ffa500')
@@ -60,14 +63,15 @@ end
 T['partial color customization'] = function()
   vim.g.rustowl = {
     colors = {
-      lifetime = '#90ee90',
+      definitely_live = '#90ee90',
       outlive = '#ff4500',
       -- Other colors should use defaults
     },
   }
   local config = require('rustowl.config')
 
-  expect.equality(config.colors.lifetime, '#90ee90')
+  expect.equality(config.colors.definitely_live, '#90ee90')
+  expect.equality(config.colors.maybe_initialized, '#00cc00') --default
   expect.equality(config.colors.imm_borrow, '#0000cc') -- default
   expect.equality(config.colors.mut_borrow, '#cc00cc') -- default
   expect.equality(config.colors.move, '#cccc00') -- default

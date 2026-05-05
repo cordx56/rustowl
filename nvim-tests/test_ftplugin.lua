@@ -34,7 +34,6 @@ local T = MiniTest.new_set {
 
 T['ftplugin_creates_highlight_groups'] = function()
   package.loaded['rustowl.config'] = {
-    highlight_style = 'undercurl',
     auto_enable = false,
     auto_attach = false,
     client = {
@@ -47,7 +46,8 @@ T['ftplugin_creates_highlight_groups'] = function()
   }
   vim.cmd('source ftplugin/rust.lua')
   local highlight_groups = {
-    'lifetime',
+    'definitely_live',
+    'maybe_initialized',
     'imm_borrow',
     'mut_borrow',
     'move',
@@ -157,7 +157,6 @@ end
 
 T['ftplugin_loads_without_error'] = function()
   package.loaded['rustowl.config'] = {
-    highlight_style = 'undercurl',
     auto_enable = false,
     auto_attach = false,
     client = {
@@ -177,7 +176,6 @@ end
 
 T['ftplugin_creates_underline_highlights'] = function()
   package.loaded['rustowl.config'] = {
-    highlight_style = 'underline',
     auto_enable = false,
     auto_attach = false,
     client = {
@@ -190,7 +188,7 @@ T['ftplugin_creates_underline_highlights'] = function()
   }
   vim.bo.filetype = 'rust'
   vim.cmd('source ftplugin/rust.lua')
-  local hl = vim.api.nvim_get_hl(0, { name = 'lifetime' })
+  local hl = vim.api.nvim_get_hl(0, { name = 'definitely_live' })
   -- Accept underline or undercurl (for plugin compatibility)
   expect.equality((hl.underline or false) or (hl.undercurl or false), true)
 end

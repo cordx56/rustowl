@@ -3,10 +3,19 @@ local config = require('rustowl.config')
 if not vim.g.loaded_rustowl then
   vim.g.loaded_rustowl = true
 
-  local highlight_style = config.highlight_style or 'undercurl'
+  local default_highlight_styles = {
+    definitely_live = 'underline',
+    maybe_initialized = 'undercurl',
+    imm_borrow = 'underline',
+    mut_borrow = 'underline',
+    move = 'underline',
+    call = 'underline',
+    outlive = 'undercurl',
+  }
 
   local default_colors = {
-    lifetime = '#00cc00',
+    definitely_live = '#00cc00',
+    maybe_initialized = '#00cc00',
     imm_borrow = '#0000cc',
     mut_borrow = '#cc00cc',
     move = '#cccc00',
@@ -14,12 +23,13 @@ if not vim.g.loaded_rustowl then
     outlive = '#cc0000',
   }
 
-  -- Ensure all color keys are present even if user provides a partial table
+  -- Ensure all keys are present even if user provides a partial table
+  local highlight_styles = vim.tbl_deep_extend('keep', config.highlight_styles or {}, default_highlight_styles)
   local highlights = vim.tbl_deep_extend('keep', config.colors or {}, default_colors)
 
   for hl_name, color in pairs(highlights) do
     local options = { default = true, sp = color }
-    if highlight_style == 'underline' then
+    if highlight_styles[hl_name] == 'underline' then
       options.underline = true
     else
       options.undercurl = true
