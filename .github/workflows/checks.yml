@@ -128,7 +128,10 @@ jobs:
 
       - name: Run tests
         # MIR is still unstable, so this test can fail in other versions of Rust.
-        if: matrix.toolchain == needs.define-matrix.outputs.latest
+        #
+        # This result differ by target platform, so only check on Linux.
+        # Note: Whether the check success or not is checked by `rustowl check`.
+        if: matrix.toolchain == needs.define-matrix.outputs.latest && matrix.os == 'ubuntu-latest'
         run: ./scripts/toolchain cargo nextest run --no-fail-fast
 
       - name: Install binary
