@@ -23,3 +23,18 @@ fn f3() {
     }
     println!("{r:?}");
 }
+
+fn f4() {
+    let v1: Vec<_> = (0..100).collect();
+    if 0 < v1.len() {
+        println!("definitely live here");
+        drop(v1);
+        println!("definitely dropped here");
+    } else {
+        println!("definitely live here");
+        println!("{v1:?}");
+        println!("definitely live here");
+    }
+    println!("maybe live here...");
+    println!("{v1:?}");
+}

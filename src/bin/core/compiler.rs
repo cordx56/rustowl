@@ -1,6 +1,5 @@
-use rayon::prelude::*;
-use rustowl::models::*;
-use std::collections::HashMap;
+use rustowl::{models::*, utils};
+use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 
@@ -51,6 +50,7 @@ pub struct SourceInfo {
     offset: u32,
     path: PathBuf,
     source: String,
+    cleaned_source: String,
 }
 impl SourceInfo {
     pub fn path(&self) -> &Path {
@@ -58,6 +58,9 @@ impl SourceInfo {
     }
     pub fn source(&self) -> &str {
         &self.source
+    }
+    pub fn cleaned_source(&self) -> &str {
+        &self.cleaned_source
     }
 }
 
@@ -111,45 +114,48 @@ impl<'tcx> TyCtxt<'tcx> {
     }
 
     #[rustversion::since(1.94.0)]
-    pub fn source_info_from_span(&self, span: Span) -> SourceInfo {
+    pub fn source_info_from_span(&self, span: Span) -> Option<SourceInfo> {
         let source_map = self.as_rustc().sess.source_map();
         let file_name = source_map.span_to_filename(*span.as_rustc());
-        let source_file = source_map.get_source_file(&file_name).unwrap();
+        let source_file = source_map.get_source_file(&file_name)?;
         let offset = source_file.start_pos.0;
 
-        let file_name = source_map.path_mapping().to_real_filename(
-            source_map.working_dir(),
-            file_name.into_local_path().unwrap(),
-        );
+        let file_name = source_map
+            .path_mapping()
+            .to_real_filename(source_map.working_dir(), file_name.into_local_path()?);
         let (_work_dir, path) =
             file_name.embeddable_name(rustc_span::RemapPathScopeComponents::DIAGNOSTICS);
         let path = path.to_path_buf();
         let source = std::fs::read_to_string(&path).unwrap();
-        SourceInfo {
+        let cleaned_source = utils::clean_source(&source);
+        Some(SourceInfo {
             offset,
             path,
             source,
-        }
+            cleaned_source,
+        })
     }
     #[rustversion::before(1.94.0)]
-    pub fn source_info_from_span(&self, span: Span) -> SourceInfo {
+    pub fn source_info_from_span(&self, span: Span) -> Option<SourceInfo> {
         let source_map = self.as_rustc().sess.source_map();
         let file_name = source_map.span_to_filename(*span.as_rustc());
-        let source_file = source_map.get_source_file(&file_name).unwrap();
+        let source_file = source_map.get_source_file(&file_name)?;
         let offset = source_file.start_pos.0;
         let file_name = source_map.path_mapping().to_embeddable_absolute_path(
-            rustc_span::RealFileName::LocalPath(file_name.into_local_path().unwrap()),
+            rustc_span::RealFileName::LocalPath(file_name.into_local_path()?),
             &rustc_span::RealFileName::LocalPath(std::env::current_dir().unwrap()),
         );
         let path = file_name
             .to_path(rustc_span::FileNameDisplayPreference::Local)
             .to_path_buf();
         let source = std::fs::read_to_string(&path).unwrap();
-        SourceInfo {
+        let cleaned_source = utils::clean_source(&source);
+        Some(SourceInfo {
             offset,
             path,
             source,
-        }
+            cleaned_source,
+        })
     }
 
     pub fn crate_name(&self) -> String {
@@ -170,7 +176,7 @@ impl_as_rustc!(
 );
 
 impl<'tcx> Body<'tcx> {
-    pub fn get_local_decls(&self) -> HashMap<LocalId, String> {
+    pub fn get_local_decls(&self) -> BTreeMap<LocalId, String> {
         self.0
             .local_decls
             .iter_enumerated()
@@ -181,7 +187,7 @@ impl<'tcx> Body<'tcx> {
     pub fn collect_user_variables(
         &self,
         source_info: &SourceInfo,
-    ) -> HashMap<LocalId, (Range, String)> {
+    ) -> BTreeMap<LocalId, (Range, String)> {
         self.0
             .var_debug_info
             // this cannot be par_iter since body cannot send
@@ -203,6 +209,10 @@ impl<'tcx> Body<'tcx> {
 
     pub fn span(&self) -> Span {
         AsRustc::from_rustc(self.0.span)
+    }
+
+    pub fn get_location_ranges(&self, source_info: &SourceInfo) -> LocationRanges {
+        LocationRanges::compute(self, source_info)
     }
 
     /// Extract StorageLive and StorageDead information from MIR body.
@@ -321,7 +331,7 @@ impl DefId {
 impl_as_rustc!(
     /// Local ID type
     /// corresponds to function local (variable) ID
-    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
     LocalId,
     rustc_middle::mir::Local,
 );

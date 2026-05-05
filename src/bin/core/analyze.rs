@@ -1,10 +1,10 @@
+mod dataflow_analyzer;
 mod polonius_analyzer;
-//mod transform;
 
 use super::cache;
 pub use super::compiler::*;
 use rustowl::models::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -26,8 +26,8 @@ pub enum MirAnalyzerInitResult {
 
 pub struct MirAnalyzer {
     file_path: PathBuf,
-    local_decls: HashMap<LocalId, String>,
-    user_vars: HashMap<LocalId, (Range, String)>,
+    local_decls: BTreeMap<LocalId, String>,
+    user_vars: BTreeMap<LocalId, (Range, String)>,
     input: PoloniusInput,
     basic_blocks: Vec<MirBasicBlock>,
     fn_id: DefId,
@@ -40,6 +40,8 @@ pub struct MirAnalyzer {
     mutable_live: HashMap<LocalId, Vec<Range>>,
     drop_range: HashMap<LocalId, Vec<Range>>,
     storage_range: HashMap<LocalId, Vec<Range>>,
+    definitely_live_range: HashMap<LocalId, Vec<Range>>,
+    maybe_init_range: HashMap<LocalId, Vec<Range>>,
 }
 impl MirAnalyzer {
     /// initialize analyzer
@@ -48,7 +50,11 @@ impl MirAnalyzer {
 
         let facts = tcx.get_borrowck_facts(fn_id);
         for (fn_id, mut facts) in facts {
-            let source_info = tcx.source_info_from_span(facts.body().span());
+            let source_info = if let Some(v) = tcx.source_info_from_span(facts.body().span()) {
+                v
+            } else {
+                continue;
+            };
             let name = tcx.def_name(fn_id);
             log::debug!("facts of {fn_id:?} ({name}) prepared; start analyze...");
 
@@ -92,9 +98,13 @@ impl MirAnalyzer {
             // this must be done in local thread
             let user_vars = body.collect_user_variables(&source_info);
 
+            // build a Location -> source range map directly from the MIR body.
+            let location_ranges = body.get_location_ranges(&source_info);
+
             // build basic blocks map
             // this must be done in local thread
-            let basic_blocks = tcx.collect_basic_blocks(fn_id, &body, &source_info);
+            let basic_blocks =
+                tcx.collect_basic_blocks(fn_id, &body, &source_info, &location_ranges);
 
             // compute storage ranges based on StorageLive/StorageDead
             // this must be done in local thread as body cannot be sent across threads
@@ -113,32 +123,47 @@ impl MirAnalyzer {
                 let output = input.compute();
                 log::debug!("second borrow check finished");
 
-                let accurate_live =
-                    polonius_analyzer::get_accurate_live(&output, &location_table, &basic_blocks);
+                let accurate_live = polonius_analyzer::get_accurate_live(
+                    &output,
+                    &location_table,
+                    &location_ranges,
+                );
 
                 let must_live = polonius_analyzer::get_must_live(
                     &output,
                     &location_table,
                     &borrow_data,
-                    &basic_blocks,
+                    &location_ranges,
                 );
 
                 let (shared_live, mutable_live) = polonius_analyzer::get_borrow_live(
                     &output,
                     &location_table,
                     &borrow_data,
-                    &basic_blocks,
+                    &location_ranges,
                 );
 
                 let drop_range =
-                    polonius_analyzer::drop_range(&output, &location_table, &basic_blocks);
+                    polonius_analyzer::drop_range(&output, &location_table, &location_ranges);
+
+                // CFG based liveness analysis
+                log::debug!("start CFG based liveness check");
+                let cfg_analysis_output =
+                    dataflow_analyzer::CfgAnalyzer::walk_cfg(&basic_blocks, &local_decls);
+                log::debug!("CFG based liveness check finished");
+                let definitely_live_range =
+                    dataflow_analyzer::get_definitely_lives(&cfg_analysis_output, &location_ranges);
+                let maybe_init_range = dataflow_analyzer::get_maybe_initialized(
+                    &cfg_analysis_output,
+                    &location_ranges,
+                );
 
                 MirAnalyzer {
                     file_path,
                     local_decls,
                     input,
                     user_vars,
-                    basic_blocks,
+                    basic_blocks: basic_blocks.values().cloned().collect(),
                     fn_id,
                     name,
                     file_hash,
@@ -149,6 +174,8 @@ impl MirAnalyzer {
                     mutable_live,
                     drop_range,
                     storage_range,
+                    definitely_live_range,
+                    maybe_init_range,
                 }
             });
             result.insert(fn_id, MirAnalyzerInitResult::Analyzer(analyzer));
@@ -177,6 +204,19 @@ impl MirAnalyzer {
                 let drop_range = drop_range.get(local).cloned().unwrap_or(Vec::new());
                 let storage_range = storage_range.get(local).cloned().unwrap_or(Vec::new());
                 let fn_local = FnLocal::new(local.as_u32(), self.fn_id.as_u32());
+
+                // liveness range based on CFG analysis
+                let definitely_live_at = self
+                    .definitely_live_range
+                    .get(local)
+                    .cloned()
+                    .unwrap_or_default();
+                let maybe_init_at = self
+                    .maybe_init_range
+                    .get(local)
+                    .cloned()
+                    .unwrap_or_default();
+
                 if let Some((span, name)) = user_vars.get(local).cloned() {
                     MirDecl::User {
                         local: fn_local,
@@ -190,6 +230,8 @@ impl MirAnalyzer {
                         drop,
                         drop_range,
                         storage_range,
+                        definitely_live_at,
+                        maybe_init_at,
                     }
                 } else {
                     MirDecl::Other {
@@ -202,6 +244,8 @@ impl MirAnalyzer {
                         drop_range,
                         must_live_at,
                         storage_range,
+                        definitely_live_at,
+                        maybe_init_at,
                     }
                 }
             })

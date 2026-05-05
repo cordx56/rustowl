@@ -215,23 +215,23 @@ pub enum MirRval {
 pub enum MirStatement {
     StorageLive {
         target_local: FnLocal,
-        range: Range,
+        range: Option<Range>,
     },
     StorageDead {
         target_local: FnLocal,
-        range: Range,
+        range: Option<Range>,
     },
     Assign {
         target_local: FnLocal,
-        range: Range,
+        range: Option<Range>,
         rval: Option<MirRval>,
     },
     Other {
-        range: Range,
+        range: Option<Range>,
     },
 }
 impl MirStatement {
-    pub fn range(&self) -> Range {
+    pub fn range(&self) -> Option<Range> {
         match self {
             Self::StorageLive { range, .. } => *range,
             Self::StorageDead { range, .. } => *range,
@@ -246,26 +246,40 @@ impl MirStatement {
 pub enum MirTerminator {
     Drop {
         local: FnLocal,
-        range: Range,
+        range: Option<Range>,
+        successors: Vec<BasicBlockId>,
     },
     Call {
+        args: Vec<Option<FnLocal>>,
         destination_local: FnLocal,
-        fn_span: Range,
+        fn_span: Option<Range>,
+        successors: Vec<BasicBlockId>,
     },
     Other {
-        range: Range,
+        range: Option<Range>,
+        successors: Vec<BasicBlockId>,
     },
 }
 impl MirTerminator {
-    pub fn range(&self) -> Range {
+    pub fn range(&self) -> Option<Range> {
         match self {
             Self::Drop { range, .. } => *range,
             Self::Call { fn_span, .. } => *fn_span,
-            Self::Other { range } => *range,
+            Self::Other { range, .. } => *range,
+        }
+    }
+    pub fn successors(&self) -> Vec<BasicBlockId> {
+        match self {
+            Self::Drop { successors, .. } => successors.clone(),
+            Self::Call { successors, .. } => successors.clone(),
+            Self::Other { successors, .. } => successors.clone(),
         }
     }
 }
 
+#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+#[serde(transparent)]
+pub struct BasicBlockId(pub usize);
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct MirBasicBlock {
     pub statements: Vec<MirStatement>,
@@ -285,6 +299,8 @@ pub enum MirDecl {
         mutable_borrow: Vec<Range>,
         drop: bool,
         drop_range: Vec<Range>,
+        definitely_live_at: Vec<Range>,
+        maybe_init_at: Vec<Range>,
         must_live_at: Vec<Range>,
         /// Range from StorageLive to StorageDead for this variable
         storage_range: Vec<Range>,
@@ -297,6 +313,8 @@ pub enum MirDecl {
         mutable_borrow: Vec<Range>,
         drop: bool,
         drop_range: Vec<Range>,
+        definitely_live_at: Vec<Range>,
+        maybe_init_at: Vec<Range>,
         must_live_at: Vec<Range>,
         /// Range from StorageLive to StorageDead for this variable
         storage_range: Vec<Range>,
