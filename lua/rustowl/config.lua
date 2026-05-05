@@ -98,6 +98,7 @@ local default_config = {
     mut_borrow = 'underline',
     move = 'underline',
     call = 'underline',
+    shared_mut = 'undercurl',
     outlive = 'undercurl',
   },
 
@@ -109,6 +110,7 @@ local default_config = {
     mut_borrow = '#cc00cc',
     move = '#cccc00',
     call = '#cccc00',
+    shared_mut = '#cc0000',
     outlive = '#cc0000',
   },
 
@@ -149,9 +151,9 @@ vim.validate {
 -- validation for highlight_style to ensure undercurl or underline
 for key, style in pairs(config.highlight_styles) do
   if style ~= 'undercurl' and style ~= 'underline' then
-    local default = default_config[key]
+    local default = default_config.highlight_styles[key]
     vim.notify(
-      "Rustowl: Invalid highlight_style '" .. style .. "'. Using default '" .. default .."'.",
+      "Rustowl: Invalid highlight_style '" .. style .. "'. Using default '" .. default .. "'.",
       vim.log.levels.WARN
     )
     config.highlight_styles[key] = default
