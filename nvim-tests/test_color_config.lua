@@ -34,6 +34,7 @@ T['default colors'] = function()
   expect.equality(config.colors.mut_borrow, '#cc00cc')
   expect.equality(config.colors.move, '#cccc00')
   expect.equality(config.colors.call, '#cccc00')
+  expect.equality(config.colors.shared_mut, '#cc0000')
   expect.equality(config.colors.outlive, '#cc0000')
 end
 
@@ -46,7 +47,8 @@ T['custom colors'] = function()
       mut_borrow = '#ff69b4',
       move = '#ffa500',
       call = '#ffd700',
-      outlive = '#dc143c',
+      shared_mut = '#dc143c',
+      outlive = '#dc143d',
     },
   }
   local config = require('rustowl.config')
@@ -57,7 +59,8 @@ T['custom colors'] = function()
   expect.equality(config.colors.mut_borrow, '#ff69b4')
   expect.equality(config.colors.move, '#ffa500')
   expect.equality(config.colors.call, '#ffd700')
-  expect.equality(config.colors.outlive, '#dc143c')
+  expect.equality(config.colors.shared_mut, '#dc143c')
+  expect.equality(config.colors.outlive, '#dc143d')
 end
 
 T['partial color customization'] = function()
@@ -76,6 +79,7 @@ T['partial color customization'] = function()
   expect.equality(config.colors.mut_borrow, '#cc00cc') -- default
   expect.equality(config.colors.move, '#cccc00') -- default
   expect.equality(config.colors.call, '#cccc00') -- default
+  expect.equality(config.colors.shared_mut, '#cc0000') -- default
   expect.equality(config.colors.outlive, '#ff4500')
 end
 

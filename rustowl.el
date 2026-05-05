@@ -82,16 +82,18 @@
                    (overlapped (gethash "overlapped" deco)))
               (if (not overlapped)
                   (cond
-                   ((equal type "lifetime")
-                    (rustowl-underline start-pos end-pos "#00cc00"))
+                   ((equal type "definitely_live")
+                    (rustowl-underline start-pos end-pos "#00cc00" nil))
+                   ((equal type "maybe_initialized")
+                    (rustowl-underline start-pos end-pos "#00cc00" t))
                    ((equal type "imm_borrow")
-                    (rustowl-underline start-pos end-pos "#0000cc"))
+                    (rustowl-underline start-pos end-pos "#0000cc" nil))
                    ((equal type "mut_borrow")
-                    (rustowl-underline start-pos end-pos "#cc00cc"))
+                    (rustowl-underline start-pos end-pos "#cc00cc" nil))
                    ((or (equal type "move") (equal type "call"))
-                    (rustowl-underline start-pos end-pos "#cccc00"))
-                   ((equal type "outlive")
-                    (rustowl-underline start-pos end-pos "#cc0000"))))))
+                    (rustowl-underline start-pos end-pos "#cccc00" nil))
+                   ((or (equal type "shared_mut") (equal type "outlive"))
+                    (rustowl-underline start-pos end-pos "#cc0000" t))))))
           decorations)))
      :mode 'current)))
 
@@ -164,9 +166,11 @@
 
 (defvar rustowl-overlays nil)
 
-(defun rustowl-underline (start end color)
+(defun rustowl-underline (start end color wavy)
   (let ((overlay (make-overlay start end)))
-    (overlay-put overlay 'face `(:underline (:color ,color :style wave)))
+    (if wavy
+      (overlay-put overlay 'face `(:underline (:color ,color :style wave)))
+      (overlay-put overlay 'face `(:underline (:color ,color :style line))))
     (push overlay rustowl-overlays)
     overlay))
 

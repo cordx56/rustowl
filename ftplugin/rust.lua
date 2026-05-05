@@ -10,6 +10,7 @@ if not vim.g.loaded_rustowl then
     mut_borrow = 'underline',
     move = 'underline',
     call = 'underline',
+    shared_mut = 'undercurl',
     outlive = 'undercurl',
   }
 
@@ -20,6 +21,7 @@ if not vim.g.loaded_rustowl then
     mut_borrow = '#cc00cc',
     move = '#cccc00',
     call = '#cccc00',
+    shared_mut = '#cc0000',
     outlive = '#cc0000',
   }
 

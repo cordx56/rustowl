@@ -52,6 +52,7 @@ T['ftplugin_creates_highlight_groups'] = function()
     'mut_borrow',
     'move',
     'call',
+    'shared_mut',
     'outlive',
   }
   for _, hl_name in ipairs(highlight_groups) do

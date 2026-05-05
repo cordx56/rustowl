@@ -53,6 +53,7 @@ T['default_config_values'] = function()
   expect.equality(config.highlight_styles.mut_borrow, 'underline')
   expect.equality(config.highlight_styles.move, 'underline')
   expect.equality(config.highlight_styles.call, 'underline')
+  expect.equality(config.highlight_styles.shared_mut, 'undercurl')
   expect.equality(config.highlight_styles.outlive, 'undercurl')
 
   expect.equality(type(config.client), 'table')
