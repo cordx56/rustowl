@@ -4,12 +4,13 @@
 //! and lifetime information, using colored underlines to represent
 //! different ownership states.
 
-use crate::lsp::decoration::{CalcDecos, Deco};
+use crate::lsp::decoration::{CalcDecos, Deco, DecoType};
 use crate::models::*;
 use crate::utils::{self, MirVisitor};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use tower_lsp::lsp_types;
 
 mod syntax;
 
@@ -82,12 +83,43 @@ pub struct VariableInfo {
     pub function_name: String,
 }
 
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct LineColPosition {
+    line: usize,
+    col: usize,
+}
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct LineColRange {
+    start: LineColPosition,
+    end: LineColPosition,
+}
+
 /// JSON format to show
 #[derive(serde::Serialize, Debug, Clone)]
-pub struct ShowAsJson {
+pub struct SingleDecorationJson {
     file_path: PathBuf,
     variable_info: VariableInfo,
-    decorations: Vec<Deco>,
+    decorations: Vec<Deco<LineColRange>>,
+}
+
+impl Deco<LineColRange> {
+    pub fn from_lsp_deco(lsp_deco: Deco<lsp_types::Range>) -> Deco<LineColRange> {
+        let start = LineColPosition {
+            line: lsp_deco.range.start.line as usize + 1,
+            col: lsp_deco.range.start.character as usize + 1,
+        };
+        let end = LineColPosition {
+            line: lsp_deco.range.end.line as usize + 1,
+            col: lsp_deco.range.end.character as usize + 1,
+        };
+        Deco {
+            deco_type: lsp_deco.deco_type,
+            local: lsp_deco.local,
+            range: LineColRange { start, end },
+            hover_text: lsp_deco.hover_text.clone(),
+            overlapped: lsp_deco.overlapped,
+        }
+    }
 }
 
 /// Find variables by name within a specific function.
@@ -229,16 +261,16 @@ impl Deco {
     const COLOR_OUTLIVE: anstyle::Style = colors::RED;
 
     fn color(&self) -> anstyle::Style {
-        match self {
-            Deco::Lifetime { .. } => Self::COLOR_LIFETIME,
-            Deco::DefinitelyLive { .. } => Self::COLOR_LIFETIME,
-            Deco::MaybeInitialized { .. } => Self::COLOR_LIFETIME,
-            Deco::ImmBorrow { .. } => Self::COLOR_IMMUTABLE,
-            Deco::MutBorrow { .. } => Self::COLOR_MUTABLE,
-            Deco::Move { .. } => Self::COLOR_MOVE,
-            Deco::Call { .. } => Self::COLOR_CALL,
-            Deco::SharedMut { .. } => Self::COLOR_SHARED,
-            Deco::Outlive { .. } => Self::COLOR_OUTLIVE,
+        match self.deco_type {
+            DecoType::Lifetime => Self::COLOR_LIFETIME,
+            DecoType::DefinitelyLive => Self::COLOR_LIFETIME,
+            DecoType::MaybeInitialized => Self::COLOR_LIFETIME,
+            DecoType::ImmBorrow => Self::COLOR_IMMUTABLE,
+            DecoType::MutBorrow => Self::COLOR_MUTABLE,
+            DecoType::Move => Self::COLOR_MOVE,
+            DecoType::Call => Self::COLOR_CALL,
+            DecoType::SharedMut => Self::COLOR_SHARED,
+            DecoType::Outlive => Self::COLOR_OUTLIVE,
         }
     }
 
@@ -246,16 +278,16 @@ impl Deco {
     const LINE_WAVY: char = '~';
 
     fn underline_char(&self) -> char {
-        match self {
-            Deco::Lifetime { .. } => Self::LINE_WAVY,
-            Deco::DefinitelyLive { .. } => Self::LINE_SOLID,
-            Deco::MaybeInitialized { .. } => Self::LINE_WAVY,
-            Deco::ImmBorrow { .. } => Self::LINE_SOLID,
-            Deco::MutBorrow { .. } => Self::LINE_SOLID,
-            Deco::Move { .. } => Self::LINE_SOLID,
-            Deco::Call { .. } => Self::LINE_SOLID,
-            Deco::SharedMut { .. } => Self::LINE_WAVY,
-            Deco::Outlive { .. } => Self::LINE_WAVY,
+        match self.deco_type {
+            DecoType::Lifetime => Self::LINE_WAVY,
+            DecoType::DefinitelyLive => Self::LINE_SOLID,
+            DecoType::MaybeInitialized => Self::LINE_WAVY,
+            DecoType::ImmBorrow => Self::LINE_SOLID,
+            DecoType::MutBorrow => Self::LINE_SOLID,
+            DecoType::Move => Self::LINE_SOLID,
+            DecoType::Call => Self::LINE_SOLID,
+            DecoType::SharedMut => Self::LINE_WAVY,
+            DecoType::Outlive => Self::LINE_WAVY,
         }
     }
 }
@@ -270,6 +302,24 @@ impl<'a> CliRenderer<'a> {
     pub fn new(source: &'a str) -> Self {
         let lines: Vec<&str> = source.lines().collect();
         Self { source, lines }
+    }
+
+    pub fn get_json(
+        &self,
+        file_path: PathBuf,
+        variable_info: VariableInfo,
+        decos: &[Deco],
+    ) -> String {
+        let decorations = decos
+            .iter()
+            .map(|v| Deco::from_lsp_deco(v.to_lsp_range(self.source)))
+            .collect();
+        serde_json::to_string(&SingleDecorationJson {
+            file_path,
+            variable_info,
+            decorations,
+        })
+        .unwrap()
     }
 
     /// Render a single variable's decorations to the terminal.
@@ -294,35 +344,7 @@ impl<'a> CliRenderer<'a> {
         let mut line_decos: HashMap<u32, Vec<(u32, u32, Deco)>> = HashMap::new();
 
         for deco in decos {
-            let (range, overlapped) = match deco {
-                Deco::Lifetime {
-                    range, overlapped, ..
-                }
-                | Deco::DefinitelyLive {
-                    range, overlapped, ..
-                }
-                | Deco::MaybeInitialized {
-                    range, overlapped, ..
-                }
-                | Deco::ImmBorrow {
-                    range, overlapped, ..
-                }
-                | Deco::MutBorrow {
-                    range, overlapped, ..
-                }
-                | Deco::Move {
-                    range, overlapped, ..
-                }
-                | Deco::Call {
-                    range, overlapped, ..
-                }
-                | Deco::SharedMut {
-                    range, overlapped, ..
-                }
-                | Deco::Outlive {
-                    range, overlapped, ..
-                } => (*range, *overlapped),
-            };
+            let (range, overlapped) = (deco.range, deco.overlapped);
             if overlapped {
                 continue;
             }
@@ -528,23 +550,19 @@ pub fn show_variable(
         all_show.push((file_path.to_path_buf(), var_info, decos));
     }
 
-    if as_json {
-        let array: Vec<_> = all_show
-            .into_iter()
-            .map(|(file_path, variable_info, decorations)| ShowAsJson {
-                file_path,
-                variable_info,
-                decorations,
-            })
-            .collect();
-        println!("{}", serde_json::to_string(&array).unwrap());
-    } else {
-        for (idx, (path, var_info, decos)) in all_show.into_iter().enumerate() {
-            // Read the source file
-            let source = std::fs::read_to_string(path)?;
-            let renderer = CliRenderer::new(&source);
+    for (idx, (path, var_info, decos)) in all_show.into_iter().enumerate() {
+        // Read the source file
+        let source = std::fs::read_to_string(&path)?;
+        let renderer = CliRenderer::new(&source);
+
+        if as_json {
+            let json = renderer.get_json(path, var_info, &decos);
+            println!("{json}");
+        } else {
             renderer.render_variable(&var_info, idx, total_vars, &decos);
         }
+    }
+    if !as_json {
         // Print legend
         print_legend();
     }
