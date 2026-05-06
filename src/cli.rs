@@ -123,4 +123,8 @@ pub struct Show {
     /// Check all features.
     #[arg(long, default_value_t = false)]
     pub all_features: bool,
+
+    /// JSON output.
+    #[arg(long, default_value_t = false)]
+    pub json: bool,
 }

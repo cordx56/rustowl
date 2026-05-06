@@ -9,7 +9,7 @@ use crate::models::*;
 use crate::utils::{self, MirVisitor};
 use std::collections::HashMap;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 mod syntax;
 
@@ -74,12 +74,20 @@ impl From<std::io::Error> for VisualizeError {
 }
 
 /// Information about a found variable.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct VariableInfo {
     pub local: FnLocal,
     pub name: String,
     pub span: Range,
     pub function_name: String,
+}
+
+/// JSON format to show
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct ShowAsJson {
+    file_path: PathBuf,
+    variable_info: VariableInfo,
+    decorations: Vec<Deco>,
 }
 
 /// Find variables by name within a specific function.
@@ -459,6 +467,7 @@ pub fn show_variable(
     file_path: Option<&Path>,
     function_path: &str,
     variable_name: &str,
+    as_json: bool,
 ) -> Result<(), VisualizeError> {
     // Collect all matching variables across files
     let mut all_found: Vec<(String, VariableInfo)> = Vec::new();
@@ -498,18 +507,15 @@ pub fn show_variable(
 
     let total_vars = all_found.len();
 
+    let mut all_show = Vec::new();
     // Display each found variable
-    for (idx, (file_path_str, var_info)) in all_found.iter().enumerate() {
-        let file_path = Path::new(file_path_str);
+    for (file_path_str, var_info) in all_found.into_iter() {
+        let file_path = Path::new(&file_path_str);
 
         // Get the file data for calculating decorations
         // Use find_file to normalize the path (handles UNC vs non-UNC paths on Windows)
         let file = find_file(crate_data, file_path)
             .ok_or_else(|| VisualizeError::FileNotFound(file_path_str.clone()))?;
-
-        // Read the source file
-        let source = std::fs::read_to_string(file_path)?;
-        let renderer = CliRenderer::new(&source);
 
         // Calculate decorations for this variable
         let mut calc = CalcDecos::new(std::iter::once(var_info.local));
@@ -519,11 +525,29 @@ pub fn show_variable(
         calc.handle_overlapping();
         let decos = calc.decorations();
 
-        renderer.render_variable(var_info, idx, total_vars, &decos);
+        all_show.push((file_path.to_path_buf(), var_info, decos));
     }
 
-    // Print legend
-    print_legend();
+    if as_json {
+        let array: Vec<_> = all_show
+            .into_iter()
+            .map(|(file_path, variable_info, decorations)| ShowAsJson {
+                file_path,
+                variable_info,
+                decorations,
+            })
+            .collect();
+        println!("{}", serde_json::to_string(&array).unwrap());
+    } else {
+        for (idx, (path, var_info, decos)) in all_show.into_iter().enumerate() {
+            // Read the source file
+            let source = std::fs::read_to_string(path)?;
+            let renderer = CliRenderer::new(&source);
+            renderer.render_variable(&var_info, idx, total_vars, &decos);
+        }
+        // Print legend
+        print_legend();
+    }
 
     Ok(())
 }

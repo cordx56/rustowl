@@ -155,6 +155,7 @@ async fn handle_show_command(opts: cli::Show) {
         file_path.as_deref(),
         &opts.function_path,
         &opts.variable,
+        opts.json,
     ) {
         log::error!("{e}");
         std::process::exit(1);
