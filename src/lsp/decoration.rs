@@ -333,31 +333,32 @@ impl SelectLocal {
         if !self.candidate_local_decls.contains(&local) {
             return;
         }
-        if range.from() <= self.pos && self.pos <= range.until() {
-            if let Some((old_reason, _, old_range)) = self.selected {
-                match (old_reason, reason) {
-                    (_, SelectReason::Var) => {
-                        if range.size() < old_range.size() {
-                            self.selected = Some((reason, local, range));
-                        }
+        if range.from() <= self.pos
+            && self.pos <= range.until()
+            && let Some((old_reason, _, old_range)) = self.selected
+        {
+            match (old_reason, reason) {
+                (_, SelectReason::Var) => {
+                    if range.size() < old_range.size() {
+                        self.selected = Some((reason, local, range));
                     }
-                    (SelectReason::Var, _) => {}
-                    (_, SelectReason::Move) | (_, SelectReason::Borrow) => {
-                        if range.size() < old_range.size() {
-                            self.selected = Some((reason, local, range));
-                        }
-                    }
-                    (SelectReason::Call, SelectReason::Call) => {
-                        // TODO: select narrower when callee is method
-                        if old_range.size() < range.size() {
-                            self.selected = Some((reason, local, range));
-                        }
-                    }
-                    _ => {}
                 }
-            } else {
-                self.selected = Some((reason, local, range));
+                (SelectReason::Var, _) => {}
+                (_, SelectReason::Move) | (_, SelectReason::Borrow) => {
+                    if range.size() < old_range.size() {
+                        self.selected = Some((reason, local, range));
+                    }
+                }
+                (SelectReason::Call, SelectReason::Call) => {
+                    // TODO: select narrower when callee is method
+                    if old_range.size() < range.size() {
+                        self.selected = Some((reason, local, range));
+                    }
+                }
+                _ => {}
             }
+        } else {
+            self.selected = Some((reason, local, range));
         }
     }
 
@@ -382,9 +383,12 @@ impl utils::MirVisitor for SelectLocal {
     fn visit_stmt(&mut self, stmt: &MirStatement) {
         if let MirStatement::Assign { rval, .. } = stmt {
             match rval {
-                Some(MirRval::Move {
-                    target_local,
-                    range,
+                Some(MirRval::Operand {
+                    operand:
+                        MirOperand::Move {
+                            target_local,
+                            range,
+                        },
                 }) => {
                     self.select(SelectReason::Move, *target_local, *range);
                 }
@@ -394,6 +398,17 @@ impl utils::MirVisitor for SelectLocal {
                     ..
                 }) => {
                     self.select(SelectReason::Borrow, *target_local, *range);
+                }
+                Some(MirRval::Aggregate { fields }) => {
+                    for field in fields {
+                        if let Some(MirOperand::Move {
+                            target_local,
+                            range,
+                        }) = field
+                        {
+                            self.select(SelectReason::Move, *target_local, *range);
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -764,19 +779,24 @@ impl utils::MirVisitor for CalcDecos {
 
     fn visit_stmt(&mut self, stmt: &MirStatement) {
         if let MirStatement::Assign { rval, .. } = stmt {
-            match rval {
-                Some(MirRval::Move {
+            let mut push_operand = |operand: &MirOperand| {
+                if let MirOperand::Move {
                     target_local,
                     range,
-                }) => {
-                    if self.locals.contains(target_local) {
-                        self.decorations.push(Deco::Move {
-                            local: *target_local,
-                            range: *range,
-                            hover_text: "variable moved".to_string(),
-                            overlapped: false,
-                        });
-                    }
+                } = operand
+                    && self.locals.contains(target_local)
+                {
+                    self.decorations.push(Deco::Move {
+                        local: *target_local,
+                        range: *range,
+                        hover_text: "variable moved".to_string(),
+                        overlapped: false,
+                    });
+                }
+            };
+            match rval {
+                Some(MirRval::Operand { operand }) => {
+                    push_operand(operand);
                 }
                 Some(MirRval::Borrow {
                     target_local,
@@ -800,6 +820,11 @@ impl utils::MirVisitor for CalcDecos {
                                 overlapped: false,
                             });
                         }
+                    }
+                }
+                Some(MirRval::Aggregate { fields }) => {
+                    for field in fields.iter().flatten() {
+                        push_operand(field);
                     }
                 }
                 _ => {}

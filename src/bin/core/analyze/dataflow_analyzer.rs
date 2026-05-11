@@ -95,14 +95,28 @@ impl CfgAnalyzer {
                 MirStatement::Assign {
                     target_local, rval, ..
                 } => {
-                    if let Some(MirRval::Move { target_local, .. }) = rval
-                        && let Some(state) =
-                            local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                                rustc_middle::mir::Local::from_u32(target_local.id),
-                            ))
-                    {
-                        state.clear();
-                        state.insert(LocalStateVariant::Moved);
+                    let mut visit_operand = |operand: &MirOperand| {
+                        if let MirOperand::Move { target_local, .. } = operand
+                            && let Some(state) =
+                                local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
+                                    rustc_middle::mir::Local::from_u32(target_local.id),
+                                ))
+                        {
+                            state.clear();
+                            state.insert(LocalStateVariant::Moved);
+                        }
+                    };
+
+                    match rval {
+                        Some(MirRval::Operand { operand }) => {
+                            visit_operand(operand);
+                        }
+                        Some(MirRval::Aggregate { fields }) => {
+                            for field in fields.iter().flatten() {
+                                visit_operand(field);
+                            }
+                        }
+                        _ => {}
                     }
                     if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
                         rustc_middle::mir::Local::from_u32(target_local.id),

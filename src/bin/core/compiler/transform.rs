@@ -56,6 +56,23 @@ impl<'tcx> TyCtxt<'tcx> {
                             statement_index,
                         };
                         let range = location_ranges.get(&AsRustc::from_rustc(location)).copied();
+                        let operand_transform = |operand: &Operand| match operand {
+                            Operand::Copy(p) => {
+                                let local = p.local;
+                                range.map(|range| MirOperand::Copy {
+                                    target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
+                                    range,
+                                })
+                            }
+                            Operand::Move(p) => {
+                                let local = p.local;
+                                range.map(|range| MirOperand::Move {
+                                    target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
+                                    range,
+                                })
+                            }
+                            _ => Some(MirOperand::Other),
+                        };
                         match &statement.kind {
                             StatementKind::StorageLive(local) => MirStatement::StorageLive {
                                 target_local: FnLocal::new(local.as_u32(), fn_id.as_u32()),
@@ -69,16 +86,8 @@ impl<'tcx> TyCtxt<'tcx> {
                                 let (place, rval) = &**v;
                                 let target_local_index = place.local.as_u32();
                                 let rv = match rval {
-                                    Rvalue::Use(Operand::Move(p)) => {
-                                        let local = p.local;
-                                        range.map(|range| MirRval::Move {
-                                            target_local: FnLocal::new(
-                                                local.as_u32(),
-                                                fn_id.as_u32(),
-                                            ),
-                                            range,
-                                        })
-                                    }
+                                    Rvalue::Use(operand) => operand_transform(operand)
+                                        .map(|operand| MirRval::Operand { operand }),
                                     Rvalue::Ref(_region, kind, place) => {
                                         let mutable = matches!(kind, BorrowKind::Mut { .. });
                                         let local = place.local;
@@ -93,6 +102,9 @@ impl<'tcx> TyCtxt<'tcx> {
                                             outlive,
                                         })
                                     }
+                                    Rvalue::Aggregate(_, fields) => Some(MirRval::Aggregate {
+                                        fields: fields.iter().map(operand_transform).collect(),
+                                    }),
                                     _ => None,
                                 };
                                 MirStatement::Assign {

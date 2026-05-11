@@ -197,16 +197,26 @@ impl Crate {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case", tag = "type")]
+pub enum MirOperand {
+    Copy { target_local: FnLocal, range: Range },
+    Move { target_local: FnLocal, range: Range },
+    Other,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "snake_case", tag = "type")]
 pub enum MirRval {
-    Move {
-        target_local: FnLocal,
-        range: Range,
+    Operand {
+        operand: MirOperand,
     },
     Borrow {
         target_local: FnLocal,
         range: Range,
         mutable: bool,
         outlive: Option<Range>,
+    },
+    Aggregate {
+        fields: Vec<Option<MirOperand>>,
     },
 }
 
