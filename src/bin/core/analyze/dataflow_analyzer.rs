@@ -130,19 +130,21 @@ impl CfgAnalyzer {
                 if let Some(local_states) = self.states.get_mut(&location)
                     && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
                         rustc_middle::mir::Local::from_u32(place.local.id),
-                    )) {
-                        state.clear();
-                        state.insert(LocalStateVariant::Initialized);
-                    }
+                    ))
+                {
+                    state.clear();
+                    state.insert(LocalStateVariant::Initialized);
+                }
             }
             MirStatementKind::StorageDead { local } => {
                 if let Some(local_states) = self.states.get_mut(&location)
                     && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
                         rustc_middle::mir::Local::from_u32(local.id),
-                    )) {
-                        state.clear();
-                        state.insert(LocalStateVariant::Uninitialized);
-                    }
+                    ))
+                {
+                    state.clear();
+                    state.insert(LocalStateVariant::Uninitialized);
+                }
             }
             _ => {}
         }

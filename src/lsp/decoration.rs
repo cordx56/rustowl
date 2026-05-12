@@ -670,7 +670,9 @@ impl CalcDecos {
     }
 
     pub fn visit_operand(&mut self, operand: &MirOperand, range: Range) {
-        if let MirOperand::Move { place } = operand {
+        if let MirOperand::Move { place } = operand
+            && self.locals.contains(&place.local)
+        {
             self.decorations.push(Deco::Move {
                 local: place.local,
                 range,
