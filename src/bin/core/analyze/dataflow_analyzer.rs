@@ -89,90 +89,109 @@ impl CfgAnalyzer {
         self.states
     }
 
+    pub fn visit_operand(&mut self, operand: &MirOperand, location: Location) {
+        if let MirOperand::Move { place, .. } = operand
+            && let Some(local_states) = self.states.get_mut(&location)
+            && let Some(state) =
+                local_states
+                    .0
+                    .get_mut(&LocalId::from_rustc(rustc_middle::mir::Local::from_u32(
+                        place.local.id,
+                    )))
+        {
+            state.clear();
+            state.insert(LocalStateVariant::Moved);
+        }
+    }
+    pub fn visit_rval(&mut self, rval: &MirRval, location: Location) {
+        match rval {
+            MirRval::Use { operand }
+            | MirRval::Repeat { operand }
+            | MirRval::Cast { operand }
+            | MirRval::UnaryOp { operand } => {
+                self.visit_operand(operand, location);
+            }
+            MirRval::BinaryOp { left, right } => {
+                self.visit_operand(left, location);
+                self.visit_operand(right, location);
+            }
+            MirRval::Aggregate { fields } => {
+                for field in fields {
+                    self.visit_operand(field, location);
+                }
+            }
+            MirRval::Ref { .. } | MirRval::Other => {}
+        }
+    }
     pub fn visit_statement(&mut self, statement: &MirStatement, location: Location) {
-        if let Some(local_states) = self.states.get_mut(&location) {
-            match statement {
-                MirStatement::Assign {
-                    target_local, rval, ..
-                } => {
-                    let mut visit_operand = |operand: &MirOperand| {
-                        if let MirOperand::Move { target_local, .. } = operand
-                            && let Some(state) =
-                                local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                                    rustc_middle::mir::Local::from_u32(target_local.id),
-                                ))
-                        {
-                            state.clear();
-                            state.insert(LocalStateVariant::Moved);
-                        }
-                    };
-
-                    match rval {
-                        Some(MirRval::Operand { operand }) => {
-                            visit_operand(operand);
-                        }
-                        Some(MirRval::Aggregate { fields }) => {
-                            for field in fields.iter().flatten() {
-                                visit_operand(field);
-                            }
-                        }
-                        _ => {}
-                    }
-                    if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                        rustc_middle::mir::Local::from_u32(target_local.id),
+        match &statement.kind {
+            MirStatementKind::Assign { place, rval, .. } => {
+                self.visit_rval(rval, location);
+                if let Some(local_states) = self.states.get_mut(&location)
+                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
+                        rustc_middle::mir::Local::from_u32(place.local.id),
                     )) {
                         state.clear();
                         state.insert(LocalStateVariant::Initialized);
                     }
-                }
-                MirStatement::StorageDead { target_local, .. } => {
-                    if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                        rustc_middle::mir::Local::from_u32(target_local.id),
+            }
+            MirStatementKind::StorageDead { local } => {
+                if let Some(local_states) = self.states.get_mut(&location)
+                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
+                        rustc_middle::mir::Local::from_u32(local.id),
                     )) {
                         state.clear();
                         state.insert(LocalStateVariant::Uninitialized);
                     }
-                }
-                _ => {}
             }
+            _ => {}
         }
     }
     pub fn visit_terminator(&mut self, terminator: &MirTerminator, location: Location) {
-        if let Some(local_states) = self.states.get_mut(&location) {
-            match &terminator {
-                MirTerminator::Call {
-                    args,
-                    destination_local,
-                    ..
-                } => {
-                    for arg in args {
-                        if let Some(moved) = arg
-                            && let Some(state) =
-                                local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                                    rustc_middle::mir::Local::from_u32(moved.id),
-                                ))
-                        {
-                            state.clear();
-                            state.insert(LocalStateVariant::Moved);
-                        }
-                    }
-                    if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                        rustc_middle::mir::Local::from_u32(destination_local.id),
-                    )) {
-                        state.clear();
-                        state.insert(LocalStateVariant::Initialized);
-                    }
-                }
-                MirTerminator::Drop { local, .. } => {
-                    if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                        rustc_middle::mir::Local::from_u32(local.id),
-                    )) {
-                        state.remove(&LocalStateVariant::Initialized);
-                        state.insert(LocalStateVariant::Dropped);
-                    }
-                }
-                _ => {}
+        match &terminator.kind {
+            MirTerminatorKind::SwitchInt { discr, .. } => {
+                self.visit_operand(discr, location);
             }
+            MirTerminatorKind::Drop { place, .. } => {
+                if let Some(local_states) = self.states.get_mut(&location)
+                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
+                        rustc_middle::mir::Local::from_u32(place.local.id),
+                    ))
+                {
+                    state.remove(&LocalStateVariant::Initialized);
+                    state.insert(LocalStateVariant::Dropped);
+                }
+            }
+            MirTerminatorKind::Call {
+                func,
+                args,
+                destination,
+                ..
+            } => {
+                self.visit_operand(func, location);
+                for arg in args {
+                    self.visit_operand(arg, location);
+                }
+                if let Some(local_states) = self.states.get_mut(&location)
+                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
+                        rustc_middle::mir::Local::from_u32(destination.local.id),
+                    ))
+                {
+                    state.clear();
+                    state.insert(LocalStateVariant::Initialized);
+                }
+            }
+            MirTerminatorKind::TailCall { func, args, .. } => {
+                self.visit_operand(func, location);
+                for arg in args {
+                    self.visit_operand(arg, location);
+                }
+            }
+            MirTerminatorKind::Assert { cond, .. } => {
+                self.visit_operand(cond, location);
+            }
+
+            _ => {}
         }
     }
 
