@@ -120,9 +120,7 @@ pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
         for stmt in &bb.statements {
             visitor.visit_stmt(stmt);
         }
-        if let Some(term) = &bb.terminator {
-            visitor.visit_term(term);
-        }
+        visitor.visit_term(&bb.terminator);
     }
 }
 

@@ -318,7 +318,7 @@ pub struct BasicBlockId(pub usize);
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct MirBasicBlock {
     pub statements: Vec<MirStatement>,
-    pub terminator: Option<MirTerminator>,
+    pub terminator: MirTerminator,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

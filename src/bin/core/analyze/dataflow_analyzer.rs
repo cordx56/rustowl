@@ -220,8 +220,7 @@ impl CfgAnalyzer {
             .iter()
             .flat_map(|(block, bb_data)| {
                 let locals = locals.clone();
-                let statement_len =
-                    bb_data.statements.len() + bb_data.terminator.as_ref().map(|_| 1).unwrap_or(0);
+                let statement_len = bb_data.statements.len() + 1;
                 (0..statement_len).map(move |statement_index| {
                     (
                         AsRustc::from_rustc(rustc_middle::mir::Location {
@@ -282,26 +281,25 @@ impl CfgAnalyzer {
                         *v += 1;
                     }
                 }
-                if let Some(terminator) = &bb_data.terminator {
-                    let statement_index = bb_data.statements.len();
-                    let location: Location = AsRustc::from_rustc(rustc_middle::mir::Location {
-                        block: rustc_middle::mir::BasicBlock::from_usize(block.0),
-                        statement_index,
-                    });
-                    if let Some(current_states) = check.states_at(&location) {
-                        current_states.join(&prev_states);
-                        check.visit_terminator(terminator, location);
-                    }
-                    if let Some(current_states) = check.states_at(&location) {
-                        prev_states = current_states.clone();
-                    }
-                    if let Some(v) = check.visited(&location) {
-                        *v += 1;
-                    }
+                let terminator = &bb_data.terminator;
+                let statement_index = bb_data.statements.len();
+                let location: Location = AsRustc::from_rustc(rustc_middle::mir::Location {
+                    block: rustc_middle::mir::BasicBlock::from_usize(block.0),
+                    statement_index,
+                });
+                if let Some(current_states) = check.states_at(&location) {
+                    current_states.join(&prev_states);
+                    check.visit_terminator(terminator, location);
+                }
+                if let Some(current_states) = check.states_at(&location) {
+                    prev_states = current_states.clone();
+                }
+                if let Some(v) = check.visited(&location) {
+                    *v += 1;
+                }
 
-                    for successor in terminator.successors() {
-                        next_blocks.push_back((successor, prev_states.clone()));
-                    }
+                for successor in terminator.successors() {
+                    next_blocks.push_back((successor, prev_states.clone()));
                 }
             } else {
                 break;

@@ -57,15 +57,13 @@ impl<'tcx> TyCtxt<'tcx> {
                         )
                     })
                     .collect();
-                let terminator = bb_data.terminator.as_ref().map(|terminator| {
-                    Terminator::from_rustc(terminator.clone()).transform(
-                        fn_id,
-                        BasicBlockId(block.as_usize()),
-                        bb_data.statements.len(),
-                        source_info,
-                        location_ranges,
-                    )
-                });
+                let terminator = Terminator::from_rustc(bb_data.terminator().clone()).transform(
+                    fn_id,
+                    BasicBlockId(block.as_usize()),
+                    bb_data.statements.len(),
+                    source_info,
+                    location_ranges,
+                );
                 (
                     BasicBlockId(block.as_usize()),
                     MirBasicBlock {
@@ -145,7 +143,7 @@ impl LocationRanges {
         let mut map = HashMap::new();
         for (block, bb_data) in body.as_rustc().basic_blocks.iter_enumerated() {
             let stmt_count = bb_data.statements.len();
-            let total = stmt_count + bb_data.terminator.as_ref().map(|_| 1).unwrap_or(0);
+            let total = stmt_count + 1;
             for statement_index in 0..total {
                 let location = rustc_middle::mir::Location {
                     block,
@@ -175,11 +173,11 @@ impl LocationRanges {
                         _ => false,
                     }
                 } else {
-                    match bb_data.terminator.as_ref().map(|t| &t.kind) {
-                        Some(TerminatorKind::Drop { place, .. }) => {
+                    match &bb_data.terminator().kind {
+                        TerminatorKind::Drop { place, .. } => {
                             user_locals.contains_key(&AsRustc::from_rustc(place.local))
                         }
-                        Some(TerminatorKind::Call { .. }) => {
+                        TerminatorKind::Call { .. } => {
                             // A return value of method call can be important if it is assigned to
                             // a temporary variable, so we always visualize them.
                             true
