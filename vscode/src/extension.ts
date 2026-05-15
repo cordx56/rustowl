@@ -64,7 +64,11 @@ export async function activate(context: vscode.ExtensionContext) {
   };
   statusBar.show();
 
-  let lifetimeDecorationType = vscode.window.createTextEditorDecorationType({});
+  let definitelyLiveDecorationType =
+    vscode.window.createTextEditorDecorationType({});
+  let maybeInitDecorationType = vscode.window.createTextEditorDecorationType(
+    {},
+  );
   let moveDecorationType = vscode.window.createTextEditorDecorationType({});
   let imBorrowDecorationType = vscode.window.createTextEditorDecorationType({});
   let mBorrowDecorationType = vscode.window.createTextEditorDecorationType({});
@@ -86,6 +90,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const {
       underlineThickness,
       lifetimeColor,
+      maybeInitColor,
       moveCallColor,
       immutableBorrowColor,
       mutableBorrowColor,
@@ -98,19 +103,25 @@ export async function activate(context: vscode.ExtensionContext) {
     function createDecorationType(
       color: string,
       highlightBackground: boolean,
+      underlineType: "solid" | "wavy" = "solid",
     ): vscode.TextEditorDecorationType {
       return highlightBackground
         ? vscode.window.createTextEditorDecorationType({
             backgroundColor: color,
           })
         : vscode.window.createTextEditorDecorationType({
-            textDecoration: `underline solid ${underlineThickness}px ${color}`,
+            textDecoration: `underline ${underlineType} ${underlineThickness}px ${color}`,
           });
     }
 
-    lifetimeDecorationType = createDecorationType(
+    definitelyLiveDecorationType = createDecorationType(
       lifetimeColor,
       highlightBackground,
+    );
+    maybeInitDecorationType = createDecorationType(
+      maybeInitColor,
+      highlightBackground,
+      "wavy",
     );
     moveDecorationType = createDecorationType(
       moveCallColor,
@@ -127,10 +138,13 @@ export async function activate(context: vscode.ExtensionContext) {
     outLiveDecorationType = createDecorationType(
       outliveColor,
       highlightBackground,
+      "wavy",
     );
     emptyDecorationType = vscode.window.createTextEditorDecorationType({});
 
     const lifetime: vscode.DecorationOptions[] = [];
+    const definitely: vscode.DecorationOptions[] = [];
+    const maybe_init: vscode.DecorationOptions[] = [];
     const immut: vscode.DecorationOptions[] = [];
     const mut: vscode.DecorationOptions[] = [];
     const moveCall: vscode.DecorationOptions[] = [];
@@ -143,6 +157,10 @@ export async function activate(context: vscode.ExtensionContext) {
           lifetime.push({
             range,
           });
+        } else if (deco.type === "definitely_live") {
+          definitely.push({ range });
+        } else if (deco.type === "maybe_initialized") {
+          maybe_init.push({ range });
         } else if (deco.type === "imm_borrow") {
           immut.push({ range });
         } else if (deco.type === "mut_borrow") {
@@ -154,6 +172,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
       }
       if (
+        deco.type != "lifetime" &&
         "hover_text" in deco &&
         deco.hover_text !== null &&
         deco.hover_text !== ""
@@ -161,7 +180,8 @@ export async function activate(context: vscode.ExtensionContext) {
         messages.push({ range, hoverMessage: deco.hover_text });
       }
     }
-    editor.setDecorations(lifetimeDecorationType, lifetime);
+    editor.setDecorations(definitelyLiveDecorationType, definitely);
+    editor.setDecorations(maybeInitDecorationType, maybe_init);
     editor.setDecorations(imBorrowDecorationType, immut);
     editor.setDecorations(mBorrowDecorationType, mut);
     editor.setDecorations(moveDecorationType, moveCall);
@@ -169,7 +189,8 @@ export async function activate(context: vscode.ExtensionContext) {
     editor.setDecorations(emptyDecorationType, messages);
   };
   const resetDecoration = () => {
-    lifetimeDecorationType.dispose();
+    definitelyLiveDecorationType.dispose();
+    maybeInitDecorationType.dispose();
     moveDecorationType.dispose();
     imBorrowDecorationType.dispose();
     mBorrowDecorationType.dispose();

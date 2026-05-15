@@ -46,7 +46,16 @@ T['default_config_values'] = function()
   expect.equality(config.auto_attach, true)
   expect.equality(config.auto_enable, false)
   expect.equality(config.idle_time, 500)
-  expect.equality(config.highlight_style, 'undercurl')
+
+  expect.equality(config.highlight_styles.definitely_live, 'underline')
+  expect.equality(config.highlight_styles.maybe_initialized, 'undercurl')
+  expect.equality(config.highlight_styles.imm_borrow, 'underline')
+  expect.equality(config.highlight_styles.mut_borrow, 'underline')
+  expect.equality(config.highlight_styles.move, 'underline')
+  expect.equality(config.highlight_styles.call, 'underline')
+  expect.equality(config.highlight_styles.shared_mut, 'undercurl')
+  expect.equality(config.highlight_styles.outlive, 'undercurl')
+
   expect.equality(type(config.client), 'table')
   expect.equality(config.client.name, 'rustowl')
   expect.equality(type(config.client.cmd), 'table')
@@ -59,14 +68,16 @@ T['user_config_override'] = function()
     auto_attach = false,
     auto_enable = true,
     idle_time = 1000,
-    highlight_style = 'underline',
+    highlight_styles = {
+      definitely_live = 'undercurl',
+    },
   }
   monkeypatch_vim_lsp_config()
   local config = require('rustowl.config')
   expect.equality(config.auto_attach, false)
   expect.equality(config.auto_enable, true)
   expect.equality(config.idle_time, 1000)
-  expect.equality(config.highlight_style, 'underline')
+  expect.equality(config.highlight_styles.definitely_live, 'undercurl')
 end
 
 T['function_based_user_config'] = function()
@@ -97,7 +108,7 @@ T['lsp_config_override'] = function()
 end
 
 T['invalid_highlight_style_warning'] = function()
-  vim.g.rustowl_as_lsp_config = { highlight_style = 'invalid_style' }
+  vim.g.rustowl_as_lsp_config = { highlight_styles = { maybe_initialized = 'invalid_style' } }
   monkeypatch_vim_lsp_config()
   local notify_called = false
   local notify_message = nil
@@ -113,7 +124,7 @@ T['invalid_highlight_style_warning'] = function()
   expect.equality(notify_called, true)
   expect.equality(type(notify_message), 'string')
   expect.equality(notify_level, vim.log.levels.WARN)
-  expect.equality(config.highlight_style, 'undercurl')
+  expect.equality(config.highlight_styles.maybe_initialized, 'undercurl')
 end
 
 T['root_dir_function_works'] = function()

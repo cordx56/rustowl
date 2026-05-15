@@ -49,7 +49,7 @@ Wait for a few seconds, and then the ownership-related operations and lifetimes 
 Basically, RustOwl can be used to resolve ownership and lifetime errors.
 What RustOwl visualizes is:
 
-- Actual lifetime of variables, split into two precisions:
+- Lifetime of variables, split into two precisions:
   - **Definitely live** range: the variable is provably initialized on every path that reaches the location.
   - **Maybe live** range: the variable is initialized on at least one path but may have been moved, dropped, or be uninitialized on others.
 - Shared (immutable) borrowing of variables
