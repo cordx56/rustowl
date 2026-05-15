@@ -172,6 +172,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
       }
       if (
+        deco.type != "lifetime" &&
         "hover_text" in deco &&
         deco.hover_text !== null &&
         deco.hover_text !== ""
