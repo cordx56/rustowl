@@ -3,6 +3,11 @@ use super::{AsRustc, TyCtxt};
 #[rustversion::since(1.89.0)]
 use rustc_data_structures::stable_hasher::HashStable;
 
+#[rustversion::since(1.95.0)]
+use rustc_middle::ich;
+#[rustversion::before(1.95.0)]
+use rustc_query_system::ich;
+
 pub trait Hasher<T> {
     fn get_hash(&self, target: T) -> String;
 }
@@ -10,7 +15,7 @@ pub trait Hasher<T> {
 #[rustversion::since(1.89.0)]
 impl<'tcx, T> Hasher<T> for TyCtxt<'tcx>
 where
-    T: HashStable<rustc_query_system::ich::StableHashingContext<'tcx>>,
+    T: HashStable<ich::StableHashingContext<'tcx>>,
 {
     fn get_hash(&self, target: T) -> String {
         #[derive(Debug, Clone)]
@@ -31,8 +36,7 @@ where
         }
 
         let tcx = self.as_rustc();
-        let mut hash_ctx =
-            rustc_query_system::ich::StableHashingContext::new(tcx.sess, tcx.untracked());
+        let mut hash_ctx = ich::StableHashingContext::new(tcx.sess, tcx.untracked());
         let mut hasher = rustc_data_structures::stable_hasher::StableHasher::default();
         target.hash_stable(&mut hash_ctx, &mut hasher);
         hasher.finish::<StableHashString>().get()

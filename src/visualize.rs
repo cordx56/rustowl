@@ -386,7 +386,7 @@ impl<'a> CliRenderer<'a> {
     /// Print decoration underlines for a single line.
     /// Groups decorations of the same type on the same output line.
     fn print_decorations(&self, decos: &mut [(u32, u32, Deco)]) {
-        decos.sort_by(|(start, _, _), (end, _, _)| start.cmp(end));
+        decos.sort_by_key(|(start, _, _)| *start);
 
         // print header
         let dim = colors::DIM;
