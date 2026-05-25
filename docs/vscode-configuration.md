@@ -33,7 +33,8 @@ The VS Code extension exposes configurable settings and commands. Here are the c
 ## Settings (configuration keys)
 
 - `rustowl.underlineThickness` (string) — The stroke thickness of the underline line. Allowed values: "1", "2", "3", "4".
-- `rustowl.lifetimeColor` (string) — The color of the lifetime.
+- `rustowl.lifetimeColor` (string) — The color of the lifetime (definitely live).
+- `rustowl.maybeInitColor` (string) — The color of the lifetime (maybe initialized).
 - `rustowl.moveCallColor` (string) — The color of the move/call.
 - `rustowl.immutableBorrowColor` (string) — The color of the immutable borrow.
 - `rustowl.mutableBorrowColor` (string) — The color of the mutable borrow.
@@ -63,6 +64,7 @@ Add settings to `.vscode/settings.json`:
   "rustowl.displayDelay": 2000,
   "rustowl.defaultEnabled": true,
   "rustowl.lifetimeColor": "#00cc00",
+  "rustowl.maybeInitColor": "#00cc00",
   "rustowl.immutableBorrowColor": "#0000cc",
   "rustowl.mutableBorrowColor": "#cc00cc",
   "rustowl.moveCallColor": "#cccc00",

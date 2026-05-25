@@ -25,6 +25,7 @@ This document describes all available configuration options for the RustOwl Neov
       - [Available Color Options:](#available-color-options)
     - [`client` (table)](#client-table)
   - [Customizing Highlight Colors](#customizing-highlight-colors)
+    - [Default Highlight Style](#default-highlight-style)
     - [Default Colors](#default-colors)
     - [Custom Colors](#custom-colors)
       - [Color Format](#color-format)
@@ -71,11 +72,9 @@ All configuration options are optional and have sensible defaults:
 - **Default**: `500`
 - **Description**: Time in milliseconds to hover with the cursor before triggering RustOwl analysis and highlighting.
 
-### `highlight_style` (string)
+### `highlight_style` (table)
 
-- **Default**: `'undercurl'`
-- **Options**: `'undercurl'` or `'underline'`
-- **Description**: The style of underline to use for highlighting.
+- **Description**: The style of underline for different highlight types. `'undercurl'` or `'underline'`.
 
 ### `colors` (table)
 
@@ -96,11 +95,15 @@ All configuration options are optional and have sensible defaults:
 
 ## Customizing Highlight Colors
 
+### Default Highlight Style
+
+Default highlight style is straight underline except for maybe live and errors.
+
 ### Default Colors
 
 The default color scheme uses the following colors that correspond to the visual legend:
 
-- 🟩 **Green** (`#00cc00`): Variable's actual lifetime
+- 🟩 **Green** (`#00cc00`): Variable's lifetime
 - 🟦 **Blue** (`#0000cc`): Immutable borrowing
 - 🟪 **Purple** (`#cc00cc`): Mutable borrowing
 - 🟧 **Yellow** (`#cccc00`): Value moved / function call
@@ -191,7 +194,10 @@ opts = {
   opts = {
     auto_enable = false,
     idle_time = 300,
-    highlight_style = 'underline',
+    highlight_style = {
+      definitely_live = 'underline',
+      maybe_initialized = 'undercurl',
+    },
     colors = {
       outlive = '#ff0000', -- Bright red for errors
     },
