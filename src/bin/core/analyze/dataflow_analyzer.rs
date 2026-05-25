@@ -89,76 +89,111 @@ impl CfgAnalyzer {
         self.states
     }
 
-    pub fn visit_statement(&mut self, statement: &MirStatement, location: Location) {
-        if let Some(local_states) = self.states.get_mut(&location) {
-            match statement {
-                MirStatement::Assign {
-                    target_local, rval, ..
-                } => {
-                    if let Some(MirRval::Move { target_local, .. }) = rval
-                        && let Some(state) =
-                            local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                                rustc_middle::mir::Local::from_u32(target_local.id),
-                            ))
-                    {
-                        state.clear();
-                        state.insert(LocalStateVariant::Moved);
-                    }
-                    if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                        rustc_middle::mir::Local::from_u32(target_local.id),
-                    )) {
-                        state.clear();
-                        state.insert(LocalStateVariant::Initialized);
-                    }
-                }
-                MirStatement::StorageDead { target_local, .. } => {
-                    if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                        rustc_middle::mir::Local::from_u32(target_local.id),
-                    )) {
-                        state.clear();
-                        state.insert(LocalStateVariant::Uninitialized);
-                    }
-                }
-                _ => {}
+    pub fn visit_operand(&mut self, operand: &MirOperand, location: Location) {
+        if let MirOperand::Move { place, .. } = operand
+            && let Some(local_states) = self.states.get_mut(&location)
+            && let Some(state) =
+                local_states
+                    .0
+                    .get_mut(&LocalId::from_rustc(rustc_middle::mir::Local::from_u32(
+                        place.local.id,
+                    )))
+        {
+            state.clear();
+            state.insert(LocalStateVariant::Moved);
+        }
+    }
+    pub fn visit_rval(&mut self, rval: &MirRval, location: Location) {
+        match rval {
+            MirRval::Use { operand }
+            | MirRval::Repeat { operand }
+            | MirRval::Cast { operand }
+            | MirRval::UnaryOp { operand } => {
+                self.visit_operand(operand, location);
             }
+            MirRval::BinaryOp { left, right } => {
+                self.visit_operand(left, location);
+                self.visit_operand(right, location);
+            }
+            MirRval::Aggregate { fields } => {
+                for field in fields {
+                    self.visit_operand(field, location);
+                }
+            }
+            MirRval::Ref { .. } | MirRval::Other => {}
+        }
+    }
+    pub fn visit_statement(&mut self, statement: &MirStatement, location: Location) {
+        match &statement.kind {
+            MirStatementKind::Assign { place, rval, .. } => {
+                self.visit_rval(rval, location);
+                if let Some(local_states) = self.states.get_mut(&location)
+                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
+                        rustc_middle::mir::Local::from_u32(place.local.id),
+                    ))
+                {
+                    state.clear();
+                    state.insert(LocalStateVariant::Initialized);
+                }
+            }
+            MirStatementKind::StorageDead { local } => {
+                if let Some(local_states) = self.states.get_mut(&location)
+                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
+                        rustc_middle::mir::Local::from_u32(local.id),
+                    ))
+                {
+                    state.clear();
+                    state.insert(LocalStateVariant::Uninitialized);
+                }
+            }
+            _ => {}
         }
     }
     pub fn visit_terminator(&mut self, terminator: &MirTerminator, location: Location) {
-        if let Some(local_states) = self.states.get_mut(&location) {
-            match &terminator {
-                MirTerminator::Call {
-                    args,
-                    destination_local,
-                    ..
-                } => {
-                    for arg in args {
-                        if let Some(moved) = arg
-                            && let Some(state) =
-                                local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                                    rustc_middle::mir::Local::from_u32(moved.id),
-                                ))
-                        {
-                            state.clear();
-                            state.insert(LocalStateVariant::Moved);
-                        }
-                    }
-                    if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                        rustc_middle::mir::Local::from_u32(destination_local.id),
-                    )) {
-                        state.clear();
-                        state.insert(LocalStateVariant::Initialized);
-                    }
-                }
-                MirTerminator::Drop { local, .. } => {
-                    if let Some(state) = local_states.0.get_mut(&<LocalId as AsRustc>::from_rustc(
-                        rustc_middle::mir::Local::from_u32(local.id),
-                    )) {
-                        state.remove(&LocalStateVariant::Initialized);
-                        state.insert(LocalStateVariant::Dropped);
-                    }
-                }
-                _ => {}
+        match &terminator.kind {
+            MirTerminatorKind::SwitchInt { discr, .. } => {
+                self.visit_operand(discr, location);
             }
+            MirTerminatorKind::Drop { place, .. } => {
+                if let Some(local_states) = self.states.get_mut(&location)
+                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
+                        rustc_middle::mir::Local::from_u32(place.local.id),
+                    ))
+                {
+                    state.remove(&LocalStateVariant::Initialized);
+                    state.insert(LocalStateVariant::Dropped);
+                }
+            }
+            MirTerminatorKind::Call {
+                func,
+                args,
+                destination,
+                ..
+            } => {
+                self.visit_operand(func, location);
+                for arg in args {
+                    self.visit_operand(arg, location);
+                }
+                if let Some(local_states) = self.states.get_mut(&location)
+                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
+                        rustc_middle::mir::Local::from_u32(destination.local.id),
+                    ))
+                {
+                    state.clear();
+                    state.insert(LocalStateVariant::Initialized);
+                }
+            }
+            MirTerminatorKind::TailCall { func, args, .. } => {
+                self.visit_operand(func, location);
+                for arg in args {
+                    self.visit_operand(arg, location);
+                }
+            }
+            MirTerminatorKind::Assert { cond, .. } => {
+                self.visit_operand(cond, location);
+            }
+
+            _ => {}
         }
     }
 
@@ -185,8 +220,7 @@ impl CfgAnalyzer {
             .iter()
             .flat_map(|(block, bb_data)| {
                 let locals = locals.clone();
-                let statement_len =
-                    bb_data.statements.len() + bb_data.terminator.as_ref().map(|_| 1).unwrap_or(0);
+                let statement_len = bb_data.statements.len() + 1;
                 (0..statement_len).map(move |statement_index| {
                     (
                         AsRustc::from_rustc(rustc_middle::mir::Location {
@@ -247,26 +281,25 @@ impl CfgAnalyzer {
                         *v += 1;
                     }
                 }
-                if let Some(terminator) = &bb_data.terminator {
-                    let statement_index = bb_data.statements.len();
-                    let location: Location = AsRustc::from_rustc(rustc_middle::mir::Location {
-                        block: rustc_middle::mir::BasicBlock::from_usize(block.0),
-                        statement_index,
-                    });
-                    if let Some(current_states) = check.states_at(&location) {
-                        current_states.join(&prev_states);
-                        check.visit_terminator(terminator, location);
-                    }
-                    if let Some(current_states) = check.states_at(&location) {
-                        prev_states = current_states.clone();
-                    }
-                    if let Some(v) = check.visited(&location) {
-                        *v += 1;
-                    }
+                let terminator = &bb_data.terminator;
+                let statement_index = bb_data.statements.len();
+                let location: Location = AsRustc::from_rustc(rustc_middle::mir::Location {
+                    block: rustc_middle::mir::BasicBlock::from_usize(block.0),
+                    statement_index,
+                });
+                if let Some(current_states) = check.states_at(&location) {
+                    current_states.join(&prev_states);
+                    check.visit_terminator(terminator, location);
+                }
+                if let Some(current_states) = check.states_at(&location) {
+                    prev_states = current_states.clone();
+                }
+                if let Some(v) = check.visited(&location) {
+                    *v += 1;
+                }
 
-                    for successor in terminator.successors() {
-                        next_blocks.push_back((successor, prev_states.clone()));
-                    }
+                for successor in terminator.successors() {
+                    next_blocks.push_back((successor, prev_states.clone()));
                 }
             } else {
                 break;

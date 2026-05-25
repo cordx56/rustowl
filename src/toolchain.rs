@@ -337,9 +337,12 @@ pub async fn setup_cargo_command() -> tokio::process::Command {
         .unwrap_or("".to_string());
 
     let sysroot = get_sysroot().await;
+    // use `RUSTOWLC` and `RUSTOWLC_WORKSPACE_WRAPPER` env var to configure `rustowlc` path
+    let rustowlc = env::var("RUSTOWLC").unwrap_or(rustowlc);
+    let rustowlc_workspace = env::var("RUSTOWLC_WORKSPACE_WRAPPER").unwrap_or(rustowlc.clone());
     command
         .env("RUSTC", &rustowlc)
-        .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc)
+        .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc_workspace)
         .env(
             "CARGO_ENCODED_RUSTFLAGS",
             format!(

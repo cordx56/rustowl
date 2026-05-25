@@ -311,6 +311,7 @@ impl CursorRequest {
 enum SelectReason {
     Var,
     Move,
+    Drop,
     Borrow,
     Call,
 }
@@ -364,6 +365,12 @@ impl SelectLocal {
     pub fn selected(&self) -> Option<FnLocal> {
         self.selected.map(|v| v.1)
     }
+
+    pub fn select_operand(&mut self, operand: &MirOperand, range: Range) {
+        if let MirOperand::Move { place } = operand {
+            self.select(SelectReason::Move, place.local, range);
+        }
+    }
 }
 impl utils::MirVisitor for SelectLocal {
     fn visit_decl(&mut self, decl: &MirDecl) {
@@ -380,34 +387,67 @@ impl utils::MirVisitor for SelectLocal {
         }
     }
     fn visit_stmt(&mut self, stmt: &MirStatement) {
-        if let MirStatement::Assign { rval, .. } = stmt {
+        if let Some(range) = stmt.range
+            && let MirStatementKind::Assign { rval, .. } = &stmt.kind
+        {
             match rval {
-                Some(MirRval::Move {
-                    target_local,
-                    range,
-                }) => {
-                    self.select(SelectReason::Move, *target_local, *range);
+                MirRval::Use { operand }
+                | MirRval::Repeat { operand }
+                | MirRval::Cast { operand }
+                | MirRval::UnaryOp { operand } => {
+                    self.select_operand(operand, range);
                 }
-                Some(MirRval::Borrow {
-                    target_local,
-                    range,
-                    ..
-                }) => {
-                    self.select(SelectReason::Borrow, *target_local, *range);
+                MirRval::BinaryOp { left, right } => {
+                    self.select_operand(left, range);
+                    self.select_operand(right, range);
                 }
-                _ => {}
+                MirRval::Ref { place, .. } => {
+                    self.select(SelectReason::Borrow, place.local, range);
+                }
+                MirRval::Aggregate { fields } => {
+                    for field in fields {
+                        self.select_operand(field, range);
+                    }
+                }
+                MirRval::Other => {}
             }
         }
     }
     fn visit_term(&mut self, term: &MirTerminator) {
-        if let MirTerminator::Call {
-            destination_local,
-            fn_span,
-            ..
-        } = term
-            && let Some(fn_span) = fn_span
-        {
-            self.select(SelectReason::Call, *destination_local, *fn_span);
+        if let Some(range) = term.range {
+            match &term.kind {
+                MirTerminatorKind::Call {
+                    args,
+                    destination,
+                    fn_range,
+                    ..
+                } => {
+                    for arg in args {
+                        self.select_operand(arg, range);
+                    }
+                    if let Some(fn_range) = fn_range {
+                        self.select(SelectReason::Call, destination.local, *fn_range);
+                    }
+                }
+                MirTerminatorKind::TailCall { args, fn_range, .. } => {
+                    if let Some(fn_range) = fn_range {
+                        for arg in args {
+                            self.select_operand(arg, *fn_range);
+                        }
+                    }
+                }
+                MirTerminatorKind::Assert { cond, .. } => {
+                    self.select_operand(cond, range);
+                }
+                MirTerminatorKind::Drop { place, .. } => {
+                    self.select(SelectReason::Drop, place.local, range);
+                }
+                MirTerminatorKind::Goto { .. }
+                | MirTerminatorKind::SwitchInt { .. }
+                | MirTerminatorKind::Return
+                | MirTerminatorKind::Unreachable
+                | MirTerminatorKind::Other { .. } => {}
+            }
         }
     }
 }
@@ -630,6 +670,48 @@ impl CalcDecos {
     pub fn decorations(self) -> Vec<Deco> {
         self.decorations
     }
+
+    pub fn visit_operand(&mut self, operand: &MirOperand, range: Range) {
+        if let MirOperand::Move { place } = operand
+            && self.locals.contains(&place.local)
+        {
+            self.decorations.push(Deco::Move {
+                local: place.local,
+                range,
+                hover_text: "variable moved".to_string(),
+                overlapped: false,
+            });
+        }
+    }
+    pub fn calc_call(&mut self, destination: &MirPlace, fn_span: Range) {
+        for deco in &self.decorations {
+            if let Deco::Call { range, .. } = deco
+                && utils::is_super_range(fn_span, *range)
+            {
+                return;
+            }
+        }
+        let mut i = 0;
+        while i < self.decorations.len() {
+            let range = match &self.decorations[i] {
+                Deco::Call { range, .. } => Some(range),
+                _ => None,
+            };
+            if let Some(range) = range
+                && utils::is_super_range(*range, fn_span)
+            {
+                self.decorations.remove(i);
+                continue;
+            }
+            i += 1;
+        }
+        self.decorations.push(Deco::Call {
+            local: destination.local,
+            range: fn_span,
+            hover_text: "function call".to_string(),
+            overlapped: false,
+        });
+    }
 }
 impl utils::MirVisitor for CalcDecos {
     fn visit_decl(&mut self, decl: &MirDecl) {
@@ -763,88 +845,83 @@ impl utils::MirVisitor for CalcDecos {
     }
 
     fn visit_stmt(&mut self, stmt: &MirStatement) {
-        if let MirStatement::Assign { rval, .. } = stmt {
+        if let Some(range) = stmt.range
+            && let MirStatementKind::Assign { rval, .. } = &stmt.kind
+        {
             match rval {
-                Some(MirRval::Move {
-                    target_local,
-                    range,
-                }) => {
-                    if self.locals.contains(target_local) {
-                        self.decorations.push(Deco::Move {
-                            local: *target_local,
-                            range: *range,
-                            hover_text: "variable moved".to_string(),
-                            overlapped: false,
-                        });
-                    }
+                MirRval::Use { operand }
+                | MirRval::Repeat { operand }
+                | MirRval::Cast { operand }
+                | MirRval::UnaryOp { operand } => {
+                    self.visit_operand(operand, range);
                 }
-                Some(MirRval::Borrow {
-                    target_local,
-                    range,
-                    mutable,
-                    ..
-                }) => {
-                    if self.locals.contains(target_local) {
+                MirRval::BinaryOp { left, right } => {
+                    self.visit_operand(left, range);
+                    self.visit_operand(right, range);
+                }
+                MirRval::Ref { place, mutable } => {
+                    if self.locals.contains(&place.local) {
                         if *mutable {
                             self.decorations.push(Deco::MutBorrow {
-                                local: *target_local,
-                                range: *range,
+                                local: place.local,
+                                range,
                                 hover_text: "mutable borrow".to_string(),
                                 overlapped: false,
                             });
                         } else {
                             self.decorations.push(Deco::ImmBorrow {
-                                local: *target_local,
-                                range: *range,
+                                local: place.local,
+                                range,
                                 hover_text: "immutable borrow".to_string(),
                                 overlapped: false,
                             });
                         }
                     }
                 }
-                _ => {}
+                MirRval::Aggregate { fields } => {
+                    for field in fields {
+                        self.visit_operand(field, range);
+                    }
+                }
+                MirRval::Other => {}
             }
         }
     }
 
     fn visit_term(&mut self, term: &MirTerminator) {
-        if let MirTerminator::Call {
-            destination_local,
-            fn_span,
-            ..
-        } = term
-            && self.locals.contains(destination_local)
-        {
-            let mut i = 0;
-            for deco in &self.decorations {
-                if let Deco::Call { range, .. } = deco
-                    && let Some(fn_span) = fn_span
-                    && utils::is_super_range(*fn_span, *range)
-                {
-                    return;
+        if let Some(range) = term.range {
+            match &term.kind {
+                MirTerminatorKind::Call {
+                    args,
+                    destination,
+                    fn_range,
+                    ..
+                } => {
+                    for arg in args {
+                        self.visit_operand(arg, range);
+                    }
+                    if let Some(fn_range) = fn_range
+                        && self.locals.contains(&destination.local)
+                    {
+                        self.calc_call(destination, *fn_range)
+                    }
                 }
-            }
-            while i < self.decorations.len() {
-                let range = match &self.decorations[i] {
-                    Deco::Call { range, .. } => Some(range),
-                    _ => None,
-                };
-                if let Some(range) = range
-                    && let Some(fn_span) = fn_span
-                    && utils::is_super_range(*range, *fn_span)
-                {
-                    self.decorations.remove(i);
-                    continue;
+                MirTerminatorKind::TailCall { args, fn_range, .. } => {
+                    if let Some(fn_range) = fn_range {
+                        for arg in args {
+                            self.visit_operand(arg, *fn_range);
+                        }
+                    }
                 }
-                i += 1;
-            }
-            if let Some(fn_span) = fn_span {
-                self.decorations.push(Deco::Call {
-                    local: *destination_local,
-                    range: *fn_span,
-                    hover_text: "function call".to_string(),
-                    overlapped: false,
-                });
+                MirTerminatorKind::Assert { cond, .. } => {
+                    self.visit_operand(cond, range);
+                }
+                MirTerminatorKind::Goto { .. }
+                | MirTerminatorKind::SwitchInt { .. }
+                | MirTerminatorKind::Return
+                | MirTerminatorKind::Unreachable
+                | MirTerminatorKind::Drop { .. }
+                | MirTerminatorKind::Other { .. } => {}
             }
         }
     }
