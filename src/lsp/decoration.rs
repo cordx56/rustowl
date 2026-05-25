@@ -311,6 +311,7 @@ impl CursorRequest {
 enum SelectReason {
     Var,
     Move,
+    Drop,
     Borrow,
     Call,
 }
@@ -333,32 +334,31 @@ impl SelectLocal {
         if !self.candidate_local_decls.contains(&local) {
             return;
         }
-        if range.from() <= self.pos
-            && self.pos <= range.until()
-            && let Some((old_reason, _, old_range)) = self.selected
-        {
-            match (old_reason, reason) {
-                (_, SelectReason::Var) => {
-                    if range.size() < old_range.size() {
-                        self.selected = Some((reason, local, range));
+        if range.from() <= self.pos && self.pos <= range.until() {
+            if let Some((old_reason, _, old_range)) = self.selected {
+                match (old_reason, reason) {
+                    (_, SelectReason::Var) => {
+                        if range.size() < old_range.size() {
+                            self.selected = Some((reason, local, range));
+                        }
                     }
-                }
-                (SelectReason::Var, _) => {}
-                (_, SelectReason::Move) | (_, SelectReason::Borrow) => {
-                    if range.size() < old_range.size() {
-                        self.selected = Some((reason, local, range));
+                    (SelectReason::Var, _) => {}
+                    (_, SelectReason::Move) | (_, SelectReason::Borrow) => {
+                        if range.size() < old_range.size() {
+                            self.selected = Some((reason, local, range));
+                        }
                     }
-                }
-                (SelectReason::Call, SelectReason::Call) => {
-                    // TODO: select narrower when callee is method
-                    if old_range.size() < range.size() {
-                        self.selected = Some((reason, local, range));
+                    (SelectReason::Call, SelectReason::Call) => {
+                        // TODO: select narrower when callee is method
+                        if old_range.size() < range.size() {
+                            self.selected = Some((reason, local, range));
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
+            } else {
+                self.selected = Some((reason, local, range));
             }
-        } else {
-            self.selected = Some((reason, local, range));
         }
     }
 
@@ -439,11 +439,13 @@ impl utils::MirVisitor for SelectLocal {
                 MirTerminatorKind::Assert { cond, .. } => {
                     self.select_operand(cond, range);
                 }
+                MirTerminatorKind::Drop { place, .. } => {
+                    self.select(SelectReason::Drop, place.local, range);
+                }
                 MirTerminatorKind::Goto { .. }
                 | MirTerminatorKind::SwitchInt { .. }
                 | MirTerminatorKind::Return
                 | MirTerminatorKind::Unreachable
-                | MirTerminatorKind::Drop { .. }
                 | MirTerminatorKind::Other { .. } => {}
             }
         }
