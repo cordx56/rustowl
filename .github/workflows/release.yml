@@ -13,7 +13,7 @@ jobs:
   check:
     uses: ./.github/workflows/checks.yml
   build:
-    uses: ./.github/workflows/build.yaml
+    uses: ./.github/workflows/build.yml
 
   meta:
     name: Check Version
