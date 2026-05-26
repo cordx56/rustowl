@@ -13,15 +13,15 @@ pub extern crate rustc_index;
 pub extern crate rustc_interface;
 pub extern crate rustc_middle;
 pub extern crate rustc_mir_dataflow;
-pub extern crate rustc_query_system;
 pub extern crate rustc_session;
 pub extern crate rustc_span;
 pub extern crate rustc_stable_hash;
 pub extern crate rustc_type_ir;
 
-pub mod core;
+#[rustversion::before(1.95.0)]
+pub extern crate rustc_query_system;
 
-use std::process::exit;
+pub mod core;
 
 // Cited from rustc
 // https://github.com/rust-lang/rust/pull/148925
@@ -29,7 +29,7 @@ use std::process::exit;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use tikv_jemalloc_sys as _;
 
-fn main() {
+fn main() -> std::process::ExitCode {
     simple_logger::SimpleLogger::new()
         .env()
         .with_colors(true)
@@ -45,5 +45,5 @@ fn main() {
             .unwrap();
     }
 
-    exit(core::run_compiler())
+    core::run_compiler()
 }

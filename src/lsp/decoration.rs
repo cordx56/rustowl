@@ -337,23 +337,20 @@ impl SelectLocal {
         if range.from() <= self.pos && self.pos <= range.until() {
             if let Some((old_reason, _, old_range)) = self.selected {
                 match (old_reason, reason) {
-                    (_, SelectReason::Var) => {
-                        if range.size() < old_range.size() {
+                    (_, SelectReason::Var)
+                        if range.size() < old_range.size() => {
                             self.selected = Some((reason, local, range));
                         }
-                    }
                     (SelectReason::Var, _) => {}
-                    (_, SelectReason::Move) | (_, SelectReason::Borrow) => {
-                        if range.size() < old_range.size() {
+                    (_, SelectReason::Move) | (_, SelectReason::Borrow)
+                        if range.size() < old_range.size() => {
                             self.selected = Some((reason, local, range));
                         }
-                    }
-                    (SelectReason::Call, SelectReason::Call) => {
+                    (SelectReason::Call, SelectReason::Call)
                         // TODO: select narrower when callee is method
-                        if old_range.size() < range.size() {
+                        if old_range.size() < range.size() => {
                             self.selected = Some((reason, local, range));
                         }
-                    }
                     _ => {}
                 }
             } else {
