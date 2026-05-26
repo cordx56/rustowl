@@ -1,6 +1,6 @@
 [package]
 name = "rustowl"
-version = "1.0.0-rc.1"
+version = "0.4.0"
 edition = "2024"
 description = "Visualize Ownership and Lifetimes in Rust"
 documentation = "https://github.com/cordx56/rustowl/blob/main/README.md"
