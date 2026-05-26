@@ -11,13 +11,11 @@ use tower_lsp::{LspService, Server};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
-use tikv_jemallocator::Jemalloc;
-
-// Use jemalloc by default, but fall back to system allocator for Miri
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+// Cited from rustc
+// https://github.com/rust-lang/rust/pull/148925
+// MIT License
+#[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
+use tikv_jemalloc_sys as _;
 
 fn set_log_level(default: log::LevelFilter) {
     log::set_max_level(
@@ -89,10 +87,77 @@ async fn handle_command(command: Commands) {
             }
         }
         Commands::Completions(command_options) => {
-            set_log_level("off".parse().unwrap());
+            set_log_level(log::LevelFilter::Off);
             let shell = command_options.shell;
             generate(shell, &mut Cli::command(), "rustowl", &mut io::stdout());
         }
+        Commands::Show(command_options) => {
+            handle_show_command(command_options).await;
+        }
+    }
+}
+
+/// Handles the show command for visualizing ownership and lifetimes.
+async fn handle_show_command(opts: cli::Show) {
+    use rustowl::lsp::analyze::Analyzer;
+
+    // Canonicalize the file path if specified
+    let file_path = opts.path.as_ref().and_then(|p| p.canonicalize().ok());
+
+    // Determine the project path for analysis
+    let path = file_path
+        .clone()
+        .unwrap_or_else(|| env::current_dir().unwrap_or(".".into()));
+
+    log::info!("Analyzing project at {path:?}");
+
+    // Create an analyzer and run analysis
+    let analyzer = match Analyzer::new(&path).await {
+        Ok(a) => a,
+        Err(e) => {
+            log::error!("Failed to create analyzer: {e:?}");
+            std::process::exit(1);
+        }
+    };
+
+    let mut iter = analyzer.analyze(opts.all_targets, opts.all_features).await;
+
+    // Collect analysis results
+    let mut crate_data: Option<rustowl::models::Crate> = None;
+    while let Some(event) = iter.next_event().await {
+        match event {
+            rustowl::lsp::analyze::AnalyzerEvent::Analyzed(ws) => {
+                for krate in ws.0.into_values() {
+                    if let Some(existing) = &mut crate_data {
+                        existing.merge(krate);
+                    } else {
+                        crate_data = Some(krate);
+                    }
+                }
+            }
+            rustowl::lsp::analyze::AnalyzerEvent::CrateChecked { package, .. } => {
+                log::debug!("Analyzed: {package}");
+            }
+        }
+    }
+
+    let crate_data = match crate_data {
+        Some(data) => data,
+        None => {
+            log::error!("Analysis produced no results");
+            std::process::exit(1);
+        }
+    };
+
+    // Run visualization
+    if let Err(e) = rustowl::visualize::show_variable(
+        &crate_data,
+        file_path.as_deref(),
+        &opts.function_path,
+        &opts.variable,
+    ) {
+        log::error!("{e}");
+        std::process::exit(1);
     }
 }
 
@@ -102,7 +167,7 @@ fn initialize_logging() {
         .with_colors(true)
         .init()
         .unwrap();
-    set_log_level("info".parse().unwrap());
+    set_log_level(log::LevelFilter::Info);
 }
 
 /// Handles the case when no command is provided (version display or LSP server mode)
@@ -142,10 +207,6 @@ async fn start_lsp_server() {
 
 #[tokio::main]
 async fn main() {
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .expect("crypto provider already installed");
-
     initialize_logging();
 
     let parsed_args = Cli::parse();

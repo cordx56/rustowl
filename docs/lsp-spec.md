@@ -1,5 +1,20 @@
 # The RustOwl LSP specification
 
+## Table of Contents
+
+<!--toc:start-->
+
+- [The RustOwl LSP specification](#the-rustowl-lsp-specification)
+  - [Table of Contents](#table-of-contents)
+  - [Types](#types)
+    - [`OprType`](#oprtype)
+    - [`Decoration`](#decoration)
+  - [Methods](#methods)
+    - [`rustowl/cursor`](#rustowlcursor)
+      - [Request payload](#request-payload)
+      - [Response payload](#response-payload)
+<!--toc:end-->
+
 `rustowl`, is an LSP server which provides RustOwl information.
 To display various types of decorations, RustOwl supports some custom methods from the client.
 
@@ -13,9 +28,18 @@ Here, we describe the types we will use in this document.
 
 <!-- prettier-ignore-start -->
 ```typescript
-"lifetime" | "imm_borrow" | "mut_borrow" | "move" | "call" | "outlive" | "shared_mut"
+"lifetime" | "definitely_live" | "maybe_initialized"
+| "imm_borrow" | "mut_borrow" | "move" | "call"
+| "outlive" | "shared_mut"
 ```
 <!-- prettier-ignore-end -->
+
+`definitely_live` and `maybe_initialized` are derived from a CFG-based liveness analysis:
+
+- `definitely_live` covers ranges where the local is provably initialized on every path that reaches the location (state is exactly `{Initialized}`).
+- `maybe_initialized` covers ranges where the local is initialized on at least one path but may also have been moved, dropped, or be uninitialized on others (state contains `Initialized` together with other variants). Useful for spotting conditional drops and other resource-management ambiguity.
+
+`lifetime` is retained for backward compatibility; clients should treat `definitely_live` as the replacement for the previous "actual lifetime" decoration.
 
 ### `Decoration`
 

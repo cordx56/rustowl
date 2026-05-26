@@ -9,7 +9,7 @@ pub fn common_range(r1: Range, r2: Range) -> Option<Range> {
     if r2.from() < r1.from() {
         return common_range(r2, r1);
     }
-    if r1.until() < r2.from() {
+    if r1.until() <= r2.from() {
         return None;
     }
     let from = r2.from();
@@ -60,6 +60,28 @@ pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
     ranges
 }
 
+/// Compute intersection of two range lists.
+/// Returns ranges that are covered by both lists.
+pub fn intersect_ranges(ranges1: Vec<Range>, ranges2: Vec<Range>) -> Vec<Range> {
+    let mut result = Vec::new();
+    for r1 in &ranges1 {
+        for r2 in &ranges2 {
+            if let Some(common) = common_range(*r1, *r2) {
+                result.push(common);
+            }
+        }
+    }
+    eliminated_ranges(result)
+}
+
+/// Compute union of two range lists.
+/// Returns ranges that are covered by either list.
+pub fn union_ranges(ranges1: Vec<Range>, ranges2: Vec<Range>) -> Vec<Range> {
+    let mut combined = ranges1;
+    combined.extend(ranges2);
+    eliminated_ranges(combined)
+}
+
 pub fn exclude_ranges(mut from: Vec<Range>, excludes: Vec<Range>) -> Vec<Range> {
     let mut i = 0;
     'outer: while i < from.len() {
@@ -98,28 +120,62 @@ pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
         for stmt in &bb.statements {
             visitor.visit_stmt(stmt);
         }
-        if let Some(term) = &bb.terminator {
-            visitor.visit_term(term);
-        }
+        visitor.visit_term(&bb.terminator);
     }
 }
 
+pub fn is_source_clean(s: &str) -> bool {
+    !s.contains('\r')
+}
+pub fn clean_source(s: &str) -> String {
+    if is_source_clean(s) {
+        // it seems that the compiler is ignoring CR
+        s.replace('\r', "")
+    } else {
+        s.to_string()
+    }
+}
+
+pub fn range_is_multiline(s: &str, range: Range) -> bool {
+    let mut cleaned = String::new();
+    if !is_source_clean(s) {
+        cleaned = clean_source(s);
+    }
+    let source_clean = if cleaned.is_empty() { s } else { &cleaned };
+
+    let from = range.from().0 as usize;
+    let until = range.until().0 as usize;
+    source_clean
+        .chars()
+        .enumerate()
+        .skip(from)
+        .take(until - from)
+        .any(|(_, c)| c == '\n')
+}
+
 pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
+    let mut cleaned = String::new();
+    if !is_source_clean(s) {
+        cleaned = clean_source(s);
+    }
+    let source_clean = if cleaned.is_empty() { s } else { &cleaned };
+
     let mut line = 0;
     let mut col = 0;
-    // it seems that the compiler is ignoring CR
-    for (i, c) in s.replace("\r", "").chars().enumerate() {
+    for (i, c) in source_clean.chars().enumerate() {
         if idx == Loc::from(i as u32) {
             return (line, col);
         }
         if c == '\n' {
             line += 1;
             col = 0;
-        } else if c != '\r' {
+        } else {
             col += 1;
         }
     }
-    (0, 0)
+    // Return current position when idx equals the string length (end position)
+    // or when idx is out of bounds
+    (line, col)
 }
 pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
     let mut col = 0;

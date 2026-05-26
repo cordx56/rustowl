@@ -1,29 +1,33 @@
-mod analyze;
-mod cache;
+pub mod analyze;
+pub mod cache;
+pub mod compiler;
 
 use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
+use compiler::AsRustc;
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
-use rustc_middle::{
-    mir::ConcreteOpaqueTypes, query::queries::mir_borrowck::ProvidedValue, ty::TyCtxt,
-    util::Providers,
-};
+use rustc_middle::{ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
 use std::collections::HashMap;
 use std::env;
-use std::sync::{LazyLock, atomic::AtomicBool};
+use std::process::ExitCode;
+use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
 use tokio::{
-    runtime::{Builder, Handle, Runtime},
-    sync::Mutex,
+    runtime::{Builder, Runtime},
     task::JoinSet,
 };
+
+#[rustversion::since(1.95.0)]
+use rustc_middle::queries;
+#[rustversion::before(1.95.0)]
+use rustc_middle::query::queries;
 
 pub struct RustcCallback;
 impl rustc_driver::Callbacks for RustcCallback {}
 
 static ATOMIC_TRUE: AtomicBool = AtomicBool::new(true);
-static TASKS: LazyLock<Mutex<JoinSet<MirAnalyzer<'static>>>> =
+static TASKS: LazyLock<Mutex<JoinSet<AnalyzeResult>>> =
     LazyLock::new(|| Mutex::new(JoinSet::new()));
 // make tokio runtime
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
@@ -38,52 +42,40 @@ static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
         .build()
         .unwrap()
 });
-// tokio runtime handler
-static HANDLE: LazyLock<Handle> = LazyLock::new(|| RUNTIME.handle().clone());
 
+#[rustversion::since(1.94.0)]
+fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
+    local.queries.mir_borrowck = mir_borrowck;
+}
+#[rustversion::before(1.94.0)]
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.mir_borrowck = mir_borrowck;
 }
-fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ProvidedValue<'_> {
-    log::info!("start borrowck of {def_id:?}");
+fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
+    log::debug!("start borrowck of {def_id:?}");
 
-    let mut def_ids = vec![def_id];
-    def_ids.extend_from_slice(tcx.nested_bodies_within(def_id));
-
-    for def_id in def_ids {
-        let analyzer = MirAnalyzer::init(
-            // To run analysis tasks in parallel, we ignore lifetime annotation in some types.
-            // This can be done since the TyCtxt object lives until the analysis tasks joined
-            // in after_analysis method.
-            unsafe { std::mem::transmute::<TyCtxt<'_>, TyCtxt<'_>>(tcx) },
-            def_id,
-        );
-        RUNTIME.block_on(async move {
-            let mut locked = TASKS.lock().await;
-
+    let analyzers = MirAnalyzer::init(AsRustc::from_rustc(tcx), AsRustc::from_rustc(def_id));
+    {
+        let mut tasks = TASKS.lock().unwrap();
+        for (_, analyzer) in analyzers {
             match analyzer {
                 MirAnalyzerInitResult::Cached(cached) => {
                     handle_analyzed_result(tcx, cached);
                 }
                 MirAnalyzerInitResult::Analyzer(analyzer) => {
-                    locked.spawn_on(analyzer, &HANDLE);
+                    tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
                 }
             }
-        });
+        }
+
+        log::debug!("there are {} tasks", tasks.len());
+        while let Some(Ok(result)) = tasks.try_join_next() {
+            log::debug!("one task joined");
+            handle_analyzed_result(tcx, result);
+        }
     }
 
-    RUNTIME.block_on(async move {
-        let mut tasks = TASKS.lock().await;
-        log::info!("there are {} tasks", tasks.len());
-        while let Some(Ok(analyzer)) = tasks.try_join_next() {
-            log::info!("one task joined");
-            handle_analyzed_result(tcx, analyzer.analyze());
-        }
-    });
-
-    Ok(tcx
-        .arena
-        .alloc(ConcreteOpaqueTypes(indexmap::IndexMap::default())))
+    Ok(tcx.arena.alloc(Default::default()))
 }
 
 pub struct AnalyzerCallback;
@@ -96,23 +88,33 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         config.override_queries = Some(override_queries);
         config.make_codegen_backend = None;
     }
-
-    /// join all tasks after all analysis finished
-    fn after_analysis<'tcx>(
+    fn after_expansion<'tcx>(
         &mut self,
         _compiler: &interface::Compiler,
         tcx: TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
+        let result = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
+
+        // join all tasks after all analysis finished
+        //
+        // allow clippy::await_holding_lock because `tokio::sync::Mutex` cannot use
+        // for TASKS because block_on cannot be used in `mir_borrowck`.
+        #[allow(clippy::await_holding_lock)]
         RUNTIME.block_on(async move {
-            while let Some(Ok(analyzer)) = { TASKS.lock().await.join_next().await } {
-                log::info!("one task joined");
-                handle_analyzed_result(tcx, analyzer.analyze());
+            while let Some(Ok(result)) = { TASKS.lock().unwrap().join_next().await } {
+                log::debug!("one task joined");
+                handle_analyzed_result(tcx, result);
             }
             if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
                 cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
             }
         });
-        rustc_driver::Compilation::Continue
+
+        if result.is_ok() {
+            rustc_driver::Compilation::Continue
+        } else {
+            rustc_driver::Compilation::Stop
+        }
     }
 }
 
@@ -125,7 +127,7 @@ pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
         );
     }
     let krate = Crate(HashMap::from([(
-        analyzed.file_name.to_owned(),
+        analyzed.file_path.to_string_lossy().to_string(),
         File {
             items: vec![analyzed.analyzed],
         },
@@ -136,7 +138,16 @@ pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
     println!("{}", serde_json::to_string(&ws).unwrap());
 }
 
-pub fn run_compiler() -> i32 {
+#[rustversion::since(1.95.0)]
+fn handle_exit_code(code: ExitCode) -> ExitCode {
+    code
+}
+#[rustversion::before(1.95.0)]
+fn handle_exit_code(code: i32) -> ExitCode {
+    ExitCode::from(code as u8)
+}
+
+pub fn run_compiler() -> ExitCode {
     let mut args: Vec<String> = env::args().collect();
     // by using `RUSTC_WORKSPACE_WRAPPER`, arguments will be as follows:
     // For dependencies: rustowlc [args...]
@@ -145,21 +156,21 @@ pub fn run_compiler() -> i32 {
     if args.first() == args.get(1) {
         args = args.into_iter().skip(1).collect();
     } else {
-        return rustc_driver::catch_with_exit_code(|| {
+        return handle_exit_code(rustc_driver::catch_with_exit_code(|| {
             rustc_driver::run_compiler(&args, &mut RustcCallback)
-        });
+        }));
     }
 
     for arg in &args {
         // utilize default rustc to avoid unexpected behavior if these arguments are passed
         if arg == "-vV" || arg == "--version" || arg.starts_with("--print") {
-            return rustc_driver::catch_with_exit_code(|| {
+            return handle_exit_code(rustc_driver::catch_with_exit_code(|| {
                 rustc_driver::run_compiler(&args, &mut RustcCallback)
-            });
+            }));
         }
     }
 
-    rustc_driver::catch_with_exit_code(|| {
+    handle_exit_code(rustc_driver::catch_with_exit_code(|| {
         rustc_driver::run_compiler(&args, &mut AnalyzerCallback);
-    })
+    }))
 }

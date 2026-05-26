@@ -79,18 +79,20 @@
                     (rustowl-line-col-to-pos
                      (gethash "line" end) (gethash "character" end)))
                    (overlapped (gethash "overlapped" deco)))
-              (unless overlapped
-                (cond
-                 ((equal type "lifetime")
-                  (rustowl-underline start-pos end-pos "#00cc00"))
-                 ((equal type "imm_borrow")
-                  (rustowl-underline start-pos end-pos "#0000cc"))
-                 ((equal type "mut_borrow")
-                  (rustowl-underline start-pos end-pos "#cc00cc"))
-                 ((or (equal type "move") (equal type "call"))
-                  (rustowl-underline start-pos end-pos "#cccc00"))
-                 ((equal type "outlive")
-                  (rustowl-underline start-pos end-pos "#cc0000"))))))
+              (if (not overlapped)
+                  (cond
+                   ((equal type "definitely_live")
+                    (rustowl-underline start-pos end-pos "#00cc00" nil))
+                   ((equal type "maybe_initialized")
+                    (rustowl-underline start-pos end-pos "#00cc00" t))
+                   ((equal type "imm_borrow")
+                    (rustowl-underline start-pos end-pos "#0000cc" nil))
+                   ((equal type "mut_borrow")
+                    (rustowl-underline start-pos end-pos "#cc00cc" nil))
+                   ((or (equal type "move") (equal type "call"))
+                    (rustowl-underline start-pos end-pos "#cccc00" nil))
+                   ((or (equal type "shared_mut") (equal type "outlive"))
+                    (rustowl-underline start-pos end-pos "#cc0000" t))))))
           decorations)))
      :mode 'current)))
 
@@ -175,13 +177,11 @@ If COL is past end of line, clamp to end of line."
 (defvar rustowl-overlays nil
   "List of currently active RustOwl overlays.")
 
-(defun rustowl-underline (start end color)
-  "Underline region from START to END with COLOR."
-  (let* ((s (max (point-min) (min start end)))
-         (e (min (point-max) (max start end)))
-         (overlay (make-overlay s e)))
-    (overlay-put
-     overlay 'face `(:underline (:color ,color :style wave)))
+(defun rustowl-underline (start end color wavy)
+  (let ((overlay (make-overlay start end)))
+    (if wavy
+      (overlay-put overlay 'face `(:underline (:color ,color :style wave)))
+      (overlay-put overlay 'face `(:underline (:color ,color :style line))))
     (push overlay rustowl-overlays)
     overlay))
 

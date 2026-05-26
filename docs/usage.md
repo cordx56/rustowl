@@ -1,11 +1,29 @@
 # RustOwl usage
 
+## Table of Contents
+
+<!--toc:start-->
+
+- [RustOwl usage](#rustowl-usage)
+  - [Table of Contents](#table-of-contents)
+  - [Quick Start](#quick-start)
+  - [Getting started](#getting-started)
+  - [Basic usage](#basic-usage)
+  - [Advanced usage](#advanced-usage)
+  <!--toc:end-->
+
+## Quick Start
+
+1. Install RustOwl (docs/installation.md) and the editor extension for your editor.
+2. Open a Rust Cargo workspace and save a Rust file to trigger analysis.
+3. Place the cursor on a variable or function call and wait a short idle time to see visualizations.
+
 Here, I describe how to use RustOwl in your workflow.
 
 ## Getting started
 
 First, please install the RustOwl LSP server and extension for your editor.
-Installation guide is on [the top page of this repository](/README.md).
+Installation guide is on [installation](/docs/installation.md) file.
 
 Then, please open a Rust source code file (`.rs`) in the editor.
 RustOwl only works with a Cargo workspace, so you need to open the source code that is part of a Cargo workspace.
@@ -31,7 +49,9 @@ Wait for a few seconds, and then the ownership-related operations and lifetimes 
 Basically, RustOwl can be used to resolve ownership and lifetime errors.
 What RustOwl visualizes is:
 
-- Actual lifetime of variables
+- Lifetime of variables, split into two precisions:
+  - **Definitely live** range: the variable is provably initialized on every path that reaches the location.
+  - **Maybe live** range: the variable is initialized on at least one path but may have been moved, dropped, or be uninitialized on others.
 - Shared (immutable) borrowing of variables
 - Mutable borrowing of variables
 - Value movement
@@ -62,6 +82,26 @@ Based on this, we can use RustOwl as listed below:
   - Because these _locks_ are freed where the lock object is dropped
 - To manage resources
   - Like memories, files, and anything which is managed by _RAII_ respective
+
+### Definitely live vs. maybe live
+
+The lifetime visualization is split by a CFG-based liveness analysis into two precisions, which is useful when ownership depends on control flow.
+
+```rust
+fn f(cond: bool) {
+    let v: Vec<_> = (0..100).collect();
+    if cond {
+        drop(v); // v is dropped only on the `cond == true` branch
+    }
+    // After the `if`, v is "maybe live": still owned on the `false`
+    // branch, but already dropped on the `true` branch.
+}
+```
+
+- A **definitely live** range marks code where the variable is owned on every path. Dropping or freeing a resource here is safe.
+- A **maybe live** range marks code where the variable is owned on some paths only. Reading from or moving the variable here would not compile, and it is a hint that resource cleanup is happening conditionally.
+
+When auditing resource management (file handles, locks, allocations), the boundary between the two ranges is typically the location to inspect.
 
 Did you get a Ph.D. in lifetimes?
 So let's try managing resources with RustOwl.

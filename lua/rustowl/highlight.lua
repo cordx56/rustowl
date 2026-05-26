@@ -21,7 +21,7 @@ function M.enable(line, col, bufnr)
           if not deco['overlapped'] then
             local start = { deco['range']['start']['line'], deco['range']['start']['character'] }
             local finish = { deco['range']['end']['line'], deco['range']['end']['character'] }
-            local opts = { regtype = 'v', inclusive = true }
+            local opts = { regtype = 'v', inclusive = false }
             vim.highlight.range(bufnr, hl_ns, deco['type'], start, finish, opts)
           end
         end

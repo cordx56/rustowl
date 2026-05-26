@@ -1,5 +1,15 @@
 # Build guide
 
+<!--toc:start-->
+- [Build guide](#build-guide)
+  - [RustOwl](#rustowl)
+    - [Build RustOwl using stable toolchain](#build-rustowl-using-stable-toolchain)
+    - [Build RustOwl using custom toolchain](#build-rustowl-using-custom-toolchain)
+  - [VSCode extension](#vscode-extension)
+    - [Prerequisite](#prerequisite)
+    - [Build & Run](#build-run)
+<!--toc:end-->
+
 Here we describe how to build each of our repository.
 
 ## RustOwl
@@ -14,10 +24,10 @@ On a freshly installed Ubuntu system, you need to run `apt install build-essenti
 ### Build RustOwl using stable toolchain
 
 There are scripts to build the stable version of RustOwl.
-`scripts/build/toolchain` sets up the RustOwl toolchain and executes command using that toolchain.
+`scripts/toolchain` sets up the RustOwl toolchain and executes command using that toolchain.
 
 ```bash
-./scripts/build/toolchain cargo install --path . --locked
+./scripts/toolchain cargo install --path . --locked
 ```
 
 ### Build RustOwl using custom toolchain
@@ -47,10 +57,10 @@ cargo install --path . --locked
 - VS Code installed
   - You can install VS Code from [this link](https://code.visualstudio.com/).
 - Node.js installed
-- `yarn` installed
-  - After installing Node.js, You can install `yarn` by running `npm install -g yarn`.
+- `pnpm` installed
+  - After installing Node.js, You can install `pnpm` by running `npm install -g pnpm`.
 
-VS Code extension has been tested on macOS Sequoia 15.3.2 on arm64 architecture with Visual Studio Code 1.99.3, Node.js v20.16.0, and `yarn` 1.22.22.
+VS Code extension has been tested on macOS Sequoia 15.3.2 on arm64 architecture with Visual Studio Code 1.99.3, Node.js v20.16.0, and `pnpm` 1.22.22.
 Other dependencies are locked in the configuration files and will be installed automatically.
 
 ### Build & Run
@@ -59,7 +69,7 @@ First, install the dependencies:
 
 ```bash
 cd vscode
-yarn install --frozen-lockfile
+pnpm install --frozen-lockfile
 ```
 
 Then, open the `vscode` directory in VS Code.

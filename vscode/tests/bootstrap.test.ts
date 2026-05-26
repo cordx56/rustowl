@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import sinon from "sinon";
+
 import { describe, it, beforeEach, afterEach } from "mocha";
 import proxyquire from "proxyquire";
-import { EventEmitter } from "node:events";
+import sinon from "sinon";
 
 describe("Bootstrap Tests", () => {
   let sandbox: sinon.SinonSandbox;
@@ -35,6 +35,7 @@ describe("Bootstrap Tests", () => {
           .stub()
           .callsFake(async (_opts, task) => task(progressStub)),
         showErrorMessage: sandbox.stub(),
+        showInformationMessage: sandbox.stub().resolves("Install"),
       },
       ProgressLocation: { Notification: 15 },
     };

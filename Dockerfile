@@ -1,73 +1,32 @@
-FROM rust:1.88.0-slim-trixie AS chef
+FROM debian:bookworm-slim AS chef
 WORKDIR /app
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential=12.9 ca-certificates=20230311+deb12u1 curl=7.88.1-10+deb12u14 && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY scripts/ scripts/
-
-ENV RUSTC_BOOTSTRAP=1
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        curl=8.14.1-2 && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN channel="$(cat scripts/build/channel)" && \
-    eval "export $(./scripts/build/print-env.sh "$channel")" && \
-    export RUSTUP_TOOLCHAIN="$channel" && \
-    cargo install cargo-chef
+RUN ./scripts/build/toolchain cargo install cargo-chef --locked
 
 FROM chef AS planner
-ENV RUSTC_BOOTSTRAP=1
 COPY . .
-RUN channel="$(cat scripts/build/channel)" && \
-    eval "export $(./scripts/build/print-env.sh "$channel")" && \
-    export RUSTUP_TOOLCHAIN="$channel" && \
-    cargo chef prepare --recipe-path recipe.json
+RUN ./scripts/build/toolchain cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
-
-ENV RUSTC_BOOTSTRAP=1
-
-WORKDIR /app
-
-ENV RUSTOWL_RUNTIME_DIRS="/opt/rustowl"
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates=20250419 \
-        build-essential=12.12 \
-        curl=8.14.1-2 && \
-    rm -rf /var/lib/apt/lists/*
-
 COPY --from=planner /app/recipe.json recipe.json
-RUN channel="$(cat scripts/build/channel)" && \
-    eval "export $(./scripts/build/print-env.sh "$channel")" && \
-    export RUSTUP_TOOLCHAIN="$channel" && \
-    cargo chef cook --release --recipe-path recipe.json
-
+RUN ./scripts/build/toolchain cargo chef cook --release --recipe-path recipe.json
 COPY . .
+RUN ./scripts/build/toolchain cargo build --release
 
-RUN channel="$(cat scripts/build/channel)" && \
-    eval "export $(./scripts/build/print-env.sh "$channel")" && \
-    export SYSROOT="/opt/rustowl/sysroot/${RUSTOWL_TOOLCHAIN}" && \
-    export RUSTUP_TOOLCHAIN="$channel" && \
-    ./scripts/build/toolchain cargo build --release --all-features --target "${HOST_TUPLE}" && \
-    mkdir -p /build-output && \
-    cp target/"${HOST_TUPLE}"/release/rustowl /build-output/rustowl && \
-    cp target/"${HOST_TUPLE}"/release/rustowlc /build-output/rustowlc
-
-FROM rust:1.88.0-slim-trixie
-
+# final image
+FROM debian:bookworm-slim
 WORKDIR /app
-
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates=20250419 curl=8.14.1-2  && \
+    apt-get install -y --no-install-recommends build-essential=12.9 ca-certificates=20230311+deb12u1 && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /build-output/rustowl /usr/local/bin/rustowl
-COPY --from=builder /build-output/rustowlc /usr/local/bin/rustowlc
-COPY --from=builder /opt/rustowl/sysroot/. /opt/rustowl/sysroot/
+COPY --from=builder /app/target/release/rustowl /usr/local/bin/
+COPY --from=builder /app/target/release/rustowlc /usr/local/bin/
 
-ENV PATH="/usr/local/bin:${PATH}"
-ENV RUSTOWL_RUNTIME_DIRS="/opt/rustowl"
+RUN rustowl toolchain install --skip-rustowl-toolchain
 
 ENTRYPOINT ["rustowl"]

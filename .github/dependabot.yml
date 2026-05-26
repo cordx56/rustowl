@@ -27,7 +27,7 @@ updates:
     ignore:
       - dependency-name: "@types/vscode"
   - package-ecosystem: docker
-    directory: '/'
+    directory: "/"
     schedule:
       interval: weekly
     groups:
