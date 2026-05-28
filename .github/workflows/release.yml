@@ -65,7 +65,7 @@ jobs:
       - name: Release vsce
         if: needs.meta.outputs.pre_release != 'true'
         run: |
-          pnpm vsce publish
+          pnpm vsce publish --no-dependencies
         working-directory: ./vscode
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -90,7 +90,7 @@ jobs:
       - name: Release ovsx
         if: needs.meta.outputs.pre_release != 'true'
         run: |
-          pnpm ovsx publish
+          pnpm ovsx publish --no-dependencies
         working-directory: ./vscode
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
