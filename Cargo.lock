@@ -2005,7 +2005,7 @@ dependencies = [
 
 [[package]]
 name = "rustowl"
-version = "1.0.0-rc.1"
+version = "0.4.0"
 dependencies = [
  "anstyle",
  "cargo_metadata",
