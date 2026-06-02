@@ -5,59 +5,145 @@
 
 ### ♻️ Code Refactoring
 
+- vscode ([#480](https://github.com/cordx56/rustowl/issues/480))
 - **alloc:** move to mimalloc because of jemalloc archive ([#230](https://github.com/cordx56/rustowl/issues/230))
+- **ci:** check build on main push ([#386](https://github.com/cordx56/rustowl/issues/386))
+- **docker:** simplify Docker file
+- **lsp-backend:** fix path problem
+- **lsp-backend:** fix and unify cargo command exec code
 - **reqwest:** move to aws_lc instead of ring ([#338](https://github.com/cordx56/rustowl/issues/338))
 - **runtime:** refactor the runtime to use more suitable stack size for generic machine, and to use amount of cores counting the existing cores on the machine and using half to not make or get stuck
 
 ### 🎨 Chores
 
-- update changelog
+- bump toolchain nightly version and add some components (now, rust-toolchain.toml is for local development)
 - add performance test to the repo ([#219](https://github.com/cordx56/rustowl/issues/219))
-- update criterion to 0.7, enable in reqwest: http2 for lower latency and others, socks, system-proxy for proxy user ([#352](https://github.com/cordx56/rustowl/issues/352))
-- update changelog ([#317](https://github.com/cordx56/rustowl/issues/317))
-- add ovsx to release script and docs about extension ([#266](https://github.com/cordx56/rustowl/issues/266))
-- reformat every single document, use new way of building ([#344](https://github.com/cordx56/rustowl/issues/344))
+- fix vscode engine version older then [@types](https://github.com/types)/vscode ([#516](https://github.com/cordx56/rustowl/issues/516))
 - update changelog ([#211](https://github.com/cordx56/rustowl/issues/211))
+- support Rust 1.93.0 ([#510](https://github.com/cordx56/rustowl/issues/510))
+- bump Rust version in security
+- use install as always ([#475](https://github.com/cordx56/rustowl/issues/475))
+- fix docs to build command for rustowl lazyvim installation ([#474](https://github.com/cordx56/rustowl/issues/474))
+- format cargo toml ([#401](https://github.com/cordx56/rustowl/issues/401))
+- fix build ([#393](https://github.com/cordx56/rustowl/issues/393))
+- add ovsx to release script and docs about extension ([#266](https://github.com/cordx56/rustowl/issues/266))
+- fix workflow's bash command ([#391](https://github.com/cordx56/rustowl/issues/391))
+- bump Rust version in AUR
+- remove comment
+- use cargo-chef
+- fix runtime dir search
+- fix Dockerfile lint
+- search runtime path
+- fix download indicator in VS Code ([#378](https://github.com/cordx56/rustowl/issues/378))
 - update lockfiles and deps ([#267](https://github.com/cordx56/rustowl/issues/267))
+- update changelog
+- update dockerfile to use prebuilt binaries
+- lockfile
+- clippy & fmt
+- bump v0.4.0 ([#619](https://github.com/cordx56/rustowl/issues/619))
+- fix formatting
+- update rustc in other places
+- up deps ([#565](https://github.com/cordx56/rustowl/issues/565))
+- update changelog ([#317](https://github.com/cordx56/rustowl/issues/317))
+- lockfile
+- update changelog ([#373](https://github.com/cordx56/rustowl/issues/373))
+- update criterion to 0.7, enable in reqwest: http2 for lower latency and others, socks, system-proxy for proxy user ([#352](https://github.com/cordx56/rustowl/issues/352))
+- reformat every single document, use new way of building ([#344](https://github.com/cordx56/rustowl/issues/344))
 - **README:** Add Discord server link ([#239](https://github.com/cordx56/rustowl/issues/239))
 - **aur:** bump rustup toolchain version ([#177](https://github.com/cordx56/rustowl/issues/177))
-- **dependabot:** fix dependabot error ([#311](https://github.com/cordx56/rustowl/issues/311))
+- **bump:** remove docker version updates
 - **dependabot:** ignore [@types](https://github.com/types)/vscode version update ([#314](https://github.com/cordx56/rustowl/issues/314))
+- **dependabot:** fix dependabot error ([#311](https://github.com/cordx56/rustowl/issues/311))
 - **dependabot:** set interval weekly and use grouping ([#310](https://github.com/cordx56/rustowl/issues/310))
+- **docker:** just install the crate and set it up
+- **dockerfile:** set rustup toolchain the same as rust_version in base image
 - **docs:** add badges to README ([#268](https://github.com/cordx56/rustowl/issues/268))
+- **emacs:** change Emacs cursor delay
+- **lsp-backend:** remove unused, moved enum
 - **nvim-tests:** add two newlines in minimal init ([#307](https://github.com/cordx56/rustowl/issues/307))
+- **package-manager:** yarn -> pnpm
+- **readme:** added Playground link and small style change ([#487](https://github.com/cordx56/rustowl/issues/487))
 - **rustc:** bump rustc to 1.88.0 in neovim ci ([#315](https://github.com/cordx56/rustowl/issues/315))
+- **scripts:** ignore toolchain install script output ([#388](https://github.com/cordx56/rustowl/issues/388))
+- **scripts:** update bump to update dockerfiles also
 - **support:** add Sublime Text plugin link ([#357](https://github.com/cordx56/rustowl/issues/357))
+- **vscode:** remove debug print
+- **vscode:** final cve fix (low though) ([#517](https://github.com/cordx56/rustowl/issues/517))
 
 ### 🐞 Bug Fixes
 
 - add skip installing RustOwl toolchain option on toolchain installation ([#342](https://github.com/cordx56/rustowl/issues/342))
+- no need to pass frozen-lockfile in ci
+- cache only on main (we are reaching 10gb)
 - visualize wrong range, caused by byte check ([#325](https://github.com/cordx56/rustowl/issues/325))
-- visualize inside async function ([#327](https://github.com/cordx56/rustowl/issues/327))
-- call vscode bootstrap only when RustOwl is downloaded ([#309](https://github.com/cordx56/rustowl/issues/309))
+- lto in windows, rustc allocator ([#519](https://github.com/cordx56/rustowl/issues/519))
+- eslint:
+- select boxes are is considered as task list ([#520](https://github.com/cordx56/rustowl/issues/520))
+- emacs rustowl/analyze
+- terminate range bug ([#508](https://github.com/cordx56/rustowl/issues/508))
+- yarn
+- yarn
+- yarn
+- emacs fixed (by GPT-5)
+- lockfile:
+- block scalar in action-setup
+- revert
+- commitlint
 - add mkdir command
-- **alloc:** move to jemalloc as rustc does ([#335](https://github.com/cordx56/rustowl/issues/335))
+- analysis on check failure ([#379](https://github.com/cordx56/rustowl/issues/379))
+- call vscode bootstrap only when RustOwl is downloaded ([#309](https://github.com/cordx56/rustowl/issues/309))
+- visualize inside async function ([#327](https://github.com/cordx56/rustowl/issues/327))
+- use macos-15-intel in build actions ([#511](https://github.com/cordx56/rustowl/issues/511))
+- support more MIR statement (e.g. aggregate rval) ([#612](https://github.com/cordx56/rustowl/issues/612))
+- run toolchain install BEFORE cache see https://github.com/Swatinem/rust-cache
 - **alloc:** properly setup mimalloc
+- **alloc:** move to jemalloc as rustc does ([#335](https://github.com/cordx56/rustowl/issues/335))
+- **analyzer:** fix async blocking and panic
 - **benchmarks:** increase measurement and warm-up time for benchmark tests
 - **bencmarks:** fix benchmarks script to calculate result correctly, and increased the amount of iteration for more precise results
+- **ci:** release workflow ref ([#620](https://github.com/cordx56/rustowl/issues/620))
+- **ci:** release CI ([#621](https://github.com/cordx56/rustowl/issues/621))
+- **ci:** eval echo in new toolchain script ([#579](https://github.com/cordx56/rustowl/issues/579))
+- **core-analyzer:** fix locked block_on
+- **core-analyzer:** fix analyze locations and refactor
 - **deps:** update tar dependency to version 0.4
+- **docs:** fix Emacs document
+- **lsp-backend:** set target dir to [target]/owl
+- **lsp-backend:** kill unnecessary processes
+- **neovim:** set inclusive false
 - **rustc:** new 1.88.0, bump version in ci ([#300](https://github.com/cordx56/rustowl/issues/300))
 - **windows:** zip now contains a top level dir ([#341](https://github.com/cordx56/rustowl/issues/341))
+- **windows:** add turbofish arguments in visualize to make trait solver happy ([#518](https://github.com/cordx56/rustowl/issues/518))
 
 ### 🚀 Features
 
-- add vscode tests, migrate to zod v4, format code ([#330](https://github.com/cordx56/rustowl/issues/330))
-- add docker image
-- update to rustc 1.88.0
-- enhance CLI command handling with options for all targets and features ([#225](https://github.com/cordx56/rustowl/issues/225))
+- use rustowl/analyze in nvim
+- use rustowl/analyze in emacs
+- support Rust 1.95.0 ([#613](https://github.com/cordx56/rustowl/issues/613))
+- toolchain installation progress bar ([#569](https://github.com/cordx56/rustowl/issues/569))
+- add installer script ([#567](https://github.com/cordx56/rustowl/issues/567))
+- support Rust 1.94.0 ([#548](https://github.com/cordx56/rustowl/issues/548))
+- implement CLI underline show command ([#509](https://github.com/cordx56/rustowl/issues/509))
+- implement new precise lifetime visualization plugin for editors ([#600](https://github.com/cordx56/rustowl/issues/600))
 - Add security and memory safety testing workflow ([#234](https://github.com/cordx56/rustowl/issues/234))
+- enhance CLI command handling with options for all targets and features ([#225](https://github.com/cordx56/rustowl/issues/225))
+- bump rustc to 1.89.0
 - consolidate and enhance CI workflows by replacing check.yaml with checks.yml and adding a development checks script ([#233](https://github.com/cordx56/rustowl/issues/233))
+- new lifetime visualization algorithm based on CFG analysis ([#595](https://github.com/cordx56/rustowl/issues/595))
 - winget package ([#178](https://github.com/cordx56/rustowl/issues/178))
+- update to rustc 1.88.0
+- add docker image
+- add vscode tests, migrate to zod v4, format code ([#330](https://github.com/cordx56/rustowl/issues/330))
+- commitlint in script
 - **build:** add consistent build script ([#336](https://github.com/cordx56/rustowl/issues/336))
 - **cache:** Implement cache mechanism ([#361](https://github.com/cordx56/rustowl/issues/361))
+- **config:** add configurable highlight colors for neovim plugin
+- **neovim:** prevent analyzing when disabled
+- **neovim:** ensure color config falls back to defaults using deep merge
 - **perf-tests:** Memory fixes ([#226](https://github.com/cordx56/rustowl/issues/226))
-- **toolchain:** install cargo on toolchain installation ([#334](https://github.com/cordx56/rustowl/issues/334))
+- **performance:** add rustc-threads option ([#491](https://github.com/cordx56/rustowl/issues/491))
 - **toolchain:** new toolchain installer ([#320](https://github.com/cordx56/rustowl/issues/320))
+- **toolchain:** install cargo on toolchain installation ([#334](https://github.com/cordx56/rustowl/issues/334))
 
 
 <a name="v0.3.4"></a>
@@ -419,9 +505,6 @@
 [v0.1.0]: https://github.com/cordx56/rustowl/compare/v0.0.5...v0.1.0
 [v0.0.5]: https://github.com/cordx56/rustowl/compare/v0.0.4...v0.0.5
 [v0.0.4]: https://github.com/cordx56/rustowl/compare/v0.0.3...v0.0.4
-[v0.0.3]: https://github.com/cordx56/rustowl/compare/v0.0.3pre...v0.0.3
-[v0.0.3pre]: https://github.com/cordx56/rustowl/compare/v0.0.2...v0.0.3pre
-[v0.0.2]: https://github.com/cordx56/rustowl/compare/v0.0.2pre...v0.0.2
-[v0.0.2pre]: https://github.com/cordx56/rustowl/compare/v0.0.1...v0.0.2pre
-[v0.0.1]: https://github.com/cordx56/rustowl/compare/vpre...v0.0.1
+[v0.0.3]: https://github.com/cordx56/rustowl/compare/v0.0.2...v0.0.3
+[v0.0.2]: https://github.com/cordx56/rustowl/compare/v0.0.1...v0.0.2
 <!-- prettier-ignore-end -->
