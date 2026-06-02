@@ -36,8 +36,8 @@ jobs:
 
       - name: Setup Rustowl
         run: |
-          ./scripts/build/toolchain cargo build --release
-          ./scripts/build/toolchain cargo install --path . --locked
+          ./scripts/toolchain cargo build --release
+          ./scripts/toolchain cargo install --path . --locked
 
       - name: Lint Regexps
         run: eask lint regexps
@@ -82,8 +82,8 @@ jobs:
 
       - name: Setup Rustowl
         run: |
-          ./scripts/build/toolchain cargo build --release
-          ./scripts/build/toolchain cargo install --path . --locked
+          ./scripts/toolchain cargo build --release
+          ./scripts/toolchain cargo install --path . --locked
 
       - name: Run Tests
         run: |
@@ -104,8 +104,8 @@ jobs:
 
       - name: Setup Rustowl
         run: |
-          ./scripts/build/toolchain cargo build --release
-          ./scripts/build/toolchain cargo install --path . --locked
+          ./scripts/toolchain cargo build --release
+          ./scripts/toolchain cargo install --path . --locked
 
       - name: Setup Eask
         uses: emacs-eask/setup-eask@master
