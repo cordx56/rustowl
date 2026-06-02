@@ -43,14 +43,13 @@ static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
         .unwrap()
 });
 
-fn default_mir_borrowck(
-    tcx: TyCtxt<'_>,
-    def_id: LocalDefId,
-) -> queries::mir_borrowck::ProvidedValue<'_> {
+static DEFAULT_MIR_BORROWCK: LazyLock<
+    fn(TyCtxt<'_>, LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_>,
+> = LazyLock::new(|| {
     let mut providers = rustc_middle::query::Providers::default();
     rustc_borrowck::provide(&mut providers);
-    (providers.mir_borrowck)(tcx, def_id)
-}
+    providers.mir_borrowck
+});
 
 #[rustversion::since(1.94.0)]
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
@@ -63,7 +62,7 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     log::debug!("start borrowck of {def_id:?}");
 
-    let result = default_mir_borrowck(tcx, def_id);
+    let default_borrowck_result = DEFAULT_MIR_BORROWCK(tcx, def_id);
     let analyzers = MirAnalyzer::init(AsRustc::from_rustc(tcx), AsRustc::from_rustc(def_id));
     {
         let mut tasks = TASKS.lock().unwrap();
@@ -85,7 +84,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
         }
     }
 
-    result
+    default_borrowck_result
 }
 
 pub struct AnalyzerCallback;
