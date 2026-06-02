@@ -22,12 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Emacs
         uses: jcs090218/setup-emacs@master
         with:
-          version: 28.1
+          version: 29.1
 
       - name: Set up Eask (snapshot)
         uses: emacs-eask/setup-eask@master
@@ -68,12 +68,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Emacs
         uses: jcs090218/setup-emacs@master
         with:
-          version: 28.1
+          version: 29.1
 
       - name: Set up Eask (snapshot)
         uses: emacs-eask/setup-eask@master
@@ -95,12 +95,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Emacs
         uses: jcs090218/setup-emacs@master
         with:
-          version: 28.1
+          version: 29.1
 
       - name: Setup Rustowl
         run: |
