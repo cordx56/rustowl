@@ -78,7 +78,7 @@ impl Backend {
         }
         let analyzers = { self.analyzers.read().await.clone() };
 
-        log::info!("analyze {} packages...", analyzers.len());
+        log::info!("analyze {} workspace(s)...", analyzers.len());
         for analyzer in analyzers {
             let analyzed = self.analyzed.clone();
             let client = self.client.clone();
