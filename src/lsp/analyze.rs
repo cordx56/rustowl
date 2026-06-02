@@ -91,9 +91,7 @@ impl Analyzer {
     }
 
     pub async fn analyze(&self, all_targets: bool, all_features: bool) -> AnalyzeEventIter {
-        if let Some(metadata) = &self.metadata
-            && metadata.root_package().is_some()
-        {
+        if let Some(metadata) = &self.metadata {
             self.analyze_package(metadata, all_targets, all_features)
                 .await
         } else {
@@ -107,17 +105,23 @@ impl Analyzer {
         all_targets: bool,
         all_features: bool,
     ) -> AnalyzeEventIter {
-        let package_name = metadata.root_package().as_ref().unwrap().name.to_string();
+        let package_names: Vec<_> = metadata
+            .workspace_packages()
+            .iter()
+            .map(|v| v.name.to_string())
+            .collect();
         let target_dir = metadata.target_directory.as_std_path().join("owl");
         log::debug!("clear cargo cache");
-        let mut command = toolchain::setup_cargo_command().await;
-        command
-            .args(["clean", "--package", &package_name])
-            .env("CARGO_TARGET_DIR", &target_dir)
-            .current_dir(&self.path)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
-        command.spawn().unwrap().wait().await.ok();
+        for package_name in &package_names {
+            let mut command = toolchain::setup_cargo_command().await;
+            command
+                .args(["clean", "--package", package_name])
+                .env("CARGO_TARGET_DIR", &target_dir)
+                .current_dir(&self.path)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            command.spawn().unwrap().wait().await.ok();
+        }
 
         let mut command = toolchain::setup_cargo_command().await;
 
@@ -152,7 +156,7 @@ impl Analyzer {
 
         let package_count = metadata.packages.len();
 
-        log::debug!("start analyzing package {package_name}");
+        log::debug!("start analyzing package {package_names:?}");
         let mut child = command.spawn().unwrap();
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
