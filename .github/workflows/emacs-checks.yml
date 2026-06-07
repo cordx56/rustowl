@@ -27,12 +27,12 @@ jobs:
       - name: Set up Emacs
         uses: jcs090218/setup-emacs@master
         with:
-          version: 29.1
+          version: snapshot
 
       - name: Set up Eask (snapshot)
         uses: emacs-eask/setup-eask@master
         with:
-          version: 'snapshot'
+          version: snapshot
 
       - name: Setup Rustowl
         run: |
@@ -73,12 +73,12 @@ jobs:
       - name: Set up Emacs
         uses: jcs090218/setup-emacs@master
         with:
-          version: 29.1
+          version: snapshot
 
       - name: Set up Eask (snapshot)
         uses: emacs-eask/setup-eask@master
         with:
-          version: 'snapshot'
+          version: snapshot
 
       - name: Setup Rustowl
         run: |
@@ -100,7 +100,7 @@ jobs:
       - name: Setup Emacs
         uses: jcs090218/setup-emacs@master
         with:
-          version: 29.1
+          version: snapshot
 
       - name: Setup Rustowl
         run: |
@@ -110,7 +110,7 @@ jobs:
       - name: Setup Eask
         uses: emacs-eask/setup-eask@master
         with:
-          version: 'snapshot'
+          version: snapshot
 
       - name: Build And Compile
         run: |
