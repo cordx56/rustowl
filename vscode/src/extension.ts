@@ -1,7 +1,4 @@
 import * as vscode from "vscode";
-
-import { zInfer, zLspCursorResponse, zLspRange } from "./schemas";
-import { bootstrapRustowl } from "./bootstrap";
 import {
   LanguageClient,
   ServerOptions,
@@ -10,12 +7,16 @@ import {
   LanguageClientOptions,
 } from "vscode-languageclient/node";
 
+import { bootstrapRustowl, UserCancelledError } from "./bootstrap";
+import { zInfer, zLspCursorResponse, zLspRange } from "./schemas";
+
 export let client: LanguageClient | undefined = undefined;
 
-let decoTimer: NodeJS.Timeout | null = null;
-let enabled: boolean = true;
+let decoTimer: ReturnType<typeof setTimeout> | null = null;
+let enabled = true;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+  // eslint-disable-next-line no-console
   console.log("rustowl activated");
 
   const lspExec: Executable = {
@@ -27,22 +28,26 @@ export function activate(context: vscode.ExtensionContext) {
     documentSelector: [{ scheme: "file", language: "rust" }],
   };
 
-  (async () => {
-    try {
-      const exec = await bootstrapRustowl(context.globalStorageUri.fsPath);
-      serverOptions.command = exec;
+  try {
+    const exec = await bootstrapRustowl(context.globalStorageUri.fsPath);
+    serverOptions.command = exec;
 
-      client = new LanguageClient(
-        "rustowl",
-        "RustOwl",
-        serverOptions,
-        clientOptions,
-      );
-      client.start();
-    } catch (e) {
-      vscode.window.showErrorMessage(`Failed to start RustOwl\n${e}`);
+    client = new LanguageClient(
+      "rustowl",
+      "RustOwl",
+      serverOptions,
+      clientOptions,
+    );
+    await client.start();
+  } catch (error) {
+    if (error instanceof UserCancelledError) {
+      return;
     }
-  })();
+    vscode.window.showErrorMessage(
+      `Failed to start RustOwl\n${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
+  }
 
   let activeEditor: vscode.TextEditor | undefined =
     vscode.window.activeTextEditor;
@@ -59,7 +64,11 @@ export function activate(context: vscode.ExtensionContext) {
   };
   statusBar.show();
 
-  let lifetimeDecorationType = vscode.window.createTextEditorDecorationType({});
+  let definitelyLiveDecorationType =
+    vscode.window.createTextEditorDecorationType({});
+  let maybeInitDecorationType = vscode.window.createTextEditorDecorationType(
+    {},
+  );
   let moveDecorationType = vscode.window.createTextEditorDecorationType({});
   let imBorrowDecorationType = vscode.window.createTextEditorDecorationType({});
   let mBorrowDecorationType = vscode.window.createTextEditorDecorationType({});
@@ -81,6 +90,7 @@ export function activate(context: vscode.ExtensionContext) {
     const {
       underlineThickness,
       lifetimeColor,
+      maybeInitColor,
       moveCallColor,
       immutableBorrowColor,
       mutableBorrowColor,
@@ -93,19 +103,25 @@ export function activate(context: vscode.ExtensionContext) {
     function createDecorationType(
       color: string,
       highlightBackground: boolean,
+      underlineType: "solid" | "wavy" = "solid",
     ): vscode.TextEditorDecorationType {
       return highlightBackground
         ? vscode.window.createTextEditorDecorationType({
             backgroundColor: color,
           })
         : vscode.window.createTextEditorDecorationType({
-            textDecoration: `underline solid ${underlineThickness}px ${color}`,
+            textDecoration: `underline ${underlineType} ${underlineThickness}px ${color}`,
           });
     }
 
-    lifetimeDecorationType = createDecorationType(
+    definitelyLiveDecorationType = createDecorationType(
       lifetimeColor,
       highlightBackground,
+    );
+    maybeInitDecorationType = createDecorationType(
+      maybeInitColor,
+      highlightBackground,
+      "wavy",
     );
     moveDecorationType = createDecorationType(
       moveCallColor,
@@ -122,10 +138,13 @@ export function activate(context: vscode.ExtensionContext) {
     outLiveDecorationType = createDecorationType(
       outliveColor,
       highlightBackground,
+      "wavy",
     );
     emptyDecorationType = vscode.window.createTextEditorDecorationType({});
 
     const lifetime: vscode.DecorationOptions[] = [];
+    const definitely: vscode.DecorationOptions[] = [];
+    const maybe_init: vscode.DecorationOptions[] = [];
     const immut: vscode.DecorationOptions[] = [];
     const mut: vscode.DecorationOptions[] = [];
     const moveCall: vscode.DecorationOptions[] = [];
@@ -138,6 +157,10 @@ export function activate(context: vscode.ExtensionContext) {
           lifetime.push({
             range,
           });
+        } else if (deco.type === "definitely_live") {
+          definitely.push({ range });
+        } else if (deco.type === "maybe_initialized") {
+          maybe_init.push({ range });
         } else if (deco.type === "imm_borrow") {
           immut.push({ range });
         } else if (deco.type === "mut_borrow") {
@@ -148,11 +171,17 @@ export function activate(context: vscode.ExtensionContext) {
           outlive.push({ range });
         }
       }
-      if ("hover_text" in deco && deco.hover_text) {
+      if (
+        deco.type != "lifetime" &&
+        "hover_text" in deco &&
+        deco.hover_text !== null &&
+        deco.hover_text !== ""
+      ) {
         messages.push({ range, hoverMessage: deco.hover_text });
       }
     }
-    editor.setDecorations(lifetimeDecorationType, lifetime);
+    editor.setDecorations(definitelyLiveDecorationType, definitely);
+    editor.setDecorations(maybeInitDecorationType, maybe_init);
     editor.setDecorations(imBorrowDecorationType, immut);
     editor.setDecorations(mBorrowDecorationType, mut);
     editor.setDecorations(moveDecorationType, moveCall);
@@ -160,7 +189,8 @@ export function activate(context: vscode.ExtensionContext) {
     editor.setDecorations(emptyDecorationType, messages);
   };
   const resetDecoration = () => {
-    lifetimeDecorationType.dispose();
+    definitelyLiveDecorationType.dispose();
+    maybeInitDecorationType.dispose();
     moveDecorationType.dispose();
     imBorrowDecorationType.dispose();
     mBorrowDecorationType.dispose();
@@ -183,6 +213,7 @@ export function activate(context: vscode.ExtensionContext) {
     const resp = await req;
     const data = zLspCursorResponse.safeParse(resp);
     if (data.success) {
+      // eslint-disable-next-line no-console
       console.log(data.data);
       if (data.data.status === "finished") {
         statusBar.text = "$(check) RustOwl";
@@ -248,10 +279,14 @@ export function activate(context: vscode.ExtensionContext) {
           clearTimeout(decoTimer);
           decoTimer = null;
         }
-        decoTimer = setTimeout(async () => {
+        decoTimer = setTimeout(() => {
           const select = ev.textEditor.selection.active;
           const uri = ev.textEditor.document.uri;
-          rustowlHoverRequest(ev.textEditor, select, uri);
+          // eslint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks
+          rustowlHoverRequest(ev.textEditor, select, uri).catch((error) => {
+            // eslint-disable-next-line no-console
+            console.error(error);
+          });
         }, displayDelay);
       }
     },
@@ -262,6 +297,19 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
   if (client) {
-    client.stop();
+    try {
+      const stopPromise = client.stop();
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises, @typescript-eslint/strict-boolean-expressions
+      if (stopPromise && typeof stopPromise.catch === "function") {
+        // eslint-disable-next-line promise/prefer-await-to-then, promise/prefer-await-to-callbacks
+        stopPromise.catch((error) => {
+          // eslint-disable-next-line no-console
+          console.error(error);
+        });
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Error during deactivation:", error);
+    }
   }
 }

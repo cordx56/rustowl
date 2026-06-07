@@ -103,7 +103,6 @@ T['start_function_with_valid_root_dir'] = function()
     auto_attach = true,
     auto_enable = false,
     idle_time = 500,
-    highlight_style = 'undercurl',
     client = {
       name = 'rustowl',
       cmd = { 'rustowl' },

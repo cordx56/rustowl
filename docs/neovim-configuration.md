@@ -1,13 +1,43 @@
 # RustOwl Configuration (Neovim)
 
+## Quick Start
+
+1. Install RustOwl (see docs/installation.md) and the Neovim plugin via your plugin manager.
+2. Add the minimal setup to your lazy.nvim config and open a Rust Cargo workspace.
+3. Hover the cursor over a variable and wait ~500ms to see visualizations.
+
 This document describes all available configuration options for the RustOwl Neovim plugin.
 
 ## Table of Contents
 
-- [Basic Setup](#basic-setup)
-- [Configuration Options](#configuration-options)
-- [Customizing Highlight Colors](#customizing-highlight-colors)
-- [Examples](#examples)
+<!--toc:start-->
+
+- [RustOwl Configuration (Neovim)](#rustowl-configuration-neovim)
+  - [Quick Start](#quick-start)
+  - [Table of Contents](#table-of-contents)
+  - [Basic Setup](#basic-setup)
+  - [Configuration Options](#configuration-options)
+    - [`auto_attach` (boolean)](#autoattach-boolean)
+    - [`auto_enable` (boolean)](#autoenable-boolean)
+    - [`idle_time` (number)](#idletime-number)
+    - [`highlight_style` (string)](#highlightstyle-string)
+    - [`colors` (table)](#colors-table)
+      - [Available Color Options:](#available-color-options)
+    - [`client` (table)](#client-table)
+  - [Customizing Highlight Colors](#customizing-highlight-colors)
+    - [Default Highlight Style](#default-highlight-style)
+    - [Default Colors](#default-colors)
+    - [Custom Colors](#custom-colors)
+      - [Color Format](#color-format)
+    - [Partial Color Customization](#partial-color-customization)
+  - [Examples](#examples)
+    - [Example 1: Minimal Configuration](#example-1-minimal-configuration)
+    - [Example 2: Auto-enable with Custom Colors](#example-2-auto-enable-with-custom-colors)
+    - [Example 3: Custom Key Binding and Styling](#example-3-custom-key-binding-and-styling)
+    - [Example 4: Dark Theme Optimized Colors](#example-4-dark-theme-optimized-colors)
+    - [Example 5: For init.vim Users](#example-5-for-initvim-users)
+  - [Usage Commands](#usage-commands)
+  <!--toc:end-->
 
 ## Basic Setup
 
@@ -17,7 +47,7 @@ The minimal configuration for RustOwl using [lazy.nvim](https://github.com/folke
 {
   'cordx56/rustowl',
   version = '*', -- Latest stable version
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false, -- This plugin is already lazy
   opts = {},
 }
@@ -42,11 +72,9 @@ All configuration options are optional and have sensible defaults:
 - **Default**: `500`
 - **Description**: Time in milliseconds to hover with the cursor before triggering RustOwl analysis and highlighting.
 
-### `highlight_style` (string)
+### `highlight_style` (table)
 
-- **Default**: `'undercurl'`
-- **Options**: `'undercurl'` or `'underline'`
-- **Description**: The style of underline to use for highlighting.
+- **Description**: The style of underline for different highlight types. `'undercurl'` or `'underline'`.
 
 ### `colors` (table)
 
@@ -67,11 +95,15 @@ All configuration options are optional and have sensible defaults:
 
 ## Customizing Highlight Colors
 
+### Default Highlight Style
+
+Default highlight style is straight underline except for maybe live and errors.
+
 ### Default Colors
 
 The default color scheme uses the following colors that correspond to the visual legend:
 
-- 🟩 **Green** (`#00cc00`): Variable's actual lifetime
+- 🟩 **Green** (`#00cc00`): Variable's lifetime
 - 🟦 **Blue** (`#0000cc`): Immutable borrowing
 - 🟪 **Purple** (`#cc00cc`): Mutable borrowing
 - 🟧 **Yellow** (`#cccc00`): Value moved / function call
@@ -123,7 +155,7 @@ opts = {
 {
   'cordx56/rustowl',
   version = '*',
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false,
   opts = {},
 }
@@ -135,7 +167,7 @@ opts = {
 {
   'cordx56/rustowl',
   version = '*',
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false,
   opts = {
     auto_enable = true,
@@ -157,12 +189,15 @@ opts = {
 {
   'cordx56/rustowl',
   version = '*',
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false,
   opts = {
     auto_enable = false,
     idle_time = 300,
-    highlight_style = 'underline',
+    highlight_style = {
+      definitely_live = 'underline',
+      maybe_initialized = 'undercurl',
+    },
     colors = {
       outlive = '#ff0000', -- Bright red for errors
     },
@@ -191,7 +226,7 @@ opts = {
 {
   'cordx56/rustowl',
   version = '*',
-  build = 'cargo binstall rustowl',
+  build = 'cargo install rustowl',
   lazy = false,
   opts = {
     colors = {
@@ -216,7 +251,7 @@ require('lazy').setup({
   {
     'cordx56/rustowl',
     version = '*',
-    build = 'cargo binstall rustowl',
+    build = 'cargo install rustowl',
     lazy = false,
     opts = {
       colors = {

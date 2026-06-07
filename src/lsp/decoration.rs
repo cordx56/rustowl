@@ -55,6 +55,19 @@ pub enum Deco<R = Range> {
         hover_text: String,
         overlapped: bool,
     },
+
+    DefinitelyLive {
+        local: FnLocal,
+        range: R,
+        hover_text: String,
+        overlapped: bool,
+    },
+    MaybeInitialized {
+        local: FnLocal,
+        range: R,
+        hover_text: String,
+        overlapped: bool,
+    },
 }
 impl Deco<Range> {
     pub fn to_lsp_range(&self, s: &str) -> Deco<lsp_types::Range> {
@@ -221,6 +234,53 @@ impl Deco<Range> {
                     overlapped,
                 }
             }
+
+            Deco::DefinitelyLive {
+                local,
+                range,
+                hover_text,
+                overlapped,
+            } => {
+                let start = utils::index_to_line_char(s, range.from());
+                let end = utils::index_to_line_char(s, range.until());
+                let start = lsp_types::Position {
+                    line: start.0,
+                    character: start.1,
+                };
+                let end = lsp_types::Position {
+                    line: end.0,
+                    character: end.1,
+                };
+                Deco::DefinitelyLive {
+                    local,
+                    range: lsp_types::Range { start, end },
+                    hover_text,
+                    overlapped,
+                }
+            }
+            Deco::MaybeInitialized {
+                local,
+                range,
+                hover_text,
+                overlapped,
+            } => {
+                let start = utils::index_to_line_char(s, range.from());
+                let end = utils::index_to_line_char(s, range.until());
+                let start = lsp_types::Position {
+                    line: start.0,
+                    character: start.1,
+                };
+                let end = lsp_types::Position {
+                    line: end.0,
+                    character: end.1,
+                };
+                Deco::MaybeInitialized {
+                    local,
+                    range: lsp_types::Range { start, end },
+                    hover_text,
+                    overlapped,
+                }
+            }
         }
     }
 }
@@ -251,6 +311,7 @@ impl CursorRequest {
 enum SelectReason {
     Var,
     Move,
+    Drop,
     Borrow,
     Call,
 }
@@ -276,23 +337,20 @@ impl SelectLocal {
         if range.from() <= self.pos && self.pos <= range.until() {
             if let Some((old_reason, _, old_range)) = self.selected {
                 match (old_reason, reason) {
-                    (_, SelectReason::Var) => {
-                        if range.size() < old_range.size() {
+                    (_, SelectReason::Var)
+                        if range.size() < old_range.size() => {
                             self.selected = Some((reason, local, range));
                         }
-                    }
                     (SelectReason::Var, _) => {}
-                    (_, SelectReason::Move) | (_, SelectReason::Borrow) => {
-                        if range.size() < old_range.size() {
+                    (_, SelectReason::Move) | (_, SelectReason::Borrow)
+                        if range.size() < old_range.size() => {
                             self.selected = Some((reason, local, range));
                         }
-                    }
-                    (SelectReason::Call, SelectReason::Call) => {
+                    (SelectReason::Call, SelectReason::Call)
                         // TODO: select narrower when callee is method
-                        if old_range.size() < range.size() {
+                        if old_range.size() < range.size() => {
                             self.selected = Some((reason, local, range));
                         }
-                    }
                     _ => {}
                 }
             } else {
@@ -303,6 +361,12 @@ impl SelectLocal {
 
     pub fn selected(&self) -> Option<FnLocal> {
         self.selected.map(|v| v.1)
+    }
+
+    pub fn select_operand(&mut self, operand: &MirOperand, range: Range) {
+        if let MirOperand::Move { place } = operand {
+            self.select(SelectReason::Move, place.local, range);
+        }
     }
 }
 impl utils::MirVisitor for SelectLocal {
@@ -320,32 +384,67 @@ impl utils::MirVisitor for SelectLocal {
         }
     }
     fn visit_stmt(&mut self, stmt: &MirStatement) {
-        if let MirStatement::Assign { rval, .. } = stmt {
+        if let Some(range) = stmt.range
+            && let MirStatementKind::Assign { rval, .. } = &stmt.kind
+        {
             match rval {
-                Some(MirRval::Move {
-                    target_local,
-                    range,
-                }) => {
-                    self.select(SelectReason::Move, *target_local, *range);
+                MirRval::Use { operand }
+                | MirRval::Repeat { operand }
+                | MirRval::Cast { operand }
+                | MirRval::UnaryOp { operand } => {
+                    self.select_operand(operand, range);
                 }
-                Some(MirRval::Borrow {
-                    target_local,
-                    range,
-                    ..
-                }) => {
-                    self.select(SelectReason::Borrow, *target_local, *range);
+                MirRval::BinaryOp { left, right } => {
+                    self.select_operand(left, range);
+                    self.select_operand(right, range);
                 }
-                _ => {}
+                MirRval::Ref { place, .. } => {
+                    self.select(SelectReason::Borrow, place.local, range);
+                }
+                MirRval::Aggregate { fields } => {
+                    for field in fields {
+                        self.select_operand(field, range);
+                    }
+                }
+                MirRval::Other => {}
             }
         }
     }
     fn visit_term(&mut self, term: &MirTerminator) {
-        if let MirTerminator::Call {
-            destination_local,
-            fn_span,
-        } = term
-        {
-            self.select(SelectReason::Call, *destination_local, *fn_span);
+        if let Some(range) = term.range {
+            match &term.kind {
+                MirTerminatorKind::Call {
+                    args,
+                    destination,
+                    fn_range,
+                    ..
+                } => {
+                    for arg in args {
+                        self.select_operand(arg, range);
+                    }
+                    if let Some(fn_range) = fn_range {
+                        self.select(SelectReason::Call, destination.local, *fn_range);
+                    }
+                }
+                MirTerminatorKind::TailCall { args, fn_range, .. } => {
+                    if let Some(fn_range) = fn_range {
+                        for arg in args {
+                            self.select_operand(arg, *fn_range);
+                        }
+                    }
+                }
+                MirTerminatorKind::Assert { cond, .. } => {
+                    self.select_operand(cond, range);
+                }
+                MirTerminatorKind::Drop { place, .. } => {
+                    self.select(SelectReason::Drop, place.local, range);
+                }
+                MirTerminatorKind::Goto { .. }
+                | MirTerminatorKind::SwitchInt { .. }
+                | MirTerminatorKind::Return
+                | MirTerminatorKind::Unreachable
+                | MirTerminatorKind::Other { .. } => {}
+            }
         }
     }
 }
@@ -367,12 +466,14 @@ impl CalcDecos {
     fn get_deco_order(deco: &Deco) -> u8 {
         match deco {
             Deco::Lifetime { .. } => 0,
-            Deco::ImmBorrow { .. } => 1,
-            Deco::MutBorrow { .. } => 2,
-            Deco::Move { .. } => 3,
-            Deco::Call { .. } => 4,
-            Deco::SharedMut { .. } => 5,
-            Deco::Outlive { .. } => 6,
+            Deco::MaybeInitialized { .. } => 1,
+            Deco::DefinitelyLive { .. } => 2,
+            Deco::ImmBorrow { .. } => 3,
+            Deco::MutBorrow { .. } => 4,
+            Deco::Move { .. } => 5,
+            Deco::Call { .. } => 6,
+            Deco::SharedMut { .. } => 7,
+            Deco::Outlive { .. } => 8,
         }
     }
 
@@ -391,7 +492,9 @@ impl CalcDecos {
                 | Deco::Move { range, .. }
                 | Deco::Call { range, .. }
                 | Deco::SharedMut { range, .. }
-                | Deco::Outlive { range, .. } => *range,
+                | Deco::Outlive { range, .. }
+                | Deco::DefinitelyLive { range, .. }
+                | Deco::MaybeInitialized { range, .. } => *range,
             };
 
             let mut j = 0;
@@ -421,6 +524,12 @@ impl CalcDecos {
                         range, overlapped, ..
                     }
                     | Deco::Outlive {
+                        range, overlapped, ..
+                    }
+                    | Deco::DefinitelyLive {
+                        range, overlapped, ..
+                    }
+                    | Deco::MaybeInitialized {
                         range, overlapped, ..
                     } => (*range, *overlapped),
                 };
@@ -492,6 +601,22 @@ impl CalcDecos {
                                 hover_text: hover_text.clone(),
                                 overlapped: false,
                             },
+                            Deco::DefinitelyLive {
+                                local, hover_text, ..
+                            } => Deco::DefinitelyLive {
+                                local: *local,
+                                range,
+                                hover_text: hover_text.clone(),
+                                overlapped: false,
+                            },
+                            Deco::MaybeInitialized {
+                                local, hover_text, ..
+                            } => Deco::MaybeInitialized {
+                                local: *local,
+                                range,
+                                hover_text: hover_text.clone(),
+                                overlapped: false,
+                            },
                         };
                         new_decos.push(new_deco);
                     }
@@ -517,6 +642,12 @@ impl CalcDecos {
                         }
                         | Deco::Outlive {
                             range, overlapped, ..
+                        }
+                        | Deco::DefinitelyLive {
+                            range, overlapped, ..
+                        }
+                        | Deco::MaybeInitialized {
+                            range, overlapped, ..
                         } => {
                             *range = common;
                             *overlapped = true;
@@ -536,64 +667,131 @@ impl CalcDecos {
     pub fn decorations(self) -> Vec<Deco> {
         self.decorations
     }
+
+    pub fn visit_operand(&mut self, operand: &MirOperand, range: Range) {
+        if let MirOperand::Move { place } = operand
+            && self.locals.contains(&place.local)
+        {
+            self.decorations.push(Deco::Move {
+                local: place.local,
+                range,
+                hover_text: "variable moved".to_string(),
+                overlapped: false,
+            });
+        }
+    }
+    pub fn calc_call(&mut self, destination: &MirPlace, fn_span: Range) {
+        for deco in &self.decorations {
+            if let Deco::Call { range, .. } = deco
+                && utils::is_super_range(fn_span, *range)
+            {
+                return;
+            }
+        }
+        let mut i = 0;
+        while i < self.decorations.len() {
+            let range = match &self.decorations[i] {
+                Deco::Call { range, .. } => Some(range),
+                _ => None,
+            };
+            if let Some(range) = range
+                && utils::is_super_range(*range, fn_span)
+            {
+                self.decorations.remove(i);
+                continue;
+            }
+            i += 1;
+        }
+        self.decorations.push(Deco::Call {
+            local: destination.local,
+            range: fn_span,
+            hover_text: "function call".to_string(),
+            overlapped: false,
+        });
+    }
 }
 impl utils::MirVisitor for CalcDecos {
     fn visit_decl(&mut self, decl: &MirDecl) {
-        let (local, lives, shared_borrow, mutable_borrow, drop_range, must_live_at, name, drop) =
-            match decl {
-                MirDecl::User {
-                    local,
-                    name,
-                    lives,
-                    shared_borrow,
-                    mutable_borrow,
-                    drop_range,
-                    must_live_at,
-                    drop,
-                    ..
-                } => (
-                    *local,
-                    lives,
-                    shared_borrow,
-                    mutable_borrow,
-                    drop_range,
-                    must_live_at,
-                    Some(name),
-                    drop,
-                ),
-                MirDecl::Other {
-                    local,
-                    lives,
-                    shared_borrow,
-                    mutable_borrow,
-                    drop_range,
-                    must_live_at,
-                    drop,
-                    ..
-                } => (
-                    *local,
-                    lives,
-                    shared_borrow,
-                    mutable_borrow,
-                    drop_range,
-                    must_live_at,
-                    None,
-                    drop,
-                ),
-            };
+        let (
+            local,
+            lives,
+            shared_borrow,
+            mutable_borrow,
+            drop_range,
+            must_live_at,
+            storage_range,
+            name,
+            drop,
+            definitely_live_at,
+            maybe_init_at,
+        ) = match decl {
+            MirDecl::User {
+                local,
+                name,
+                lives,
+                shared_borrow,
+                mutable_borrow,
+                drop_range,
+                must_live_at,
+                storage_range,
+                drop,
+                definitely_live_at,
+                maybe_init_at,
+                ..
+            } => (
+                *local,
+                lives,
+                shared_borrow,
+                mutable_borrow,
+                drop_range,
+                must_live_at,
+                storage_range,
+                Some(name),
+                drop,
+                definitely_live_at,
+                maybe_init_at,
+            ),
+            MirDecl::Other {
+                local,
+                lives,
+                shared_borrow,
+                mutable_borrow,
+                drop_range,
+                must_live_at,
+                storage_range,
+                drop,
+                definitely_live_at,
+                maybe_init_at,
+                ..
+            } => (
+                *local,
+                lives,
+                shared_borrow,
+                mutable_borrow,
+                drop_range,
+                must_live_at,
+                storage_range,
+                None,
+                drop,
+                definitely_live_at,
+                maybe_init_at,
+            ),
+        };
         self.current_fn_id = local.fn_id;
         if self.locals.contains(&local) {
             let var_str = match name {
                 Some(mir_var_name) => {
                     format!("variable `{mir_var_name}`")
                 }
-                None => "anonymus variable".to_owned(),
+                None => "anonymous variable".to_owned(),
             };
-            // merge Drop object lives
+            // Compute variable availability range:
+            // - drop variables (Non-Copy): intersection of drop_range and storage_range
+            // - non-drop variables (Copy): union of lives and storage_range
             let drop_copy_live = if *drop {
-                utils::eliminated_ranges(drop_range.clone())
+                utils::intersect_ranges(drop_range.clone(), storage_range.clone())
             } else {
-                utils::eliminated_ranges(lives.clone())
+                utils::union_ranges(lives.clone(), storage_range.clone())
             };
             for range in &drop_copy_live {
                 self.decorations.push(Deco::Lifetime {
@@ -614,7 +812,7 @@ impl utils::MirVisitor for CalcDecos {
                     overlapped: false,
                 });
             }
-            let outlive = utils::exclude_ranges(must_live_at.clone(), drop_copy_live);
+            let outlive = utils::exclude_ranges(must_live_at.clone(), definitely_live_at.clone());
             for range in outlive {
                 self.decorations.push(Deco::Outlive {
                     local,
@@ -623,88 +821,105 @@ impl utils::MirVisitor for CalcDecos {
                     overlapped: false,
                 });
             }
+
+            for range in definitely_live_at {
+                self.decorations.push(Deco::DefinitelyLive {
+                    local,
+                    range: *range,
+                    hover_text: format!("{var_str} definitely lives here"),
+                    overlapped: false,
+                })
+            }
+            for range in maybe_init_at {
+                self.decorations.push(Deco::MaybeInitialized {
+                    local,
+                    range: *range,
+                    hover_text: format!("{var_str} maybe lives here"),
+                    overlapped: false,
+                })
+            }
         }
     }
 
     fn visit_stmt(&mut self, stmt: &MirStatement) {
-        if let MirStatement::Assign { rval, .. } = stmt {
+        if let Some(range) = stmt.range
+            && let MirStatementKind::Assign { rval, .. } = &stmt.kind
+        {
             match rval {
-                Some(MirRval::Move {
-                    target_local,
-                    range,
-                }) => {
-                    if self.locals.contains(target_local) {
-                        self.decorations.push(Deco::Move {
-                            local: *target_local,
-                            range: *range,
-                            hover_text: "variable moved".to_string(),
-                            overlapped: false,
-                        });
-                    }
+                MirRval::Use { operand }
+                | MirRval::Repeat { operand }
+                | MirRval::Cast { operand }
+                | MirRval::UnaryOp { operand } => {
+                    self.visit_operand(operand, range);
                 }
-                Some(MirRval::Borrow {
-                    target_local,
-                    range,
-                    mutable,
-                    ..
-                }) => {
-                    if self.locals.contains(target_local) {
+                MirRval::BinaryOp { left, right } => {
+                    self.visit_operand(left, range);
+                    self.visit_operand(right, range);
+                }
+                MirRval::Ref { place, mutable } => {
+                    if self.locals.contains(&place.local) {
                         if *mutable {
                             self.decorations.push(Deco::MutBorrow {
-                                local: *target_local,
-                                range: *range,
+                                local: place.local,
+                                range,
                                 hover_text: "mutable borrow".to_string(),
                                 overlapped: false,
                             });
                         } else {
                             self.decorations.push(Deco::ImmBorrow {
-                                local: *target_local,
-                                range: *range,
+                                local: place.local,
+                                range,
                                 hover_text: "immutable borrow".to_string(),
                                 overlapped: false,
                             });
                         }
                     }
                 }
-                _ => {}
+                MirRval::Aggregate { fields } => {
+                    for field in fields {
+                        self.visit_operand(field, range);
+                    }
+                }
+                MirRval::Other => {}
             }
         }
     }
 
     fn visit_term(&mut self, term: &MirTerminator) {
-        if let MirTerminator::Call {
-            destination_local,
-            fn_span,
-        } = term
-            && self.locals.contains(destination_local)
-        {
-            let mut i = 0;
-            for deco in &self.decorations {
-                if let Deco::Call { range, .. } = deco
-                    && utils::is_super_range(*fn_span, *range)
-                {
-                    return;
+        if let Some(range) = term.range {
+            match &term.kind {
+                MirTerminatorKind::Call {
+                    args,
+                    destination,
+                    fn_range,
+                    ..
+                } => {
+                    for arg in args {
+                        self.visit_operand(arg, range);
+                    }
+                    if let Some(fn_range) = fn_range
+                        && self.locals.contains(&destination.local)
+                    {
+                        self.calc_call(destination, *fn_range)
+                    }
                 }
-            }
-            while i < self.decorations.len() {
-                let range = match &self.decorations[i] {
-                    Deco::Call { range, .. } => Some(range),
-                    _ => None,
-                };
-                if let Some(range) = range
-                    && utils::is_super_range(*range, *fn_span)
-                {
-                    self.decorations.remove(i);
-                    continue;
+                MirTerminatorKind::TailCall { args, fn_range, .. } => {
+                    if let Some(fn_range) = fn_range {
+                        for arg in args {
+                            self.visit_operand(arg, *fn_range);
+                        }
+                    }
                 }
-                i += 1;
+                MirTerminatorKind::Assert { cond, .. } => {
+                    self.visit_operand(cond, range);
+                }
+                MirTerminatorKind::Goto { .. }
+                | MirTerminatorKind::SwitchInt { .. }
+                | MirTerminatorKind::Return
+                | MirTerminatorKind::Unreachable
+                | MirTerminatorKind::Drop { .. }
+                | MirTerminatorKind::Other { .. } => {}
             }
-            self.decorations.push(Deco::Call {
-                local: *destination_local,
-                range: *fn_span,
-                hover_text: "function call".to_string(),
-                overlapped: false,
-            });
         }
     }
 }

@@ -63,9 +63,8 @@ fn get_toolchain() -> String {
     } else if let Ok(v) = env::var("TOOLCHAIN_CHANNEL") {
         format!("{v}-{}", get_host_tuple())
     } else {
-        let v = std::fs::read_to_string("./scripts/build/channel")
-            .expect("there are no toolchain specifier");
-        format!("{}-{}", v.trim(), get_host_tuple())
+        let rustc_v = rustc_version::version().expect("failed to get rustc version");
+        format!("{}-{}", rustc_v, get_host_tuple())
     }
 }
 fn get_channel() -> String {

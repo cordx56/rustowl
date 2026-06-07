@@ -1,0 +1,70 @@
+#!/bin/sh -e
+
+# config
+RUSTOWL_VERSION="${1:-"latest"}"
+RUSTOWL_REPO_BASE_URL="https://github.com/cordx56/rustowl"
+
+# print host-tuple
+print_host_tuple() {
+    if [ -z "$TOOLCHAIN_OS" ]; then
+        # Get OS
+        case "$(uname -s)" in
+            Linux)
+                TOOLCHAIN_OS="unknown-linux-gnu"
+                ;;
+            Darwin)
+                TOOLCHAIN_OS="apple-darwin"
+                ;;
+            CYGWIN*|MINGW32*|MSYS*|MINGW*)
+                TOOLCHAIN_OS="pc-windows-msvc"
+                ;;
+            *)
+                echo "Unsupported OS: $(uname -s)" >&2
+                exit 1
+                ;;
+        esac
+    fi
+
+    if [ -z "$TOOLCHAIN_ARCH" ]; then
+        # Get architecture
+        case "$(uname -m)" in
+            arm64|aarch64)
+                TOOLCHAIN_ARCH="aarch64"
+                ;;
+            x86_64|amd64)
+                TOOLCHAIN_ARCH="x86_64"
+                ;;
+            *)
+                echo "Unsupported architecture: $(uname -m)" >&2
+                exit 1
+                ;;
+        esac
+    fi
+
+    echo "$TOOLCHAIN_ARCH-$TOOLCHAIN_OS"
+}
+
+HOST_TUPLE="$(print_host_tuple)"
+
+#
+# main
+#
+dest="$HOME/.rustowl"
+mkdir -p "$dest"
+case "$HOST_TUPLE" in
+    *windows*)
+        echo "This script does not support Windows. Please use another method to install RustOwl."
+        exit 1
+        ;;
+esac
+bin_file="rustowl-$HOST_TUPLE.tar.gz"
+if [ "$RUSTOWL_VERSION" = "latest" ]; then
+    url="$RUSTOWL_REPO_BASE_URL/releases/latest/download/$bin_file"
+else
+    url="$RUSTOWL_REPO_BASE_URL/releases/download/$RUSTOWL_VERSION/$bin_file"
+fi
+curl -L "$url" | tar -xz -C "$dest"
+
+"$dest/rustowl" toolchain install
+
+echo 'Add $HOME/.rustowl to your PATH to complete the installation.'

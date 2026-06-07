@@ -1,0 +1,115 @@
+name: Release to Registries
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  crates-io-release:
+    name: Create Crates.io release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Release crates.io
+        run: |
+          echo '${{ secrets.CRATES_IO_API_TOKEN }}' | cargo login
+          cargo publish
+
+  vscode-release:
+    name: Create Vscode Release
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Setup PNPM And Install dependencies
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: ./vscode/package.json
+          run_install: |
+            - cwd: ./vscode
+      - name: Release vsce
+        run: |
+          pnpm vsce publish --no-dependencies
+        working-directory: ./vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  vscodium-release:
+    name: Create Vscodium Release
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Setup PNPM And Install dependencies
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: ./vscode/package.json
+          run_install: |
+            - cwd: ./vscode
+      - name: Release ovsx
+        run: |
+          pnpm ovsx publish --no-dependencies
+        working-directory: ./vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+  winget-release:
+    name: Create Winget Release
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: windows-latest
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@main
+        with:
+          identifier: Cordx56.Rustowl
+          token: ${{ secrets.WINGET_TOKEN }}
+
+  aur-release:
+    name: Create AUR Release
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: AUR Release
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
+        with:
+          pkgname: rustowl
+          pkgbuild: ./aur/PKGBUILD
+          updpkgsums: true
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: Update AUR package
+          ssh_keyscan_types: rsa,ecdsa,ed25519
+        env:
+          AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
+          AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+      - name: AUR Release (Bin)
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
+        with:
+          pkgname: rustowl-bin
+          pkgbuild: ./aur/PKGBUILD-BIN
+          updpkgsums: true
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: Update AUR package
+          ssh_keyscan_types: rsa,ecdsa,ed25519
+        env:
+          AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
+          AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

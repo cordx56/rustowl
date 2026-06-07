@@ -63,7 +63,7 @@ T['enable_function_with_mock_client'] = function()
     local result = {
       decorations = {
         {
-          type = 'lifetime',
+          type = 'definitely_live',
           range = {
             start = { line = 0, character = 0 },
             ['end'] = { line = 0, character = 5 },
@@ -84,7 +84,7 @@ T['enable_function_with_mock_client'] = function()
       local result = {
         decorations = {
           {
-            type = 'lifetime',
+            type = 'definitely_live',
             range = {
               start = { line = 0, character = 0 },
               ['end'] = { line = 0, character = 5 },
@@ -143,7 +143,7 @@ T['enable_function_ignores_overlapped_decorations'] = function()
       local result = {
         decorations = {
           {
-            type = 'lifetime',
+            type = 'definitely_live',
             range = {
               start = { line = 0, character = 0 },
               ['end'] = { line = 0, character = 5 },

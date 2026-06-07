@@ -195,81 +195,130 @@ impl Crate {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case", tag = "type")]
+pub enum MirProjectionElem {
+    Deref,
+    Field { index: usize },
+    Index { local: FnLocal },
+    Other,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MirPlace {
+    pub local: FnLocal,
+    pub projection: Vec<MirProjectionElem>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "snake_case", tag = "type")]
+pub enum MirOperand {
+    Copy { place: MirPlace },
+    Move { place: MirPlace },
+    // TODO: Constant, RuntimeChecks
+    Other,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum MirRval {
-    Move {
-        target_local: FnLocal,
-        range: Range,
-    },
-    Borrow {
-        target_local: FnLocal,
-        range: Range,
-        mutable: bool,
-        outlive: Option<Range>,
-    },
+    Use { operand: MirOperand },
+    Repeat { operand: MirOperand },
+    Ref { place: MirPlace, mutable: bool },
+    Cast { operand: MirOperand },
+    BinaryOp { left: MirOperand, right: MirOperand },
+    UnaryOp { operand: MirOperand },
+    Aggregate { fields: Vec<MirOperand> },
+    // TODO: ThreadLocalRef, RawPtr, Discriminant, CopyForDeref, WrapUnsafeBinder, Reborrow
+    Other,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct MirStatement {
+    #[serde(flatten)]
+    pub kind: MirStatementKind,
+    pub range: Option<Range>,
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "snake_case", tag = "type")]
+pub enum MirStatementKind {
+    Assign { place: MirPlace, rval: MirRval },
+    StorageLive { local: FnLocal },
+    StorageDead { local: FnLocal },
+    Nop,
+    // TODO: FakeRead, SetDiscriminant, PlaceMention, AscribeUserType, Coverage, ConstEvalCounter,
+    // BackwardIncompatibleDropHint
+    Other,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MirTerminator {
+    #[serde(flatten)]
+    pub kind: MirTerminatorKind,
+    pub range: Option<Range>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case", tag = "type")]
-pub enum MirStatement {
-    StorageLive {
-        target_local: FnLocal,
-        range: Range,
+pub enum MirTerminatorKind {
+    Goto {
+        target: BasicBlockId,
     },
-    StorageDead {
-        target_local: FnLocal,
-        range: Range,
+    SwitchInt {
+        discr: MirOperand,
+        targets: Vec<BasicBlockId>,
     },
-    Assign {
-        target_local: FnLocal,
-        range: Range,
-        rval: Option<MirRval>,
-    },
-    Other {
-        range: Range,
-    },
-}
-impl MirStatement {
-    pub fn range(&self) -> Range {
-        match self {
-            Self::StorageLive { range, .. } => *range,
-            Self::StorageDead { range, .. } => *range,
-            Self::Assign { range, .. } => *range,
-            Self::Other { range } => *range,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "snake_case", tag = "type")]
-pub enum MirTerminator {
+    Return,
+    Unreachable,
     Drop {
-        local: FnLocal,
-        range: Range,
+        place: MirPlace,
+        target: BasicBlockId,
     },
     Call {
-        destination_local: FnLocal,
-        fn_span: Range,
+        func: MirOperand,
+        args: Vec<MirOperand>,
+        destination: MirPlace,
+        target: Option<BasicBlockId>,
+        fn_range: Option<Range>,
     },
+    TailCall {
+        func: MirOperand,
+        args: Vec<MirOperand>,
+        fn_range: Option<Range>,
+    },
+    Assert {
+        cond: MirOperand,
+        target: BasicBlockId,
+    },
+    // TODO: UnwindResume, UnwindTerminate, Yield, CoroutineDrop, FalseEdge, FalseUnwind, InlineAsm
     Other {
-        range: Range,
+        successors: Vec<BasicBlockId>,
     },
 }
 impl MirTerminator {
-    pub fn range(&self) -> Range {
-        match self {
-            Self::Drop { range, .. } => *range,
-            Self::Call { fn_span, .. } => *fn_span,
-            Self::Other { range } => *range,
+    pub fn successors(&self) -> Vec<BasicBlockId> {
+        match &self.kind {
+            MirTerminatorKind::Goto { target } => vec![*target],
+            MirTerminatorKind::SwitchInt { targets, .. } => targets.clone(),
+            MirTerminatorKind::Drop { target, .. } => vec![*target],
+            MirTerminatorKind::Call { target, .. } => (*target).into_iter().collect(),
+            MirTerminatorKind::Assert { target, .. } => vec![*target],
+            MirTerminatorKind::Other { successors } => successors.clone(),
+            MirTerminatorKind::TailCall { .. }
+            | MirTerminatorKind::Return
+            | MirTerminatorKind::Unreachable => Vec::new(),
         }
     }
 }
 
+#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+#[serde(transparent)]
+pub struct BasicBlockId(pub usize);
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct MirBasicBlock {
     pub statements: Vec<MirStatement>,
-    pub terminator: Option<MirTerminator>,
+    pub terminator: MirTerminator,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -285,7 +334,11 @@ pub enum MirDecl {
         mutable_borrow: Vec<Range>,
         drop: bool,
         drop_range: Vec<Range>,
+        definitely_live_at: Vec<Range>,
+        maybe_init_at: Vec<Range>,
         must_live_at: Vec<Range>,
+        /// Range from StorageLive to StorageDead for this variable
+        storage_range: Vec<Range>,
     },
     Other {
         local: FnLocal,
@@ -295,13 +348,18 @@ pub enum MirDecl {
         mutable_borrow: Vec<Range>,
         drop: bool,
         drop_range: Vec<Range>,
+        definitely_live_at: Vec<Range>,
+        maybe_init_at: Vec<Range>,
         must_live_at: Vec<Range>,
+        /// Range from StorageLive to StorageDead for this variable
+        storage_range: Vec<Range>,
     },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Function {
     pub fn_id: u32,
+    pub name: String,
     pub basic_blocks: Vec<MirBasicBlock>,
     pub decls: Vec<MirDecl>,
 }
