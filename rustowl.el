@@ -157,7 +157,8 @@
 ;; RustOwl visualization
 (defun rustowl-line-col-to-pos (line col)
   "Convert LINE and COL to buffer position.
-LINE and COL are 0-based (LSP compatible); if either is negative (< 0), signal an error.
+LINE and COL are 0-based (LSP compatible);
+if either is negative (< 0), signal an error.
 If LINE is past the last line, return (point-max).
 If COL is past end of line, clamp to end of line."
   (when (or (< line 0) (< col 0))
@@ -180,7 +181,7 @@ If COL is past end of line, clamp to end of line."
 (defun rustowl-underline (start end color wavy)
   (let ((overlay (make-overlay start end)))
     (if wavy
-      (overlay-put overlay 'face `(:underline (:color ,color :style wave)))
+        (overlay-put overlay 'face `(:underline (:color ,color :style wave)))
       (overlay-put overlay 'face `(:underline (:color ,color :style line))))
     (push overlay rustowl-overlays)
     overlay))

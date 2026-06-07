@@ -39,7 +39,7 @@
 (ert-deftest rustowl-test-underline-and-clear ()
   (with-temp-buffer
     (insert "abcdef")
-    (let ((ov (rustowl-underline 1 4 "#ff0000")))
+    (let ((ov (rustowl-underline 1 4 "#ff0000" t)))
       (should (overlayp ov))
       (should (memq ov rustowl-overlays))
       (should
@@ -54,17 +54,17 @@
   (with-temp-buffer
     (insert "abcdef")
     ;; start == end: should still create a zero-length overlay
-    (let ((ov (rustowl-underline 2 2 "#00ff00")))
+    (let ((ov (rustowl-underline 2 2 "#00ff00" t)))
       (should (overlayp ov))
       (should (= (overlay-start ov) 2))
       (should (= (overlay-end ov) 2)))
     ;; start > end: should still create an overlay, but Emacs overlays swap start/end
-    (let ((ov (rustowl-underline 4 2 "#00ff00")))
+    (let ((ov (rustowl-underline 4 2 "#00ff00" t)))
       (should (overlayp ov))
       (should (= (overlay-start ov) 2))
       (should (= (overlay-end ov) 4)))
     ;; out-of-bounds: should not error, overlay will be clamped
-    (let ((ov (rustowl-underline -5 100 "#00ff00")))
+    (let ((ov (rustowl-underline -5 100 "#00ff00" t)))
       (should (overlayp ov))
       (should (<= (overlay-start ov) (point-max)))
       (should (>= (overlay-start ov) (point-min)))
@@ -196,7 +196,7 @@
                      (funcall cb response)
                      (setq called t)))
                   ((symbol-function 'rustowl-underline)
-                   (lambda (start end color)
+                   (lambda (start end color _wavy)
                      (setq called (list start end color))
                      (make-overlay start end))))
           (rustowl-cursor
@@ -229,13 +229,15 @@
               (puthash
                "decorations"
                (vector
-                (funcall make-deco "lifetime")
+                (funcall make-deco "definitely_live")
+                (funcall make-deco "maybe_initialized")
                 (funcall make-deco "imm_borrow")
                 (funcall make-deco "mut_borrow")
                 (funcall make-deco "move")
                 (funcall make-deco "call")
                 (funcall make-deco "outlive")
-                (funcall make-deco "lifetime" t)) ; overlapped
+                (funcall make-deco "shared_mut")
+                (funcall make-deco "definitely_live" t)) ; overlapped
                ht)
               ht)))
       (with-temp-buffer
@@ -247,7 +249,7 @@
                      (lambda (_method _params cb &rest _args)
                        (funcall cb response)))
                     ((symbol-function 'rustowl-underline)
-                     (lambda (_start _end color)
+                     (lambda (_start _end color _wavy)
                        (push color called-types)
                        (make-overlay 1 2))))
             (rustowl-cursor
@@ -255,17 +257,17 @@
                (:line 0 :character 0)
                :document (:uri "file:///fake")))
             ;; Should get all colors except for the overlapped one
-            (should (member "#00cc00" called-types)) ; lifetime
+            (should (member "#00cc00" called-types)) ; definitely_live / maybe_initialized
             (should (member "#0000cc" called-types)) ; imm_borrow
             (should (member "#cc00cc" called-types)) ; mut_borrow
-            (should (member "#cccc00" called-types)) ; move/call
-            (should (member "#cc0000" called-types)) ; outlive
+            (should (member "#cccc00" called-types)) ; move / call
+            (should (member "#cc0000" called-types)) ; outlive / shared_mut
             ;; Should not call underline for overlapped
             (should
              (= (length
                  (cl-remove-if-not
                   (lambda (c) (equal c "#00cc00")) called-types))
-                1)))))))
+                2)))))))
 
   ;; Test rustowl-cursor-call (mocking buffer and lsp)
   (ert-deftest rustowl-test-cursor-call ()
