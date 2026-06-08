@@ -36,7 +36,11 @@ libc = "0.2"
 
 # Platform-specific dependencies
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["processthreadsapi", "winuser"], optional = true }
+winapi = {
+  version = "0.3",
+  features = ["processthreadsapi", "winuser"],
+  optional = true
+}
 
 [features]
 default = ["tokio"]

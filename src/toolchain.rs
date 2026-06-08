@@ -303,6 +303,13 @@ pub async fn get_executable_path(name: &str) -> String {
     #[cfg(windows)]
     let exec_name = format!("{name}.exe");
 
+    let runtime_dir = get_runtime_dir().await;
+    let exec_root = runtime_dir.join(&exec_name);
+    if exec_root.is_file() {
+        log::debug!("{name} is selected in runtime root");
+        return exec_root.to_string_lossy().to_string();
+    }
+
     let sysroot = get_sysroot().await;
     let exec_bin = sysroot.join("bin").join(&exec_name);
     if exec_bin.is_file() {
