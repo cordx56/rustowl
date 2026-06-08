@@ -39,8 +39,7 @@ impl Analyzer {
     pub async fn new(path: impl AsRef<Path>) -> Result<Self, ()> {
         let path = path.as_ref().to_path_buf();
 
-        let mut cargo_cmd = toolchain::setup_cargo_command().await;
-
+        let mut cargo_cmd = tokio::process::Command::new("cargo");
         cargo_cmd
             .args([
                 "metadata".to_owned(),
