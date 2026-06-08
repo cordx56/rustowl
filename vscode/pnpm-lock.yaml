@@ -107,8 +107,8 @@ importers:
         specifier: ^9.0.1
         version: 9.0.1
       ovsx:
-        specifier: ^0.10.12
-        version: 0.10.12
+        specifier: ^1.0.0
+        version: 1.0.0
       oxlint:
         specifier: ^1.68.0
         version: 1.68.0(oxlint-tsgolint@0.23.0)
@@ -198,11 +198,20 @@ packages:
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
 
+  '@emnapi/core@1.11.0':
+    resolution: {integrity: sha512-l9Oo58x0HOP5znGzVhYW9U3e5wVuA4LAZU2AGezTmkhO1CgQRFDhDg4nneHsu/t3WniXg9QrG2nIXL/ZS8ln8Q==}
+
   '@emnapi/runtime@1.10.0':
     resolution: {integrity: sha512-ewvYlk86xUoGI0zQRNq/mC+16R1QeDlKQy21Ki3oSYXNgLb45GV1P6A0M+/s6nyCuNDqe5VpaY84BzXGwVbwFA==}
 
+  '@emnapi/runtime@1.11.0':
+    resolution: {integrity: sha512-55coeOFKHv1ywEcUXJtWU5f+Jr/W5tZDvZig8DLKSwUN1JpROQ4rk/SNOQiFWmaR/VKF4zuFyW1B8JduOSv6Pg==}
+
   '@emnapi/wasi-threads@1.2.1':
     resolution: {integrity: sha512-uTII7OYF+/Mes/MrcIOYp5yOtSMLBWSIoLPpcgwipoiKbli6k322tcoFsxoIIxPDqW01SQGAgko4EzZi2BNv2w==}
+
+  '@emnapi/wasi-threads@1.2.2':
+    resolution: {integrity: sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA==}
 
   '@es-joy/jsdoccomment@0.87.0':
     resolution: {integrity: sha512-mFXZloZMzuJZXSHUmAFu/pXTk0ZJTJBluuAkrvbzidpTN8W6F2bpRFuedSH+85kbdlRLJqc+gfN+kD3JOLJK5g==}
@@ -2274,8 +2283,8 @@ packages:
     resolution: {integrity: sha512-weP+BZ8MVNnlCm8c0Qdc1WSWq4Qn7I+9CJGm7Qali6g44e/PUzbjNqJX5NJ9ljlNMosfJvg1fKEGILklK9cwnw==}
     engines: {node: '>=18'}
 
-  ovsx@0.10.12:
-    resolution: {integrity: sha512-WwMj1iQDvCk02029oxPnkFXsPrHZ+WzmoNW5pJ8JGepHtL30i2JE4s3C3wqzQqj6a35vx2hp0gV3TdfefGmvMg==}
+  ovsx@1.0.0:
+    resolution: {integrity: sha512-bDxwb55DNbybe10chWlnofj6ZJuER1LjFaQKUtUL9SW8l9P5Vqn7LfI23IFtmtuSJ82pYX0R+MisomXPKNGR9A==}
     engines: {node: '>= 20'}
     hasBin: true
 
@@ -3040,12 +3049,28 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  '@emnapi/core@1.11.0':
+    dependencies:
+      '@emnapi/wasi-threads': 1.2.2
+      tslib: 2.8.1
+    optional: true
+
   '@emnapi/runtime@1.10.0':
     dependencies:
       tslib: 2.8.1
     optional: true
 
+  '@emnapi/runtime@1.11.0':
+    dependencies:
+      tslib: 2.8.1
+    optional: true
+
   '@emnapi/wasi-threads@1.2.1':
+    dependencies:
+      tslib: 2.8.1
+    optional: true
+
+  '@emnapi/wasi-threads@1.2.2':
     dependencies:
       tslib: 2.8.1
     optional: true
@@ -3216,8 +3241,8 @@ snapshots:
 
   '@napi-rs/wasm-runtime@0.2.12':
     dependencies:
-      '@emnapi/core': 1.10.0
-      '@emnapi/runtime': 1.10.0
+      '@emnapi/core': 1.11.0
+      '@emnapi/runtime': 1.11.0
       '@tybys/wasm-util': 0.10.2
     optional: true
 
@@ -4239,7 +4264,7 @@ snapshots:
   eslint-compat-utils@0.5.1(eslint@10.4.1):
     dependencies:
       eslint: 10.4.1
-      semver: 7.8.1
+      semver: 7.8.2
 
   eslint-import-context@0.1.9(unrs-resolver@1.12.2):
     dependencies:
@@ -5052,14 +5077,14 @@ snapshots:
       string-width: 7.2.0
       strip-ansi: 7.2.0
 
-  ovsx@0.10.12:
+  ovsx@1.0.0:
     dependencies:
       '@vscode/vsce': 3.9.2
       commander: 6.2.1
       follow-redirects: 1.16.0
       is-ci: 2.0.0
       leven: 3.1.0
-      semver: 7.8.1
+      semver: 7.8.2
       tmp: 0.2.7
       yauzl-promise: 4.0.0
     transitivePeerDependencies:
