@@ -121,7 +121,7 @@ describe("Extension Test Suite", () => {
     assert.equal(
       (vscode.window.createTextEditorDecorationType as sinon.SinonStub)
         .callCount,
-      6,
+      7,
     );
   });
 
