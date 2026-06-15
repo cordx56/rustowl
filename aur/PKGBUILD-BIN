@@ -3,7 +3,7 @@
 
 pkgname=rustowl-bin
 pkgver=0.4.0
-pkgrel=1
+pkgrel=2
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
@@ -13,8 +13,8 @@ conflicts=('rustowl-git' 'rustowl')
 arch=('x86_64' 'aarch64')
 source_aarch64=("https://github.com/cordx56/rustowl/releases/download/v${pkgver}/rustowl-aarch64-unknown-linux-gnu.tar.gz")
 source_x86_64=("https://github.com/cordx56/rustowl/releases/download/v${pkgver}/rustowl-x86_64-unknown-linux-gnu.tar.gz")
-sha256sums_x86_64=('a75ab50c1678c5cd33f8d5a693c602d60824a865de5aebc3e4775a7987a40838')
-sha256sums_aarch64=('3cd4c8ed6b63c91c1bf56fe7127df288a3491853751845f95dd2c0a486f2589f')
+sha256sums_x86_64=('054c8947babf38b9868e20431b109204ff22864ae49673d0e0967847d6d7679a')
+sha256sums_aarch64=('e374c80724065b007c54868bb5b870588244e34f36e7807d68c578b5c1dead2a')
 
 package() {
     install -d -m 755 "$pkgdir/opt/rustowl"
