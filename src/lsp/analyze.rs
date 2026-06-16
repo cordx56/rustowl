@@ -40,7 +40,6 @@ impl Analyzer {
         let path = path.as_ref().to_path_buf();
 
         let mut cargo_cmd = toolchain::setup_cargo_command().await;
-
         cargo_cmd
             .args([
                 "metadata".to_owned(),
