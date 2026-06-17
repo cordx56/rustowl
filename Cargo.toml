@@ -16,7 +16,7 @@ rustc_private = true
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/rustowl-{ target }{ archive-suffix }"
 pkg-fmt = "tgz"
-disabled-strategies = ["quick-install", "compile"]
+disabled-strategies = ["quick-install"]
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 pkg-fmt = "zip"
