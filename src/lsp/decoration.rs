@@ -375,7 +375,7 @@ impl utils::MirVisitor for SelectLocal {
             MirDecl::User { local, ty, .. } => (local, ty),
             MirDecl::Other { local, ty, .. } => (local, ty),
         };
-        if ASYNC_RESUME_TY.contains(&ty.as_str()) {
+        if ASYNC_RESUME_TY.contains(&ty.name.as_str()) {
             return;
         }
         self.candidate_local_decls.push(*local);
@@ -414,14 +414,11 @@ impl utils::MirVisitor for SelectLocal {
         if let Some(range) = term.range {
             match &term.kind {
                 MirTerminatorKind::Call {
-                    args,
                     destination,
                     fn_range,
                     ..
                 } => {
-                    for arg in args {
-                        self.select_operand(arg, range);
-                    }
+                    // ignore args to ensure the destination local is selected
                     if let Some(fn_range) = fn_range {
                         self.select(SelectReason::Call, destination.local, *fn_range);
                     }

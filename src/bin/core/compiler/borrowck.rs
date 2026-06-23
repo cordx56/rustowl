@@ -20,6 +20,12 @@ impl_as_rustc!(
     <rustc_borrowck::consumers::RustcFacts as polonius_engine::FactTypes>::Origin,
 );
 
+impl_as_rustc!(
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+    RegionVid,
+    rustc_middle::ty::RegionVid,
+);
+
 impl_as_rustc!(PoloniusInput, rustc_borrowck::consumers::PoloniusInput);
 impl PoloniusInput {
     pub fn compute(&self) -> PoloniusOutput {

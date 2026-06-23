@@ -100,6 +100,9 @@ impl LocalStates {
 pub type CfgAnalysisOutput = IndexMap<Location, LocalStates>;
 
 /// Walks MIR [`Body`]'s CFG and collects [`LocalId`]'s state at each [`Location`].
+///
+/// We may use [`rustc_mir_dataflow::impls::MaybeInitializedPlaces`] or such impls, but some of
+/// them do not work as we expected. So we impl this analyzer.
 #[derive(Debug)]
 pub struct CfgAnalyzer {
     states: IndexMap<Location, LocalStates>,
@@ -244,9 +247,9 @@ impl CfgAnalyzer {
     /// inputs (e.g. unreachable cycles introduced by ill-formed MIR).
     pub fn walk_cfg(
         basic_blocks: &IndexMap<BasicBlockId, MirBasicBlock>,
-        locals: &BTreeMap<LocalId, String>,
+        locals: impl Iterator<Item = LocalId>,
     ) -> IndexMap<Location, LocalStates> {
-        let mut locals = LocalStates::init_from_locals(locals.keys().copied());
+        let mut locals = LocalStates::init_from_locals(locals);
         let location_local_state: IndexMap<Location, LocalStates> = basic_blocks
             .iter()
             .flat_map(|(block, bb_data)| {
