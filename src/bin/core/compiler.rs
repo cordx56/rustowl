@@ -1,5 +1,6 @@
+use indexmap::IndexMap;
 use rustowl::{models::*, utils};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 
@@ -176,18 +177,35 @@ impl_as_rustc!(
 );
 
 impl<'tcx> Body<'tcx> {
-    pub fn get_local_decls(&self) -> BTreeMap<LocalId, String> {
+    pub fn get_local_decls(&self) -> IndexMap<LocalId, MirType> {
         self.0
             .local_decls
             .iter_enumerated()
-            .map(|(local, decl)| (AsRustc::from_rustc(local), decl.ty.to_string()))
+            .map(|(local, decl)| {
+                (
+                    LocalId::from_rustc(local),
+                    Ty::from_rustc(decl.ty).to_mir_type(),
+                )
+            })
+            .collect()
+    }
+
+    pub fn get_local_region_vids(&self) -> IndexMap<LocalId, RegionVid> {
+        self.as_rustc()
+            .local_decls
+            .iter_enumerated()
+            .filter_map(|(local, decl)| {
+                Ty::from_rustc(decl.ty)
+                    .get_region_vid()
+                    .map(|v| (LocalId::from_rustc(local), v))
+            })
             .collect()
     }
 
     pub fn collect_user_variables(
         &self,
         source_info: &SourceInfo,
-    ) -> BTreeMap<LocalId, (Range, String)> {
+    ) -> IndexMap<LocalId, (Range, String)> {
         self.0
             .var_debug_info
             // this cannot be par_iter since body cannot send
@@ -295,6 +313,34 @@ impl<'tcx> Body<'tcx> {
             .into_iter()
             .map(|(local, ranges)| (local, utils::eliminated_ranges(ranges)))
             .collect()
+    }
+}
+
+impl_as_rustc!(
+    #[derive(Clone, Copy, Debug)]
+    Ty<'tcx>,
+    rustc_middle::ty::Ty<'tcx>,
+);
+
+impl Ty<'_> {
+    pub fn to_mir_type(&self) -> MirType {
+        let name = self.0.to_string();
+        let reference = if let rustc_middle::ty::TyKind::Ref(_r, ty, m) = self.0.kind() {
+            Some(Box::new(MirRefType {
+                refer_to: Ty::from_rustc(*ty).to_mir_type(),
+                mutable: m.is_mut(),
+            }))
+        } else {
+            None
+        };
+        MirType { name, reference }
+    }
+    pub fn get_region_vid(&self) -> Option<RegionVid> {
+        if let rustc_middle::ty::TyKind::Ref(r, _, _) = self.as_rustc().kind() {
+            Some(RegionVid::from_rustc(r.as_var()))
+        } else {
+            None
+        }
     }
 }
 

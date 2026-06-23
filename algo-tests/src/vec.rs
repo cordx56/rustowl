@@ -38,3 +38,13 @@ fn f4() {
     println!("maybe live here...");
     println!("{v1:?}");
 }
+
+fn f5() {
+    let mut v1: Vec<_> = (0..100).collect();
+    let r = &v1[0];
+    println!("{v1:?}");
+    println!("{r}");
+    // here, lifetime of r is already dead in NLL
+    v1.push(100);
+    println!("{v1:?}");
+}

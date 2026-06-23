@@ -321,6 +321,18 @@ pub struct MirBasicBlock {
     pub terminator: MirTerminator,
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+pub struct MirRefType {
+    pub refer_to: MirType,
+    pub mutable: bool,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+pub struct MirType {
+    pub name: String,
+    pub reference: Option<Box<MirRefType>>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MirDecl {
@@ -328,7 +340,7 @@ pub enum MirDecl {
         local: FnLocal,
         name: String,
         span: Range,
-        ty: String,
+        ty: MirType,
         lives: Vec<Range>,
         shared_borrow: Vec<Range>,
         mutable_borrow: Vec<Range>,
@@ -342,7 +354,7 @@ pub enum MirDecl {
     },
     Other {
         local: FnLocal,
-        ty: String,
+        ty: MirType,
         lives: Vec<Range>,
         shared_borrow: Vec<Range>,
         mutable_borrow: Vec<Range>,

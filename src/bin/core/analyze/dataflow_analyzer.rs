@@ -22,7 +22,7 @@
 use super::*;
 use indexmap::IndexMap;
 use rustowl::utils;
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 /// One element of the per-local state lattice.
 ///
@@ -39,17 +39,48 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 ///   reflecting all paths reaching the location.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum LocalStateVariant {
-    Uninitialized = 1,
-    Initialized,
-    Moved,
-    Dropped,
+    Uninitialized = 0b0001,
+    Initialized = 0b0010,
+    Moved = 0b0100,
+    Dropped = 0b1000,
+}
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub struct StateBitSet(u8);
+impl StateBitSet {
+    pub fn new() -> Self {
+        Self(0)
+    }
+    #[inline]
+    pub fn clear(&mut self) {
+        self.0 = 0;
+    }
+    #[inline]
+    pub fn remove(&mut self, variant: LocalStateVariant) {
+        self.0 &= !(variant as u8);
+    }
+    #[inline]
+    pub fn insert(&mut self, variant: LocalStateVariant) {
+        self.0 |= variant as u8;
+    }
+    #[inline]
+    pub fn contains(&self, variant: LocalStateVariant) -> bool {
+        0 < self.0 & (variant as u8)
+    }
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.count_ones() as usize
+    }
+    #[inline]
+    pub fn extend(&mut self, other: Self) {
+        self.0 |= other.0
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct LocalStates(IndexMap<LocalId, BTreeSet<LocalStateVariant>>);
+pub struct LocalStates(IndexMap<LocalId, StateBitSet>);
 impl LocalStates {
     pub fn init_from_locals(locals: impl Iterator<Item = LocalId>) -> Self {
-        Self(locals.map(|v| (v, BTreeSet::new())).collect())
+        Self(locals.map(|v| (v, StateBitSet::new())).collect())
     }
     /// Meet operation for the lattice: per-local set union with `others`.
     /// Used at CFG join points so that a local's state at a successor is
@@ -57,11 +88,11 @@ impl LocalStates {
     pub fn join(&mut self, others: &Self) {
         for (key, state) in &mut self.0 {
             if let Some(other) = others.0.get(key) {
-                state.extend(other);
+                state.extend(*other);
             }
         }
     }
-    pub fn iter(&self) -> impl Iterator<Item = (&LocalId, &BTreeSet<LocalStateVariant>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&LocalId, &StateBitSet)> {
         self.0.iter()
     }
 }
@@ -69,6 +100,9 @@ impl LocalStates {
 pub type CfgAnalysisOutput = IndexMap<Location, LocalStates>;
 
 /// Walks MIR [`Body`]'s CFG and collects [`LocalId`]'s state at each [`Location`].
+///
+/// We may use [`rustc_mir_dataflow::impls::MaybeInitializedPlaces`] or such impls, but some of
+/// them do not work as we expected. So we impl this analyzer.
 #[derive(Debug)]
 pub struct CfgAnalyzer {
     states: IndexMap<Location, LocalStates>,
@@ -160,7 +194,7 @@ impl CfgAnalyzer {
                         rustc_middle::mir::Local::from_u32(place.local.id),
                     ))
                 {
-                    state.remove(&LocalStateVariant::Initialized);
+                    state.remove(LocalStateVariant::Initialized);
                     state.insert(LocalStateVariant::Dropped);
                 }
             }
@@ -213,9 +247,9 @@ impl CfgAnalyzer {
     /// inputs (e.g. unreachable cycles introduced by ill-formed MIR).
     pub fn walk_cfg(
         basic_blocks: &IndexMap<BasicBlockId, MirBasicBlock>,
-        locals: &BTreeMap<LocalId, String>,
+        locals: impl Iterator<Item = LocalId>,
     ) -> IndexMap<Location, LocalStates> {
-        let mut locals = LocalStates::init_from_locals(locals.keys().copied());
+        let mut locals = LocalStates::init_from_locals(locals);
         let location_local_state: IndexMap<Location, LocalStates> = basic_blocks
             .iter()
             .flat_map(|(block, bb_data)| {
@@ -320,7 +354,7 @@ pub fn get_definitely_lives(
     location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
     check_cfg_analysis_result(cfg_analysis_output, location_ranges, |state| {
-        state.len() == 1 && state.contains(&LocalStateVariant::Initialized)
+        state.len() == 1 && state.contains(LocalStateVariant::Initialized)
     })
 }
 
@@ -336,14 +370,14 @@ pub fn get_maybe_initialized(
     location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
     check_cfg_analysis_result(cfg_analysis_output, location_ranges, |state| {
-        state.contains(&LocalStateVariant::Initialized)
+        state.contains(LocalStateVariant::Initialized)
     })
 }
 
 fn check_cfg_analysis_result(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,
-    eval: impl Fn(&BTreeSet<LocalStateVariant>) -> bool,
+    eval: impl Fn(&StateBitSet) -> bool,
 ) -> HashMap<LocalId, Vec<Range>> {
     let mut var_initialized: HashMap<LocalId, Vec<Range>> = HashMap::new();
     for (location, states) in cfg_analysis_output {

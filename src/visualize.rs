@@ -287,10 +287,11 @@ impl<'a> CliRenderer<'a> {
 
         for deco in decos {
             let (range, overlapped) = match deco {
-                Deco::Lifetime {
-                    range, overlapped, ..
+                Deco::Lifetime { .. } => {
+                    // normal lifetime is not used now
+                    continue;
                 }
-                | Deco::DefinitelyLive {
+                Deco::DefinitelyLive {
                     range, overlapped, ..
                 }
                 | Deco::MaybeInitialized {
