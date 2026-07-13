@@ -14,9 +14,7 @@ expression: output
 [2m  14 |[0m     [96mdrop[0m[2m([0mv2[2m)[0m[2m;[0m
 [2m     |[0m     [92m----[0m [93m--[0m
 [2m  15 |[0m [2m}[0m
-[2m     |[0m [92m~[0m
 [2m  16 |[0m 
-[2m  17 |[0m [95mfn[0m f3[2m([0m[2m)[0m [2m{[0m
 
 [96mLegend:[0m
   [92m---[0m definitely live (lifetime)

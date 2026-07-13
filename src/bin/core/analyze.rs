@@ -3,8 +3,9 @@ mod polonius_analyzer;
 
 use super::cache;
 pub use super::compiler::*;
+use indexmap::IndexMap;
 use rustowl::models::*;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -26,8 +27,8 @@ pub enum MirAnalyzerInitResult {
 
 pub struct MirAnalyzer {
     file_path: PathBuf,
-    local_decls: BTreeMap<LocalId, String>,
-    user_vars: BTreeMap<LocalId, (Range, String)>,
+    local_decls: IndexMap<LocalId, MirType>,
+    user_vars: IndexMap<LocalId, (Range, String)>,
     input: PoloniusInput,
     basic_blocks: Vec<MirBasicBlock>,
     fn_id: DefId,
@@ -63,6 +64,8 @@ impl MirAnalyzer {
             // collect local declared vars
             // this must be done in local thread
             let local_decls = body.get_local_decls();
+            // collect `RegionVid` for references' lifetime analysis
+            let region_vids = body.get_local_region_vids();
 
             let file_path = source_info.path().to_path_buf();
 
@@ -146,17 +149,37 @@ impl MirAnalyzer {
                 let drop_range =
                     polonius_analyzer::drop_range(&output, &location_table, &location_ranges);
 
+                let reference_local_live = polonius_analyzer::reference_local_live_range(
+                    &output,
+                    region_vids.into_iter(),
+                    &location_table,
+                    &location_ranges,
+                );
+
                 // CFG based liveness analysis
                 log::debug!("start CFG based liveness check");
-                let cfg_analysis_output =
-                    dataflow_analyzer::CfgAnalyzer::walk_cfg(&basic_blocks, &local_decls);
+                let cfg_analysis_output = dataflow_analyzer::CfgAnalyzer::walk_cfg(
+                    &basic_blocks,
+                    local_decls.keys().copied(),
+                );
                 log::debug!("CFG based liveness check finished");
-                let definitely_live_range =
+                let mut definitely_live_range =
                     dataflow_analyzer::get_definitely_lives(&cfg_analysis_output, &location_ranges);
-                let maybe_init_range = dataflow_analyzer::get_maybe_initialized(
+                let mut maybe_init_range = dataflow_analyzer::get_maybe_initialized(
                     &cfg_analysis_output,
                     &location_ranges,
                 );
+
+                // overwrite live ranges by reference_local_live if the local is
+                // reference (lifetime of reference is differ from variable's lifetime)
+                for (local, ranges) in &mut maybe_init_range {
+                    if let Some(ref_ranges) = reference_local_live.get(local) {
+                        *ranges = ref_ranges.clone();
+                        if let Some(ranges) = definitely_live_range.get_mut(local) {
+                            *ranges = ref_ranges.clone();
+                        }
+                    }
+                }
 
                 MirAnalyzer {
                     file_path,

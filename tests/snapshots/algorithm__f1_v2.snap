@@ -14,9 +14,7 @@ expression: output
 [2m   5 |[0m     [96mprintln[0m[96m![0m[2m([0m[92m"finish"[0m[2m)[0m[2m;[0m
 [2m     |[0m     [92m------------------[0m
 [2m   6 |[0m [2m}[0m
-[2m     |[0m [92m~[0m
 [2m   7 |[0m 
-[2m   8 |[0m [95mfn[0m f2[2m([0m[2m)[0m [2m{[0m
 
 [96mLegend:[0m
   [92m---[0m definitely live (lifetime)

@@ -184,6 +184,39 @@ pub fn drop_range(
     )
 }
 
+pub fn reference_local_live_range(
+    output: &PoloniusOutput,
+    region_vids: impl Iterator<Item = (LocalId, RegionVid)>,
+    location_table: &PoloniusLocationTable,
+    location_ranges: &LocationRanges,
+) -> IndexMap<LocalId, Vec<Range>> {
+    region_vids
+        .map(|(local, vid)| {
+            let locations: Vec<_> = output
+                .origin_live_on_entry()
+                .iter()
+                .filter_map(|(p, r)| {
+                    let polonius_vid =
+                        rustc_borrowck::consumers::PoloniusRegionVid::from(vid.into_rustc());
+                    if r.iter()
+                        .map(|v| v.into_rustc())
+                        .find(|v| *v == polonius_vid)
+                        .is_some()
+                    {
+                        Some(location_table.get_rich_location(p))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            (
+                local,
+                utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, &locations)),
+            )
+        })
+        .collect()
+}
+
 pub fn get_range(
     live_on_entry: impl Iterator<Item = (Point, impl Iterator<Item = LocalId>)>,
     location_table: &PoloniusLocationTable,

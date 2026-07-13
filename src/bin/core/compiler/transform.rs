@@ -165,17 +165,17 @@ impl LocationRanges {
                 let touches_user_local = if statement_index < stmt_count {
                     match &bb_data.statements[statement_index].kind {
                         StatementKind::StorageLive(local) | StatementKind::StorageDead(local) => {
-                            user_locals.contains_key(&AsRustc::from_rustc(*local))
+                            user_locals.contains_key(&LocalId::from_rustc(*local))
                         }
                         StatementKind::Assign(boxed) => {
-                            user_locals.contains_key(&AsRustc::from_rustc(boxed.0.local))
+                            user_locals.contains_key(&LocalId::from_rustc(boxed.0.local))
                         }
                         _ => false,
                     }
                 } else {
                     match &bb_data.terminator().kind {
                         TerminatorKind::Drop { place, .. } => {
-                            user_locals.contains_key(&AsRustc::from_rustc(place.local))
+                            user_locals.contains_key(&LocalId::from_rustc(place.local))
                         }
                         TerminatorKind::Call { .. } => {
                             // A return value of method call can be important if it is assigned to

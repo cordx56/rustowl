@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Using fat LTO causes failure to link on Windows
       - name: Set build profile
@@ -95,7 +95,7 @@ jobs:
           rm -rf rustowl && mkdir -p rustowl/sysroot/${{ env.toolchain }}/bin
 
           cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./rustowl/
-          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/sysroot/${{ env.toolchain }}/bin
+          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/
 
           cp README.md ./rustowl
           cp LICENSE ./rustowl
@@ -110,7 +110,7 @@ jobs:
             powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath ".\${{ env.archive_name }}" -CompressionLevel Optimal'
           else
             cd rustowl
-            tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ completions/ man/ rustowl${{ env.exec_ext }}
+            tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ rustowlc${{ env.exec_ext }} completions/ man/ rustowl${{ env.exec_ext }}
             cd ..
           fi
 
@@ -132,7 +132,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

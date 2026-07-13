@@ -3,7 +3,7 @@
 
 pkgname=rustowl
 pkgver=0.4.0
-pkgrel=1
+pkgrel=2
 pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
@@ -12,23 +12,30 @@ depends=()
 conflicts=('rustowl-git' 'rustowl-bin')
 arch=('any')
 source=("https://github.com/cordx56/rustowl/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('fa120643aeb48061eb32a7c993dabff88aa4e9d0b32f8ab0f3289b3fb2cf5744')
+sha256sums=('ada97d9f387c86b8cbce9dc9e7f20565d578013a5b4517e9826cb2ec6d1cc432')
 
 prepare() {
     cd rustowl-${pkgver}
-    ./scripts/toolchain cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+    export RUSTC_BOOTSTRAP=1
+    export RUSTUP_TOOLCHAIN=1.95.0
+    rustup component add rust-src rustc-dev llvm-tools
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
     cd rustowl-${pkgver}
     export CARGO_TARGET_DIR=target
+    export RUSTC_BOOTSTRAP=1
+    export RUSTUP_TOOLCHAIN=1.95.0
     export RUSTOWL_RUNTIME_DIRS=/opt/rustowl
     ./scripts/toolchain cargo build --frozen --release --all-features --target "$(rustc --print=host-tuple)"
 }
 
 check() {
     cd rustowl-${pkgver}
-    ./scripts/toolchain cargo test --frozen --all-features
+    export RUSTC_BOOTSTRAP=1
+    export RUSTUP_TOOLCHAIN=1.95.0
+    cargo test --frozen --all-features
 }
 
 package() {

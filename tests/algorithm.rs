@@ -110,3 +110,9 @@ fn test_f4_v1() {
     let output = get_rustowl_output("vec::f4", "v1");
     insta::assert_snapshot!(output);
 }
+
+#[test]
+fn test_f5_r() {
+    let output = get_rustowl_output("vec::f5", "r");
+    insta::assert_snapshot!(output);
+}
