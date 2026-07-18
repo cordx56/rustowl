@@ -68,11 +68,19 @@ fn get_toolchain() -> String {
     }
 }
 fn get_channel() -> String {
-    get_toolchain()
-        .split("-")
-        .next()
-        .expect("failed to obtain channel from toolchain")
-        .to_owned()
+    let toolchain = get_toolchain();
+
+    if toolchain.contains("-nightly-") {
+        "nightly".to_string()
+    } else if toolchain.contains("-beta") {
+        "beta".to_string()
+    } else {
+        toolchain
+            .split('-')
+            .next()
+            .expect("failed to obtain channel from toolchain")
+            .to_owned()
+    }
 }
 fn get_toolchain_date() -> Option<String> {
     let r = regex::Regex::new(r#"\d\d\d\d-\d\d-\d\d"#).unwrap();
