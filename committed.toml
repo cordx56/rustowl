@@ -1,0 +1,4 @@
+style = "conventional"
+ignore_author_re = "(dependabot|renovate)"
+subject_capitalized = false
+

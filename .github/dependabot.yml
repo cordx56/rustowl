@@ -10,10 +10,14 @@ updates:
         update-types:
           - patch
           - minor
+    cooldown:
+      default-days: 7
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: npm
     directory: "/vscode"
     schedule:
@@ -26,6 +30,8 @@ updates:
           - minor
     ignore:
       - dependency-name: "@types/vscode"
+    cooldown:
+      default-days: 7
   - package-ecosystem: docker
     directory: "/"
     schedule:
@@ -36,14 +42,5 @@ updates:
         update-types:
           - patch
           - minor
-  - package-ecosystem: npm
-    directory: "/scripts"
-    schedule:
-      interval: weekly
-    groups:
-      version:
-        applies-to: version-updates
-        update-types:
-          - patch
-          - minor
-          - major
+    cooldown:
+      default-days: 7

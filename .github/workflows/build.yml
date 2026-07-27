@@ -36,7 +36,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Using fat LTO causes failure to link on Windows
       - name: Set build profile
@@ -65,37 +67,37 @@ jobs:
 
       - name: Install zig
         if: ${{ env.is_linux == 'true' }}
-        uses: mlugg/setup-zig@v2
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.13.0
 
       - name: Build
         run: |
-          if [[ "${{ env.is_linux }}" == "true" ]]; then
+          if [[ "${is_linux}" == "true" ]]; then
             ./scripts/toolchain cargo install --locked cargo-zigbuild
-            ./scripts/toolchain cargo zigbuild --target ${{ env.host_tuple }}.2.17 --profile=${{ env.build_profile }}
+            ./scripts/toolchain cargo zigbuild --target ${host_tuple}.2.17 --profile=${build_profile}
           else
-            ./scripts/toolchain cargo build --target ${{ env.host_tuple }} --profile=${{ env.build_profile }}
+            ./scripts/toolchain cargo build --target ${host_tuple} --profile=${build_profile}
           fi
 
       - name: Check the functionality
         run: |
-          ./target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} check ./perf-tests/dummy-package
+          ./target/${host_tuple}/${build_profile}/rustowl${exec_ext} check ./perf-tests/dummy-package
 
       - name: Set archive name
         run: |
-          if [[ "${{ env.is_windows }}" == "true" ]]; then
-            echo "archive_name=rustowl-${{ env.host_tuple }}.zip" >> $GITHUB_ENV
+          if [[ "${is_windows}" == "true" ]]; then
+            echo "archive_name=rustowl-${host_tuple}.zip" >> $GITHUB_ENV
           else
-            echo "archive_name=rustowl-${{ env.host_tuple }}.tar.gz" >> $GITHUB_ENV
+            echo "archive_name=rustowl-${host_tuple}.tar.gz" >> $GITHUB_ENV
           fi
 
       - name: Setup archive artifacts
         run: |
-          rm -rf rustowl && mkdir -p rustowl/sysroot/${{ env.toolchain }}/bin
+          rm -rf rustowl && mkdir -p rustowl/sysroot/${toolchain}/bin
 
-          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowl${{ env.exec_ext }} ./rustowl/
-          cp target/${{ env.host_tuple }}/${{ env.build_profile }}/rustowlc${{ env.exec_ext }} ./rustowl/
+          cp target/${host_tuple}/${build_profile}/rustowl${exec_ext} ./rustowl/
+          cp target/${host_tuple}/${build_profile}/rustowlc${exec_ext} ./rustowl/
 
           cp README.md ./rustowl
           cp LICENSE ./rustowl
@@ -104,20 +106,20 @@ jobs:
           cp -r rustowl-build-time-out/completions ./rustowl
           cp -r rustowl-build-time-out/man ./rustowl
 
-          rm -rf ${{ env.archive_name }}
+          rm -rf ${archive_name}
 
-          if [[ "${{ env.is_windows }}" == "true" ]]; then
-            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath ".\${{ env.archive_name }}" -CompressionLevel Optimal'
+          if [[ "${is_windows}" == "true" ]]; then
+            powershell -c 'Compress-Archive -Path "rustowl/" -DestinationPath ".\${archive_name}" -CompressionLevel Optimal'
           else
             cd rustowl
-            tar -czvf ../${{ env.archive_name }} README.md LICENSE sysroot/ rustowlc${{ env.exec_ext }} completions/ man/ rustowl${{ env.exec_ext }}
+            tar -czvf ../${archive_name} README.md LICENSE sysroot/ rustowlc${exec_ext} completions/ man/ rustowl${exec_ext}
             cd ..
           fi
 
-          cp ./rustowl/rustowl${{ env.exec_ext }} ./rustowl-${{ env.host_tuple }}${{ env.exec_ext }}
+          cp ./rustowl/rustowl${exec_ext} ./rustowl-${host_tuple}${exec_ext}
 
       - name: Upload
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rustowl-runtime-${{ env.host_tuple }}
           path: |
@@ -132,15 +134,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
       - name: Setup PNPM And Install dependencies
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           package_json_file: ./vscode/package.json
           run_install: |
@@ -151,7 +155,7 @@ jobs:
         working-directory: ./vscode
 
       - name: Upload
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rustowl-vscode
           path: vscode/**/*.vsix

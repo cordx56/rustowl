@@ -6,8 +6,7 @@ on:
       - v*
 
 permissions:
-  actions: read
-  contents: write
+  contents: read
 
 jobs:
   check:
@@ -23,11 +22,13 @@ jobs:
     needs:
       - check
       - build
+    permissions:
+      contents: read
     steps:
       - name: Check pre-release
         id: pre-release
         run: |
-          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "pre_release=false" >> $GITHUB_OUTPUT
           else
             echo "pre_release=true" >> $GITHUB_OUTPUT
@@ -37,28 +38,30 @@ jobs:
     name: Create A GitHub Release
     runs-on: ubuntu-latest
     needs: ["meta"]
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+          persist-credentials: false
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
         with:
-          node-version: 20
-      - name: Generate Release Notes
-        run: |
-          npx changelogithub@latest --contributors --output release.md
+          config: cliff.toml
+          args: --verbose --latest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUTPUT: release.md
+          GITHUB_REPO: ${{ github.repository }}
       - name: Download All Artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
           pattern: rustowl-*
           merge-multiple: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           files: artifacts/**/*
           draft: true
@@ -74,23 +77,25 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           push: true
