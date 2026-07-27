@@ -88,9 +88,9 @@ impl Highlighter {
     pub fn highlight(&mut self, line: &str) -> String {
         use std::fmt::Write;
 
-        let Ok(events) = self
-            .highlighter
-            .highlight(&self.config, line.as_bytes(), None, |_| None)
+        let Ok(events) =
+            self.highlighter
+                .highlight(&self.config, line.as_bytes(), None, None, |_| None)
         else {
             return line.to_string();
         };

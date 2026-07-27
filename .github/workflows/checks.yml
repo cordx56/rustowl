@@ -6,6 +6,9 @@ on:
   workflow_dispatch:
   workflow_call:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUSTC_BOOTSTRAP: 1
@@ -40,16 +43,18 @@ jobs:
           - ubuntu-24.04-arm
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
         with:
           toolchain: ${{ needs.define-matrix.outputs.latest }}
           components: clippy,llvm-tools,rust-src,rustc-dev
 
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -62,10 +67,12 @@ jobs:
     needs: define-matrix
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
         with:
           toolchain: ${{ needs.define-matrix.outputs.latest }}
           components: rustfmt
@@ -99,7 +106,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Using fat LTO causes failure to link on Windows
       - name: Set build profile
@@ -111,12 +120,14 @@ jobs:
           fi
 
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install nextest
-        uses: taiki-e/install-action@cargo-nextest
+        uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff # v2.87.8
+        with:
+          tool: cargo-nextest
 
       # uname on Windows on ARM returns "x86_64"
       - name: Set ARCH flag for Windows on ARM
@@ -124,7 +135,7 @@ jobs:
         run: echo "TOOLCHAIN_ARCH=aarch64" >> $GITHUB_ENV
 
       - name: Build release
-        run: ./scripts/toolchain cargo build --profile=${{ env.build_profile }}
+        run: ./scripts/toolchain cargo build --profile=${build_profile}
 
       - name: Run tests
         # MIR is still unstable, so this test can fail in other versions of Rust.
@@ -135,7 +146,7 @@ jobs:
         run: ./scripts/toolchain cargo nextest run --no-fail-fast
 
       - name: Install binary
-        run: ./scripts/toolchain cargo install --path . --profile=${{ env.build_profile }}
+        run: ./scripts/toolchain cargo install --path . --profile=${build_profile}
 
       - name: Test rustowl check
         run: rustowl check ./perf-tests/dummy-package
@@ -145,19 +156,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
+          persist-credentials: false
 
       - name: Setup PNPM And Install dependencies
-        uses: pnpm/action-setup@v6
+        uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
         with:
-          package_json_file: ./vscode/package.json
-          run_install: |
-            - cwd: ./vscode
+          cache: true
+          working-directory: ./vscode
 
       - name: Check formatting
         run: pnpm prettier -c src
