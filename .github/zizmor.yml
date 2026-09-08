@@ -1,0 +1,12 @@
+rules:
+  dangerous-triggers:
+    ignore:
+      - validate-pr-title.yml
+  # Vscode and OpenVSX doesn't support it yet
+  use-trusted-publishing:
+    ignore:
+      - release-registries.yml:49
+      - release-registries.yml:75
+  superfluous-actions:
+    ignore:
+      - release-github.yml
