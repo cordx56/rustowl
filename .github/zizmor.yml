@@ -5,8 +5,8 @@ rules:
   # Vscode and OpenVSX doesn't support it yet
   use-trusted-publishing:
     ignore:
-      - release-registries.yml:49
-      - release-registries.yml:75
+      - release-registries.yml:42
+      - release-registries.yml:61
   superfluous-actions:
     ignore:
       - release-github.yml

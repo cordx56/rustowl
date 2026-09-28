@@ -51,13 +51,8 @@ static DEFAULT_MIR_BORROWCK: LazyLock<
     providers.mir_borrowck
 });
 
-#[rustversion::since(1.94.0)]
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.queries.mir_borrowck = mir_borrowck;
-}
-#[rustversion::before(1.94.0)]
-fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
-    local.mir_borrowck = mir_borrowck;
 }
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     log::debug!("start borrowck of {def_id:?}");

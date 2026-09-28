@@ -12,6 +12,17 @@ pub const HOST_TUPLE: &str = env!("HOST_TUPLE");
 const TOOLCHAIN_CHANNEL: &str = env!("TOOLCHAIN_CHANNEL");
 const TOOLCHAIN_DATE: Option<&str> = option_env!("TOOLCHAIN_DATE");
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ToolchainError(pub &'static str);
+
+impl std::fmt::Display for ToolchainError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl std::error::Error for ToolchainError {}
+
 pub static FALLBACK_RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let opt = PathBuf::from("/opt/rustowl");
     if sysroot_from_runtime(&opt).is_dir() {
@@ -62,25 +73,26 @@ pub async fn get_sysroot() -> PathBuf {
     sysroot_from_runtime(get_runtime_dir().await)
 }
 
-fn progress_bar_style() -> Result<indicatif::ProgressStyle, ()> {
+fn progress_bar_style() -> Result<indicatif::ProgressStyle, ToolchainError> {
     use indicatif::*;
     Ok(
         ProgressStyle::with_template("{spinner:.green} {msg:<10} [{bar:30.cyan/blue}]  {pos:>3}%")
             .map_err(|_| {
                 log::error!("failed to setup progress bar");
+                ToolchainError("failed to setup progress bar")
             })?
             .progress_chars("#>-"),
     )
 }
 
-async fn download(url: &str, set_progress: impl Fn(usize)) -> Result<Vec<u8>, ()> {
+async fn download(url: &str, set_progress: impl Fn(usize)) -> Result<Vec<u8>, ToolchainError> {
     log::debug!("start downloading {url}...");
     let mut resp = match reqwest::get(url).await.and_then(|v| v.error_for_status()) {
         Ok(v) => v,
         Err(e) => {
             log::error!("failed to download tarball");
             log::error!("{e:?}");
-            return Err(());
+            return Err(ToolchainError("failed to download tarball"));
         }
     };
 
@@ -92,7 +104,7 @@ async fn download(url: &str, set_progress: impl Fn(usize)) -> Result<Vec<u8>, ()
         Err(e) => {
             log::error!("failed to download runtime archive");
             log::error!("{e:?}");
-            return Err(());
+            return Err(ToolchainError("failed to download runtime archive"));
         }
     } {
         data.extend_from_slice(&chunk);
@@ -110,12 +122,13 @@ async fn download_tarball_and_extract(
     url: &str,
     dest: &Path,
     set_progress: impl Fn(usize),
-) -> Result<(), ()> {
+) -> Result<(), ToolchainError> {
     let data = download(url, set_progress).await?;
     let decoder = GzDecoder::new(&*data);
     let mut archive = Archive::new(decoder);
     archive.unpack(dest).map_err(|_| {
         log::error!("failed to unpack tarball");
+        ToolchainError("failed to unpack tarball")
     })?;
     log::debug!("successfully unpacked");
     Ok(())
@@ -125,7 +138,7 @@ async fn download_zip_and_extract(
     url: &str,
     dest: &Path,
     set_progress: impl Fn(usize),
-) -> Result<(), ()> {
+) -> Result<(), ToolchainError> {
     use zip::ZipArchive;
     let data = download(url, set_progress).await?;
     let cursor = std::io::Cursor::new(&*data);
@@ -135,11 +148,12 @@ async fn download_zip_and_extract(
         Err(e) => {
             log::error!("failed to read ZIP archive");
             log::error!("{e:?}");
-            return Err(());
+            return Err(ToolchainError("failed to read ZIP archive"));
         }
     };
     archive.extract(dest).map_err(|e| {
         log::error!("failed to unpack zip: {e}");
+        ToolchainError("failed to unpack zip")
     })?;
     log::debug!("successfully unpacked");
     Ok(())
@@ -148,7 +162,7 @@ async fn download_zip_and_extract(
 async fn install_components(
     components: impl IntoIterator<Item = impl AsRef<str>>,
     dest: PathBuf,
-) -> Result<(), ()> {
+) -> Result<(), ToolchainError> {
     use indicatif::*;
     let m = MultiProgress::new();
 
@@ -164,7 +178,8 @@ async fn install_components(
 
         let dest = dest.clone();
         let handle = tokio::spawn(async move {
-            let tempdir = tempfile::tempdir().map_err(|_| ())?;
+            let tempdir =
+                tempfile::tempdir().map_err(|_| ToolchainError("failed to create temp dir"))?;
             // Using `tempdir.path()` more than once causes SEGV, so we use `tempdir.path().to_owned()`.
             let temp_path = tempdir.path().to_owned();
             log::debug!("temp dir is made: {}", temp_path.display());
@@ -186,6 +201,7 @@ async fn install_components(
                 .await
                 .map_err(|_| {
                     log::error!("failed to read components list");
+                    ToolchainError("failed to read components list")
                 })?;
             let components = components.split_whitespace();
 
@@ -196,23 +212,23 @@ async fn install_components(
                         Ok(v) => v,
                         Err(e) => {
                             log::error!("path error: {e}");
-                            return Err(());
+                            return Err(ToolchainError("path error"));
                         }
                     };
                     let to = dest.join(rel_path);
                     if let Err(e) = create_dir_all(to.parent().unwrap()).await {
                         log::error!("failed to create dir: {e}");
-                        return Err(());
+                        return Err(ToolchainError("failed to create dir"));
                     }
                     if let Err(e) = rename(&from, &to).await {
                         log::warn!("file rename failed: {e}, falling back to copy and delete");
                         if let Err(copy_err) = tokio::fs::copy(&from, &to).await {
                             log::error!("file copy error (after rename failure): {copy_err}");
-                            return Err(());
+                            return Err(ToolchainError("file copy error"));
                         }
                         if let Err(del_err) = tokio::fs::remove_file(&from).await {
                             log::error!("file delete error (after copy): {del_err}");
-                            return Err(());
+                            return Err(ToolchainError("file delete error"));
                         }
                     }
                 }
@@ -234,18 +250,21 @@ async fn install_components(
     }
     Ok(())
 }
-pub async fn setup_toolchain(dest: impl AsRef<Path>, skip_rustowl: bool) -> Result<(), ()> {
+pub async fn setup_toolchain(
+    dest: impl AsRef<Path>,
+    skip_rustowl: bool,
+) -> Result<(), ToolchainError> {
     setup_rust_toolchain(&dest).await?;
     if !skip_rustowl {
         setup_rustowl_toolchain(&dest).await?;
     }
     Ok(())
 }
-pub async fn setup_rust_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
+pub async fn setup_rust_toolchain(dest: impl AsRef<Path>) -> Result<(), ToolchainError> {
     let sysroot = sysroot_from_runtime(dest.as_ref());
     if create_dir_all(&sysroot).await.is_err() {
         log::error!("failed to create toolchain directory");
-        return Err(());
+        return Err(ToolchainError("failed to create toolchain directory"));
     }
 
     log::info!("start installing Rust toolchain...");
@@ -253,7 +272,7 @@ pub async fn setup_rust_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
     log::info!("installing Rust toolchain finished");
     Ok(())
 }
-pub async fn setup_rustowl_toolchain(dest: impl AsRef<Path>) -> Result<(), ()> {
+pub async fn setup_rustowl_toolchain(dest: impl AsRef<Path>) -> Result<(), ToolchainError> {
     let pb = indicatif::ProgressBar::new(100);
     pb.set_style(progress_bar_style()?);
 
