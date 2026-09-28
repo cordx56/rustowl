@@ -117,10 +117,11 @@ impl MirAnalyzer {
             // this must be done in local thread
             let borrow_data = facts.borrow_map();
 
-            let input = facts.polonius_input();
+            let mut input = facts.polonius_input();
             let location_table = facts.location_table();
 
             let analyzer = Box::pin(async move {
+                input.remove_kills_on_invalidation(&location_table);
                 log::debug!("start re-computing borrow check with dump: true");
                 // compute accurate region, which may eliminate invalid region
                 let output = input.compute();
@@ -133,6 +134,7 @@ impl MirAnalyzer {
                 );
 
                 let must_live = polonius_analyzer::get_must_live(
+                    &input,
                     &output,
                     &location_table,
                     &borrow_data,

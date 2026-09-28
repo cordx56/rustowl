@@ -1,0 +1,25 @@
+---
+source: tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 's' (1/1) in function 'must_live::loop_local' ===[0m
+
+[2m  32 |[0m     [95mlet[0m [95mmut[0m r = [95m&[0mbase[2m;[0m
+[2m  33 |[0m     [95mfor[0m i [95min[0m [96m0[0m..[96m3[0m [2m{[0m
+[2m  34 |[0m         [95mlet[0m s = i[2m.[0m[96mto_string[0m[2m([0m[2m)[0m[2m;[0m
+[2m     |[0m             [92m-[0m   [92m-[0m [93m-----------[0m
+[2m  35 |[0m         r = [95m&[0ms[2m;[0m
+[2m     |[0m         [92m---[0m [96m--[0m
+[2m  36 |[0m         [96mprintln[0m[96m![0m[2m([0m[92m"{r}"[0m[2m)[0m[2m;[0m
+[2m     |[0m         [92m---------------[0m
+[2m  37 |[0m     [2m}[0m
+[2m  38 |[0m [2m}[0m
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable

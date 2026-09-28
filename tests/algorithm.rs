@@ -26,6 +26,11 @@ fn ensure_rustowl_built() {
 fn get_rustowl_output(function_path: &str, variable: &str) -> String {
     ensure_rustowl_built();
 
+    let module = function_path
+        .split("::")
+        .next()
+        .expect("function path must start with a module name");
+
     let exe_name = if cfg!(windows) {
         "rustowl.exe"
     } else {
@@ -50,7 +55,7 @@ fn get_rustowl_output(function_path: &str, variable: &str) -> String {
             "show",
             "--path",
             &format!(
-                "algo-tests{}src{}vec.rs",
+                "algo-tests{}src{}{module}.rs",
                 std::path::MAIN_SEPARATOR,
                 std::path::MAIN_SEPARATOR
             ),
@@ -114,5 +119,78 @@ fn test_f4_v1() {
 #[test]
 fn test_f5_r() {
     let output = get_rustowl_output("vec::f5", "r");
+    insta::assert_snapshot!(output);
+}
+
+// must_live soundness check
+#[test]
+fn test_must_live_reassign_block_a() {
+    let output = get_rustowl_output("must_live::reassign_block", "a");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_reassign_move_a() {
+    let output = get_rustowl_output("must_live::reassign_move", "a");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_loop_local_s() {
+    let output = get_rustowl_output("must_live::loop_local", "s");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_macro_use_m() {
+    let output = get_rustowl_output("must_live::macro_use", "m");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_deref_use_m() {
+    let output = get_rustowl_output("must_live::deref_use", "m");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_call_use_m() {
+    let output = get_rustowl_output("must_live::call_use", "m");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_copy_use_m() {
+    let output = get_rustowl_output("must_live::copy_use", "m");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_move_while_borrowed_a() {
+    let output = get_rustowl_output("must_live::move_while_borrowed", "a");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_drop_use_s() {
+    let output = get_rustowl_output("must_live::drop_use", "s");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_nll_v() {
+    let output = get_rustowl_output("must_live::nll", "v");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_struct_borrow_s() {
+    let output = get_rustowl_output("must_live::struct_borrow", "s");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_guard_m() {
+    let output = get_rustowl_output("must_live::guard", "m");
     insta::assert_snapshot!(output);
 }
