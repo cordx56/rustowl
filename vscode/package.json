@@ -166,8 +166,8 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "^12.5.1",
-      "onFail": "download"
+      "version": "^12.6.0",
+      "onFail": "warn"
     },
     "runtime": {
       "name": "node",
