@@ -79,7 +79,6 @@ impl_as_rustc!(
 );
 
 impl<'tcx> TyCtxt<'tcx> {
-    #[rustversion::since(1.90.0)]
     pub fn get_borrowck_facts(&self, def_id: DefId) -> HashMap<DefId, BorrowckFacts<'tcx>> {
         let facts = rustc_borrowck::consumers::get_bodies_with_borrowck_facts(
             *self.as_rustc(),
@@ -91,30 +90,7 @@ impl<'tcx> TyCtxt<'tcx> {
             .map(|(k, v)| (AsRustc::from_rustc(k), AsRustc::from_rustc(v)))
             .collect()
     }
-    #[rustversion::before(1.90.0)]
-    pub fn get_borrowck_facts(&self, def_id: DefId) -> HashMap<DefId, BorrowckFacts<'tcx>> {
-        let mut result = HashMap::new();
-        let facts = rustc_borrowck::consumers::get_body_with_borrowck_facts(
-            *self.as_rustc(),
-            *def_id.as_rustc(),
-            rustc_borrowck::consumers::ConsumerOptions::PoloniusInputFacts,
-        );
-        result.insert(def_id, AsRustc::from_rustc(facts));
-        for nested_def_id in self.as_rustc().nested_bodies_within(*def_id.as_rustc()) {
-            let facts = rustc_borrowck::consumers::get_body_with_borrowck_facts(
-                *self.as_rustc(),
-                nested_def_id,
-                rustc_borrowck::consumers::ConsumerOptions::PoloniusInputFacts,
-            );
-            result.insert(
-                AsRustc::from_rustc(nested_def_id),
-                AsRustc::from_rustc(facts),
-            );
-        }
-        result
-    }
 
-    #[rustversion::since(1.94.0)]
     pub fn source_info_from_span(&self, span: Span) -> Option<SourceInfo> {
         let source_map = self.as_rustc().sess.source_map();
         let file_name = source_map.span_to_filename(*span.as_rustc());
@@ -127,28 +103,6 @@ impl<'tcx> TyCtxt<'tcx> {
         let (_work_dir, path) =
             file_name.embeddable_name(rustc_span::RemapPathScopeComponents::DIAGNOSTICS);
         let path = path.to_path_buf();
-        let source = std::fs::read_to_string(&path).unwrap();
-        let cleaned_source = utils::clean_source(&source);
-        Some(SourceInfo {
-            offset,
-            path,
-            source,
-            cleaned_source,
-        })
-    }
-    #[rustversion::before(1.94.0)]
-    pub fn source_info_from_span(&self, span: Span) -> Option<SourceInfo> {
-        let source_map = self.as_rustc().sess.source_map();
-        let file_name = source_map.span_to_filename(*span.as_rustc());
-        let source_file = source_map.get_source_file(&file_name)?;
-        let offset = source_file.start_pos.0;
-        let file_name = source_map.path_mapping().to_embeddable_absolute_path(
-            rustc_span::RealFileName::LocalPath(file_name.into_local_path()?),
-            &rustc_span::RealFileName::LocalPath(std::env::current_dir().unwrap()),
-        );
-        let path = file_name
-            .to_path(rustc_span::FileNameDisplayPreference::Local)
-            .to_path_buf();
         let source = std::fs::read_to_string(&path).unwrap();
         let cleaned_source = utils::clean_source(&source);
         Some(SourceInfo {

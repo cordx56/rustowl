@@ -1,6 +1,8 @@
 use super::{AsRustc, TyCtxt};
 
-#[rustversion::since(1.89.0)]
+#[rustversion::since(1.97.0)]
+use rustc_data_structures::stable_hash::StableHash;
+#[rustversion::before(1.97.0)]
 use rustc_data_structures::stable_hasher::HashStable;
 
 #[rustversion::since(1.95.0)]
@@ -12,7 +14,7 @@ pub trait Hasher<T> {
     fn get_hash(&self, target: T) -> String;
 }
 
-#[rustversion::since(1.89.0)]
+#[rustversion::before(1.97.0)]
 impl<'tcx, T> Hasher<T> for TyCtxt<'tcx>
 where
     T: HashStable<ich::StableHashingContext<'tcx>>,
@@ -39,6 +41,37 @@ where
         let mut hash_ctx = ich::StableHashingContext::new(tcx.sess, tcx.untracked());
         let mut hasher = rustc_data_structures::stable_hasher::StableHasher::default();
         target.hash_stable(&mut hash_ctx, &mut hasher);
+        hasher.finish::<StableHashString>().get()
+    }
+}
+
+#[rustversion::since(1.97.0)]
+impl<'tcx, T> Hasher<T> for TyCtxt<'tcx>
+where
+    T: StableHash,
+{
+    fn get_hash(&self, target: T) -> String {
+        #[derive(Debug, Clone)]
+        struct StableHashString(String);
+        impl StableHashString {
+            pub fn get(self) -> String {
+                self.0
+            }
+        }
+        impl rustc_stable_hash::FromStableHash for StableHashString {
+            type Hash = rustc_stable_hash::SipHasher128Hash;
+            fn from(hash: Self::Hash) -> Self {
+                let byte0 = hash.0[0] as u128;
+                let byte1 = hash.0[1] as u128;
+                let byte = (byte0 << 64) | byte1;
+                Self(format!("{byte:x}"))
+            }
+        }
+
+        let tcx = self.as_rustc();
+        let mut hash_ctx = ich::StableHashState::new(tcx.sess, tcx.untracked());
+        let mut hasher = rustc_data_structures::stable_hash::StableHasher::default();
+        target.stable_hash(&mut hash_ctx, &mut hasher);
         hasher.finish::<StableHashString>().get()
     }
 }

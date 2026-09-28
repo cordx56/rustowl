@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 pub struct RegionEraser<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
+#[rustversion::before(1.99.0)]
 impl<'tcx> rustc_middle::ty::TypeFolder<rustc_middle::ty::TyCtxt<'tcx>> for RegionEraser<'tcx> {
     fn cx(&self) -> rustc_middle::ty::TyCtxt<'tcx> {
         *self.tcx.as_rustc()
@@ -17,6 +18,18 @@ impl<'tcx> rustc_middle::ty::TypeFolder<rustc_middle::ty::TyCtxt<'tcx>> for Regi
         &mut self,
         _r: <rustc_middle::ty::TyCtxt<'tcx> as rustc_type_ir::Interner>::Region,
     ) -> <rustc_middle::ty::TyCtxt<'tcx> as rustc_type_ir::Interner>::Region {
+        self.cx().lifetimes.re_static
+    }
+}
+#[rustversion::since(1.99.0)]
+impl<'tcx> rustc_middle::ty::TypeFolder<rustc_middle::ty::TyCtxt<'tcx>> for RegionEraser<'tcx> {
+    fn cx(&self) -> rustc_middle::ty::TyCtxt<'tcx> {
+        *self.tcx.as_rustc()
+    }
+    fn fold_region(
+        &mut self,
+        _r: rustc_type_ir::Region<rustc_middle::ty::TyCtxt<'tcx>>,
+    ) -> rustc_type_ir::Region<rustc_middle::ty::TyCtxt<'tcx>> {
         self.cx().lifetimes.re_static
     }
 }
@@ -224,6 +237,7 @@ pub struct BorrowMap {
     local_map: HashMap<LocalId, HashSet<Borrow>>,
 }
 impl BorrowMap {
+    #[rustversion::before(1.99.0)]
     pub fn new(borrow_set: &rustc_borrowck::consumers::BorrowSet<'_>) -> Self {
         let mut location_map = HashMap::new();
         // BorrowIndex corresponds to Location index
@@ -258,6 +272,35 @@ impl BorrowMap {
                 )
             })
             .collect();
+        Self {
+            location_map,
+            local_map,
+        }
+    }
+    #[rustversion::since(1.99.0)]
+    pub fn new(borrow_set: &rustc_borrowck::consumers::BorrowSet<'_>) -> Self {
+        let mut location_map = HashMap::new();
+        let mut local_map: HashMap<LocalId, HashSet<Borrow>> = HashMap::new();
+        for (borrow_index, data) in borrow_set.iter_enumerated() {
+            let borrow: Borrow = AsRustc::from_rustc(borrow_index);
+            let location: Location = AsRustc::from_rustc(data.reserve_location());
+            let borrow_data = if data.kind().mutability().is_mut() {
+                BorrowData::Mutable {
+                    borrowed: AsRustc::from_rustc(data.borrowed_place().local),
+                    assigned: AsRustc::from_rustc(data.assigned_place().local),
+                }
+            } else {
+                BorrowData::Shared {
+                    borrowed: AsRustc::from_rustc(data.borrowed_place().local),
+                    assigned: AsRustc::from_rustc(data.assigned_place().local),
+                }
+            };
+            location_map.insert(borrow, (location, borrow_data));
+            local_map
+                .entry(AsRustc::from_rustc(data.borrowed_place().local))
+                .or_default()
+                .insert(borrow);
+        }
         Self {
             location_map,
             local_map,
@@ -300,7 +343,7 @@ impl Place<'_> {
 }
 
 impl_as_rustc!(
-    #[derive(Clone, Hash, Debug)]
+    #[derive(Clone, Debug)]
     Operand<'tcx>,
     rustc_middle::mir::Operand<'tcx>,
 );
@@ -320,7 +363,7 @@ impl Operand<'_> {
 }
 
 impl_as_rustc!(
-    #[derive(Clone, Hash, Debug)]
+    #[derive(Clone, Debug)]
     Rvalue<'tcx>,
     rustc_middle::mir::Rvalue<'tcx>,
 );
@@ -328,7 +371,7 @@ impl Rvalue<'_> {
     pub fn transform(&self, fn_id: DefId) -> MirRval {
         use rustc_middle::mir::Rvalue;
         match &self.as_rustc() {
-            Rvalue::Use(operand) => {
+            Rvalue::Use(operand, ..) => {
                 let operand = Operand::from_rustc(operand.clone()).transform(fn_id);
                 MirRval::Use { operand }
             }

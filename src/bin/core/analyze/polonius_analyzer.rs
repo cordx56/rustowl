@@ -127,7 +127,7 @@ pub fn get_must_live(
 
     // Build a map from borrow to all regions that ever contain it
     let mut borrow_regions = HashMap::new();
-    for (_location, region_borrows) in output.origin_contains_loan_at().iter() {
+    for region_borrows in output.origin_contains_loan_at().values() {
         for (region, borrows) in region_borrows.iter() {
             for borrow in borrows {
                 borrow_regions

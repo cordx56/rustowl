@@ -8,6 +8,17 @@ use tokio::{
     sync::{Notify, mpsc},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidTargetError;
+
+impl std::fmt::Display for InvalidTargetError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("invalid analysis target")
+    }
+}
+
+impl std::error::Error for InvalidTargetError {}
+
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct CargoCheckMessageTarget {
     name: String,
@@ -36,7 +47,7 @@ pub struct Analyzer {
 }
 
 impl Analyzer {
-    pub async fn new(path: impl AsRef<Path>) -> Result<Self, ()> {
+    pub async fn new(path: impl AsRef<Path>) -> Result<Self, InvalidTargetError> {
         let path = path.as_ref().to_path_buf();
 
         let mut cargo_cmd = toolchain::setup_cargo_command().await;
@@ -76,7 +87,7 @@ impl Analyzer {
             })
         } else {
             log::warn!("Invalid analysis target: {}", path.display());
-            Err(())
+            Err(InvalidTargetError)
         }
     }
     pub fn target_path(&self) -> &Path {
