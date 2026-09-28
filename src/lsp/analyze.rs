@@ -183,7 +183,7 @@ impl Analyzer {
                     let _ = sender.send(event).await;
                 }
                 if !line.is_empty() {
-                    log::warn!("unknown format stdout from rustowlc");
+                    log::trace!("unknown format stdout from rustowlc");
                 }
             }
             log::debug!("stdout closed");
