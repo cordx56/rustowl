@@ -31,34 +31,24 @@ fn get_rustowl_output(function_path: &str, variable: &str) -> String {
         .next()
         .expect("function path must start with a module name");
 
-    let exe_name = if cfg!(windows) {
-        "rustowl.exe"
-    } else {
-        "rustowl"
-    };
-    let profile_dir = if cfg!(windows) {
-        "windows-release"
-    } else {
-        "release"
-    };
+    // Absolute path to the binary of this package (CWD-independent: test
+    // runners execute with varying working directories in a workspace).
+    let rustowl_path = env!("CARGO_BIN_EXE_rustowl");
 
-    let rustowl_path = format!(
-        "target{}{}{}{}",
-        std::path::MAIN_SEPARATOR,
-        profile_dir,
-        std::path::MAIN_SEPARATOR,
-        exe_name
-    );
+    let fixture_path: std::path::PathBuf = [
+        env!("CARGO_MANIFEST_DIR"),
+        "algo-tests",
+        "src",
+        &format!("{module}.rs"),
+    ]
+    .iter()
+    .collect();
 
-    let output = Command::new(&rustowl_path)
+    let output = Command::new(rustowl_path)
         .args([
             "show",
             "--path",
-            &format!(
-                "algo-tests{}src{}{module}.rs",
-                std::path::MAIN_SEPARATOR,
-                std::path::MAIN_SEPARATOR
-            ),
+            fixture_path.to_str().expect("fixture path must be UTF-8"),
             function_path,
             variable,
         ])

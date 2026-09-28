@@ -4,7 +4,9 @@ use std::process::Command;
 use std::time::Duration;
 
 fn bench_rustowl_check(c: &mut Criterion) {
-    let dummy_package = "./perf-tests/dummy-package";
+    // CWD-independent paths: benchmark runners execute with varying working
+    // directories in a workspace.
+    let dummy_package = concat!(env!("CARGO_MANIFEST_DIR"), "/perf-tests/dummy-package");
 
     let mut group = c.benchmark_group("rustowl_check");
     group
@@ -25,7 +27,7 @@ fn bench_rustowl_check(c: &mut Criterion) {
         );
     }
 
-    let binary_path = "./target/release/rustowl";
+    let binary_path = env!("CARGO_BIN_EXE_rustowl");
 
     group.bench_function("default", |b| {
         b.iter(|| {
@@ -61,8 +63,8 @@ fn bench_rustowl_check(c: &mut Criterion) {
 }
 
 fn bench_rustowl_comprehensive(c: &mut Criterion) {
-    let dummy_package = "./perf-tests/dummy-package";
-    let binary_path = "./target/release/rustowl";
+    let dummy_package = concat!(env!("CARGO_MANIFEST_DIR"), "/perf-tests/dummy-package");
+    let binary_path = env!("CARGO_BIN_EXE_rustowl");
 
     let mut group = c.benchmark_group("rustowl_comprehensive");
     group
