@@ -1,0 +1,25 @@
+---
+source: tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 'a' (1/1) in function 'must_live::reassign_block' ===[0m
+
+[2m   7 |[0m     [95mlet[0m [95mmut[0m r[2m;[0m
+[2m   8 |[0m     [2m{[0m
+[2m   9 |[0m         [95mlet[0m a = [93mString[0m[2m::[0m[96mfrom[0m[2m([0m[92m"a"[0m[2m)[0m[2m;[0m
+[2m     |[0m             [92m-[0m   [93m-----------------[0m
+[2m  10 |[0m         r = [95m&[0ma[2m;[0m
+[2m     |[0m         [92m---[0m [96m--[0m
+[2m  11 |[0m         [96mprintln[0m[96m![0m[2m([0m[92m"{r}"[0m[2m)[0m[2m;[0m
+[2m     |[0m         [92m---------------[0m
+[2m  12 |[0m     [2m}[0m
+[2m  13 |[0m     [95mlet[0m b = [93mString[0m[2m::[0m[96mfrom[0m[2m([0m[92m"b"[0m[2m)[0m[2m;[0m
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable

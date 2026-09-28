@@ -1,0 +1,26 @@
+---
+source: tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 'm' (1/1) in function 'must_live::deref_use' ===[0m
+
+[2m  54 |[0m     [95mlet[0m [95mmut[0m r = [95m&[0mn[2m;[0m
+[2m  55 |[0m     [95mif[0m c [2m{[0m
+[2m  56 |[0m         [95mlet[0m m = [93mBox[0m[2m::[0m[96mnew[0m[2m([0m[96m2[0m[2m)[0m[2m;[0m
+[2m     |[0m             [92m-[0m   [93m-----------[0m
+[2m  57 |[0m         r = [95m&[0mm[2m;[0m
+[2m     |[0m         [92m---[0m [96m--[0m
+[2m  58 |[0m     [2m}[0m
+[2m  59 |[0m     [95m*[0m[95m*[0mr + [96m1[0m
+[2m     |[0m     [91m~~~[0m
+[2m  60 |[0m [2m}[0m
+[2m  61 |[0m 
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable

@@ -36,11 +36,54 @@ impl PoloniusInput {
         ))
     }
 
+    /// remove kills of loans at the points where they are also invalidated
+    /// from the input facts
+    ///
+    /// this should be done to track usage of references after borrowed local dies
+    pub fn remove_kills_on_invalidation(&mut self, location_table: &PoloniusLocationTable) {
+        let table = location_table.as_rustc();
+        // A kill is emitted at the mid point and an invalidation at the start
+        // point of the same statement, so they are compared by location.
+        let invalidated: HashSet<_> = self
+            .as_rustc()
+            .loan_invalidated_at
+            .iter()
+            .map(|(p, l)| (table.to_location(*p), *l))
+            .collect();
+        self.mut_rustc()
+            .loan_killed_at
+            .retain(|(l, p)| !invalidated.contains(&(table.to_location(*p), *l)));
+    }
+
     pub fn var_dropped_at(&self) -> Vec<(LocalId, Point)> {
         self.as_rustc()
             .var_dropped_at
             .iter()
             .map(|(v, p)| (AsRustc::from_rustc(*v), AsRustc::from_rustc(*p)))
+            .collect()
+    }
+
+    pub fn var_used_at(&self) -> Vec<(LocalId, Point)> {
+        self.as_rustc()
+            .var_used_at
+            .iter()
+            .map(|(v, p)| (AsRustc::from_rustc(*v), AsRustc::from_rustc(*p)))
+            .collect()
+    }
+
+    pub fn use_of_var_derefs_origin(&self) -> Vec<(LocalId, Region)> {
+        self.as_rustc()
+            .use_of_var_derefs_origin
+            .iter()
+            .map(|(v, r)| (AsRustc::from_rustc(*v), AsRustc::from_rustc(*r)))
+            .collect()
+    }
+
+    pub fn drop_of_var_derefs_origin(&self) -> Vec<(LocalId, Region)> {
+        self.as_rustc()
+            .drop_of_var_derefs_origin
+            .iter()
+            .map(|(v, r)| (AsRustc::from_rustc(*v), AsRustc::from_rustc(*r)))
             .collect()
     }
 }

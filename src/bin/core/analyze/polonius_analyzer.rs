@@ -71,7 +71,35 @@ pub fn get_borrow_live(
     )
 }
 
+/// obtain a map that region -> locations where a variable
+/// whose type contains the region is used or dropped
+fn region_access_locations(input: &PoloniusInput) -> HashMap<Region, HashSet<Point>> {
+    let mut result = HashMap::new();
+    for (var_accessed_at, var_derefs_origin) in [
+        (input.var_used_at(), input.use_of_var_derefs_origin()),
+        (input.var_dropped_at(), input.drop_of_var_derefs_origin()),
+    ] {
+        let mut local_regions = HashMap::new();
+        for (local, region) in var_derefs_origin {
+            local_regions
+                .entry(local)
+                .or_insert_with(Vec::new)
+                .push(region);
+        }
+        for (local, location_idx) in var_accessed_at {
+            for region in local_regions.get(&local).into_iter().flatten() {
+                result
+                    .entry(*region)
+                    .or_insert_with(HashSet::new)
+                    .insert(location_idx);
+            }
+        }
+    }
+    result
+}
+
 pub fn get_must_live(
+    input: &PoloniusInput,
     output: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
     borrow_map: &BorrowMap,
@@ -124,31 +152,28 @@ pub fn get_must_live(
             }
         }
     }
-
-    // Build a map from borrow to all regions that ever contain it
-    let mut borrow_regions = HashMap::new();
-    for region_borrows in output.origin_contains_loan_at().values() {
-        for (region, borrows) in region_borrows.iter() {
-            for borrow in borrows {
-                borrow_regions
-                    .entry(*borrow)
-                    .or_insert_with(HashSet::new)
-                    .insert(*region);
-            }
-        }
+    // a region must also be live where a variable whose type contains it is used or dropped;
+    // the borrows in the region may be dereferenced there
+    for (region, locations) in region_access_locations(input) {
+        region_must_locations
+            .entry(region)
+            .or_insert_with(HashSet::new)
+            .extend(locations);
     }
 
     // obtain a map that local -> locations
-    // a local must live where any of its borrow's regions must be live
     let mut local_must_locations = HashMap::new();
-    for (borrow, regions) in borrow_regions.iter() {
-        if let Some(local) = borrow_local.get(borrow) {
-            for region in regions {
-                if let Some(locs) = region_must_locations.get(region) {
+    for (location_idx, region_borrows) in output.origin_contains_loan_at().iter() {
+        for (region, borrows) in region_borrows.iter() {
+            if region_must_locations
+                .get(region)
+                .is_some_and(|locs| locs.contains(location_idx))
+            {
+                for local in borrows.iter().filter_map(|borrow| borrow_local.get(borrow)) {
                     local_must_locations
                         .entry(*local)
                         .or_insert_with(HashSet::new)
-                        .extend(locs.iter().copied());
+                        .insert(*location_idx);
                 }
             }
         }

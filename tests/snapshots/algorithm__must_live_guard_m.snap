@@ -1,0 +1,25 @@
+---
+source: tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 'm' (1/1) in function 'must_live::guard' ===[0m
+
+[2m 130 |[0m [2m// A guard borrows the mutex until the end of the block (compiles).[0m
+[2m 131 |[0m [95mfn[0m guard[2m([0m[2m)[0m [2m{[0m
+[2m 132 |[0m     [95mlet[0m m = std[2m::[0msync[2m::[0m[93mMutex[0m[2m::[0m[96mnew[0m[2m([0m[96m0[0m[2m)[0m[2m;[0m
+[2m     |[0m         [92m-[0m   [93m------------------------[0m
+[2m 133 |[0m     [95mlet[0m g = m[2m.[0m[96mlock[0m[2m([0m[2m)[0m[2m.[0m[96munwrap[0m[2m([0m[2m)[0m[2m;[0m
+[2m     |[0m         [92m-[0m   [96m-[0m [92m---------------[0m
+[2m 134 |[0m     [96mprintln[0m[96m![0m[2m([0m[92m"{}"[0m[2m,[0m [95m*[0mg[2m)[0m[2m;[0m
+[2m     |[0m     [92m------------------[0m
+[2m 135 |[0m [2m}[0m
+[2m     |[0m [92m-[0m
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable

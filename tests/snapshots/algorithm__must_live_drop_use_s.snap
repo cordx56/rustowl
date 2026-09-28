@@ -1,0 +1,26 @@
+---
+source: tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 's' (1/1) in function 'must_live::drop_use' ===[0m
+
+[2m 107 |[0m     [95mlet[0m _h[2m;[0m
+[2m 108 |[0m     [2m{[0m
+[2m 109 |[0m         [95mlet[0m s = [93mString[0m[2m::[0m[96mfrom[0m[2m([0m[92m"s"[0m[2m)[0m[2m;[0m
+[2m     |[0m             [92m-[0m   [93m-----------------[0m
+[2m 110 |[0m         _h = [96mHolder[0m[2m([0m[95m&[0ms[2m)[0m[2m;[0m
+[2m     |[0m         [92m--[0m   [92m------[0m [96m--[0m [92m-[0m
+[2m 111 |[0m     [2m}[0m
+[2m 112 |[0m [2m}[0m
+[2m     |[0m [91m~[0m
+[2m 113 |[0m 
+[2m 114 |[0m [2m// NLL accepts this because `first` is dead before the mutable borrow (compiles).[0m
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable
