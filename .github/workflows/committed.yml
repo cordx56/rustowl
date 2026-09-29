@@ -1,9 +1,6 @@
 name: Committed
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
 
 permissions:
