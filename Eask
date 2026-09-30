@@ -1,7 +1,7 @@
 ;; -*- mode: eask; lexical-binding: t -*-
 
 (package "rustowl"
-         "0.3.4"
+         "0.4.0"
          "Visualize Ownership and Lifetimes in Rust")
 
 (website-url "https://github.com/cordx56/rustowl")
