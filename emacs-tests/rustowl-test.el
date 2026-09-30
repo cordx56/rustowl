@@ -43,10 +43,7 @@
     (let ((ov (rustowl-underline 1 4 "#ff0000" t)))
       (should (overlayp ov))
       (should (memq ov rustowl-overlays))
-      (should
-       (equal
-        (overlay-get ov 'face)
-        '(:underline (:color "#ff0000" :style wave))))
+      (should (equal (overlay-get ov 'face) '(:underline (:color "#ff0000" :style wave))))
       (rustowl-clear-overlays)
       (should (null rustowl-overlays)))))
 
@@ -87,10 +84,8 @@
                (lambda (_secs _repeat function &rest _args)
                  (setq called t)
                  'fake-timer))
-              ((symbol-function 'cancel-timer)
-               (lambda (_timer) (setq called 'cancelled)))
-              ((symbol-function 'rustowl-clear-overlays)
-               (lambda () (setq called 'cleared))))
+              ((symbol-function 'cancel-timer) (lambda (_timer) (setq called 'cancelled)))
+              ((symbol-function 'rustowl-clear-overlays) (lambda () (setq called 'cleared))))
       (rustowl-reset-cursor-timer)
       (should (or (eq called t) (eq called 'cleared)))
       (setq rustowl-cursor-timer 'fake-timer)
@@ -98,13 +93,9 @@
       (should (or (eq called 'cancelled) (eq called 'cleared)))
       (let ((added nil))
         (cl-letf (((symbol-function 'add-hook)
-                   (lambda (hook fn &optional _depth local)
-                     (setq added (list hook fn local)))))
+                   (lambda (hook fn &optional _depth local) (setq added (list hook fn local)))))
           (rustowl-enable-cursor)
-          (should
-           (equal
-            added
-            '(post-command-hook rustowl-reset-cursor-timer t))))))))
+          (should (equal added '(post-command-hook rustowl-reset-cursor-timer t))))))))
 
 ;; Test idempotency of rustowl-enable-cursor and rustowl-disable-cursor
 (ert-deftest rustowl-test-enable-disable-idempotent ()
@@ -112,25 +103,20 @@
     (let ((rustowl-cursor-timer nil))
       (rustowl-enable-cursor)
       (rustowl-enable-cursor)
-      (should
-       (= (cl-count 'rustowl-reset-cursor-timer post-command-hook) 1))
+      (should (= (cl-count 'rustowl-reset-cursor-timer post-command-hook) 1))
       (rustowl-disable-cursor)
       (rustowl-disable-cursor)
-      (should-not
-       (memq 'rustowl-reset-cursor-timer post-command-hook))
+      (should-not (memq 'rustowl-reset-cursor-timer post-command-hook))
       (should (null rustowl-cursor-timer)))))
 
 ;; Test rustowl-reset-cursor-timer when timer is nil
 (ert-deftest rustowl-test-reset-cursor-timer-nil ()
   (let ((rustowl-cursor-timer nil)
         (called nil))
-    (cl-letf (((symbol-function 'cancel-timer)
-               (lambda (_timer) (setq called t)))
-              ((symbol-function 'rustowl-clear-overlays)
-               (lambda () (setq called 'cleared)))
+    (cl-letf (((symbol-function 'cancel-timer) (lambda (_timer) (setq called t)))
+              ((symbol-function 'rustowl-clear-overlays) (lambda () (setq called 'cleared)))
               ((symbol-function 'run-with-idle-timer)
-               (lambda (_timeout _repeat fn &rest _args)
-                 'fake-timer)))
+               (lambda (_timeout _repeat fn &rest _args) 'fake-timer)))
       (should (not called))
       (rustowl-reset-cursor-timer)
       (should (not (eq called t)))
@@ -187,19 +173,14 @@
     (with-temp-buffer
       (insert "abcdef")
       (let ((lsp-mode t))
-        (cl-letf (((symbol-function 'lsp-workspaces)
-                   (lambda () '(fake-workspace)))
+        (cl-letf (((symbol-function 'lsp-workspaces) (lambda () '(fake-workspace)))
                   ((symbol-function 'lsp-request-async)
-                   (lambda (_method _params cb &rest _args)
-                     (funcall cb response)))
+                   (lambda (_method _params cb &rest _args) (funcall cb response)))
                   ((symbol-function 'rustowl-underline)
                    (lambda (start end color _wavy)
                      (setq called (list start end color))
                      (make-overlay start end))))
-          (rustowl-cursor
-           '(:position
-             (:line 0 :character 0)
-             :document (:uri "file:///fake")))
+          (rustowl-cursor '(:position (:line 0 :character 0) :document (:uri "file:///fake")))
           (should (equal (nth 2 called) "#0000cc")))))))
 
 ;; Test rustowl-cursor overlays for all type branches and overlapped
@@ -240,19 +221,14 @@
       (with-temp-buffer
         (insert "abcdef")
         (let ((lsp-mode t))
-          (cl-letf (((symbol-function 'lsp-workspaces)
-                     (lambda () '(fake-workspace)))
+          (cl-letf (((symbol-function 'lsp-workspaces) (lambda () '(fake-workspace)))
                     ((symbol-function 'lsp-request-async)
-                     (lambda (_method _params cb &rest _args)
-                       (funcall cb response)))
+                     (lambda (_method _params cb &rest _args) (funcall cb response)))
                     ((symbol-function 'rustowl-underline)
                      (lambda (_start _end color _wavy)
                        (push color called-types)
                        (make-overlay 1 2))))
-            (rustowl-cursor
-             '(:position
-               (:line 0 :character 0)
-               :document (:uri "file:///fake")))
+            (rustowl-cursor '(:position (:line 0 :character 0) :document (:uri "file:///fake")))
             ;; Should get all colors except for the overlapped one
             (should (member "#00cc00" called-types)) ; definitely_live / maybe_initialized
             (should (member "#0000cc" called-types)) ; imm_borrow
@@ -261,10 +237,7 @@
             (should (member "#cc0000" called-types)) ; outlive / shared_mut
             ;; Should not call underline for overlapped
             (should
-             (= (length
-                 (cl-remove-if-not
-                  (lambda (c) (equal c "#00cc00")) called-types))
-                2))))))))
+             (= (length (cl-remove-if-not (lambda (c) (equal c "#00cc00")) called-types)) 2))))))))
 
 ;; Test rustowl-cursor-call (mocking buffer and lsp)
 (ert-deftest rustowl-test-cursor-call ()
@@ -273,22 +246,13 @@
       (insert "abc\ndef")
       (goto-char (point-min))
       (let ((lsp-mode t))
-        (cl-letf (((symbol-function 'lsp-workspaces)
-                   (lambda () '(fake-workspace)))
-                  ((symbol-function 'rustowl-line-number-at-pos)
-                   (lambda () 0))
-                  ((symbol-function 'rustowl-current-column)
-                   (lambda () 1))
-                  ((symbol-function 'lsp--buffer-uri)
-                   (lambda () "file:///fake"))
-                  ((symbol-function 'rustowl-cursor)
-                   (lambda (params) (setq called params))))
+        (cl-letf (((symbol-function 'lsp-workspaces) (lambda () '(fake-workspace)))
+                  ((symbol-function 'rustowl-line-number-at-pos) (lambda () 0))
+                  ((symbol-function 'rustowl-current-column) (lambda () 1))
+                  ((symbol-function 'lsp--buffer-uri) (lambda () "file:///fake"))
+                  ((symbol-function 'rustowl-cursor) (lambda (params) (setq called params))))
           (rustowl-cursor-call)
           (should
-           (equal
-            called
-            '(:position
-              (:line 0 :character 1)
-              :document (:uri "file:///fake")))))))))
+           (equal called '(:position (:line 0 :character 1) :document (:uri "file:///fake")))))))))
 (provide 'rustowl-test)
 ;;; rustowl-test.el ends here

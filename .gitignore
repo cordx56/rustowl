@@ -17,3 +17,5 @@ memory-bank/
 security-logs/
 benchmark-summary.*
 .eask/
+rustowl-up-autoloads.el
+rustowl.elc

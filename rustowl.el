@@ -6,7 +6,7 @@
 ;; Keywords: tools lifetime ownership visualization rust
 
 ;; Version: 0.4.0
-;; Package-Requires: ((emacs "28.1") (lsp-mode "9.0.0"))
+;; Package-Requires: ((emacs "29.1") (lsp-mode "9.0.0"))
 ;; URL: https://github.com/cordx56/rustowl
 
 ;; SPDX-License-Identifier: MPL-2.0
@@ -24,26 +24,20 @@
   :prefix "rustowl-"
   :link '(url-link "https://github.com/cordx56/rustowl"))
 
-;;;###autoload
+;; Register the LSP client.
 (lsp-register-client
  (make-lsp-client
-  :new-connection
-  (lsp-stdio-connection '("rustowl"))
-  :major-modes
-  '(rust-mode rust-ts-mode rustic-mode)
+  :new-connection (lsp-stdio-connection '("rustowl"))
+  :major-modes '(rust-mode rust-ts-mode rustic-mode)
   :server-id 'rustowl
   :priority -1
   :add-on? t))
 
 ;; Analyze on save
 (defun rustowl--analyze-request ()
-  "Send a rustowl/analyze request to the LSP server for the current buffer."
+  "Send a `rustowl/analyze' request for the current buffer."
   (when (and (bound-and-true-p lsp-mode) (lsp-workspaces))
-    (lsp-request-async
-     "rustowl/analyze"
-     (make-hash-table)
-     #'ignore
-     :mode 'current)))
+    (lsp-request-async "rustowl/analyze" (make-hash-table) #'ignore :mode 'current)))
 
 (defun rustowl-enable-analyze-on-save ()
   "Enable sending rustowl/analyze on save in this buffer."
@@ -72,33 +66,23 @@
                    (start (lsp-get range :start))
                    (end (lsp-get range :end))
                    (start-pos
-                    (rustowl-line-col-to-pos
-                     (lsp-get start :line)
-                     (lsp-get start :character)))
-                   (end-pos
-                    (rustowl-line-col-to-pos
-                     (lsp-get end :line) (lsp-get end :character)))
+                    (rustowl-line-col-to-pos (lsp-get start :line) (lsp-get start :character)))
+                   (end-pos (rustowl-line-col-to-pos (lsp-get end :line) (lsp-get end :character)))
                    (overlapped (lsp-get deco :overlapped)))
               (if (not overlapped)
                   (cond
                    ((equal type "definitely_live")
-                    (rustowl-underline
-                     start-pos end-pos "#00cc00" nil))
+                    (rustowl-underline start-pos end-pos "#00cc00" nil))
                    ((equal type "maybe_initialized")
                     (rustowl-underline start-pos end-pos "#00cc00" t))
                    ((equal type "imm_borrow")
-                    (rustowl-underline
-                     start-pos end-pos "#0000cc" nil))
+                    (rustowl-underline start-pos end-pos "#0000cc" nil))
                    ((equal type "mut_borrow")
-                    (rustowl-underline
-                     start-pos end-pos "#cc00cc" nil))
+                    (rustowl-underline start-pos end-pos "#cc00cc" nil))
                    ((or (equal type "move") (equal type "call"))
-                    (rustowl-underline
-                     start-pos end-pos "#cccc00" nil))
-                   ((or (equal type "shared_mut")
-                        (equal type "outlive"))
-                    (rustowl-underline
-                     start-pos end-pos "#cc0000" t))))))
+                    (rustowl-underline start-pos end-pos "#cccc00" nil))
+                   ((or (equal type "shared_mut") (equal type "outlive"))
+                    (rustowl-underline start-pos end-pos "#cc0000" t))))))
           decorations)))
      :mode 'current)))
 
@@ -123,10 +107,7 @@
     (let ((line (rustowl-line-number-at-pos))
           (column (rustowl-current-column))
           (uri (lsp--buffer-uri)))
-      (rustowl-cursor
-       `(:position
-         (:line ,line :character ,column)
-         :document (:uri ,uri))))))
+      (rustowl-cursor `(:position (:line ,line :character ,column) :document (:uri ,uri))))))
 
 ;;;###autoload
 (defvar rustowl-cursor-timer nil
@@ -143,34 +124,31 @@
     (cancel-timer rustowl-cursor-timer))
   (rustowl-clear-overlays)
   (setq rustowl-cursor-timer
-        (run-with-idle-timer
-         rustowl-cursor-timeout nil #'rustowl--cursor-call-in
-         (current-buffer))))
+        (run-with-idle-timer rustowl-cursor-timeout nil #'rustowl--cursor-call-in
+                             (current-buffer))))
 
 (defun rustowl--cursor-call-in (buffer)
-  "Call `rustowl-cursor-call' in BUFFER if it is still live and current."
+  "Call `rustowl-cursor-call' in BUFFER when it is still current."
   (when (and (buffer-live-p buffer) (eq buffer (current-buffer)))
     (with-current-buffer buffer
       (rustowl-cursor-call))))
 
 ;;;###autoload
 (defun rustowl-enable-cursor ()
-  "Enable RustOwl overlay updates on cursor move."
+  "Enable RustOwl cursor overlays."
   (add-hook 'post-command-hook #'rustowl-reset-cursor-timer nil t))
 
 ;;;###autoload
 (defun rustowl-disable-cursor ()
-  "Disable RustOwl overlay updates."
+  "Disable RustOwl cursor overlays."
   (remove-hook 'post-command-hook #'rustowl-reset-cursor-timer t)
   (when rustowl-cursor-timer
     (cancel-timer rustowl-cursor-timer)
     (setq rustowl-cursor-timer nil))
   (rustowl-clear-overlays))
 
-(define-obsolete-function-alias
-  'enable-rustowl-cursor #'rustowl-enable-cursor "0.4.1")
-(define-obsolete-function-alias
-  'disable-rustowl-cursor #'rustowl-disable-cursor "0.4.1")
+(define-obsolete-function-alias 'enable-rustowl-cursor #'rustowl-enable-cursor "0.4.1")
+(define-obsolete-function-alias 'disable-rustowl-cursor #'rustowl-disable-cursor "0.4.1")
 
 ;; Automatically enable cursor-based highlighting for Rust buffers
 (add-hook 'rust-mode-hook #'rustowl-enable-cursor)
@@ -209,10 +187,8 @@ If COL is past end of line, clamp to end of line."
 If WAVY is non-nil, use a wavy underline, otherwise a straight line."
   (let ((overlay (make-overlay start end)))
     (if wavy
-        (overlay-put
-         overlay 'face `(:underline (:color ,color :style wave)))
-      (overlay-put
-       overlay 'face `(:underline (:color ,color :style line))))
+        (overlay-put overlay 'face `(:underline (:color ,color :style wave)))
+      (overlay-put overlay 'face `(:underline (:color ,color :style line))))
     (push overlay rustowl-overlays)
     overlay))
 
