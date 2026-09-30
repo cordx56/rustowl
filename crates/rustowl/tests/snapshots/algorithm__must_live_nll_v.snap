@@ -1,0 +1,29 @@
+---
+source: tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 'v' (1/1) in function 'must_live::nll' ===[0m
+
+[2m 114 |[0m [2m// NLL accepts this because `first` is dead before the mutable borrow (compiles).[0m
+[2m 115 |[0m [95mfn[0m nll[2m([0m[2m)[0m [2m{[0m
+[2m 116 |[0m     [95mlet[0m [95mmut[0m v = [96mvec[0m[96m![0m[2m[[0m[96m1[0m[2m][0m[2m;[0m
+[2m     |[0m         [92m-----[0m   [92m-------[0m
+[2m 117 |[0m     [95mlet[0m first = [95m&[0mv[2m[[0m[96m0[0m[2m][0m[2m;[0m
+[2m     |[0m         [92m-----[0m    [96m-[0m [92m--[0m
+[2m 118 |[0m     [96mprintln[0m[96m![0m[2m([0m[92m"{first}"[0m[2m)[0m[2m;[0m
+[2m     |[0m     [92m-------------------[0m
+[2m 119 |[0m     v[2m.[0m[96mpush[0m[2m([0m[96m2[0m[2m)[0m[2m;[0m
+[2m     |[0m     [38;5;177m-[0m [92m--------[0m
+[2m 120 |[0m [2m}[0m
+[2m     |[0m [92m-[0m
+[2m 121 |[0m 
+[2m 122 |[0m [2m// A borrow held by a struct and used through another reference (compiles).[0m
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable

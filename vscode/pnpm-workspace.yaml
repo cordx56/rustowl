@@ -1,7 +1,7 @@
 minimumReleaseAge: 0
 
 allowBuilds:
-  '@vscode/vsce-sign': true
+  "@vscode/vsce-sign": true
   esbuild: true
   keytar: true
   unrs-resolver: true

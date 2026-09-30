@@ -1,0 +1,26 @@
+---
+source: tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 'm' (1/1) in function 'must_live::call_use' ===[0m
+
+[2m  65 |[0m     [95mlet[0m [95mmut[0m r = [95m&[0mn[2m;[0m
+[2m  66 |[0m     [95mif[0m c [2m{[0m
+[2m  67 |[0m         [95mlet[0m m = [93mString[0m[2m::[0m[96mfrom[0m[2m([0m[92m"m"[0m[2m)[0m[2m;[0m
+[2m     |[0m             [92m-[0m   [93m-----------------[0m
+[2m  68 |[0m         r = [95m&[0mm[2m;[0m
+[2m     |[0m         [92m---[0m [96m--[0m
+[2m  69 |[0m     [2m}[0m
+[2m  70 |[0m     [96mtakes[0m[2m([0mr[2m)[0m[2m;[0m
+[2m     |[0m     [91m~~~~~~~~[0m
+[2m  71 |[0m [2m}[0m
+[2m  72 |[0m 
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable

@@ -1,0 +1,28 @@
+---
+source: tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 'm' (1/1) in function 'must_live::copy_use' ===[0m
+
+[2m  80 |[0m     [95mlet[0m [95mmut[0m r = [95m&[0mn[2m;[0m
+[2m  81 |[0m     [95mif[0m c [2m{[0m
+[2m  82 |[0m         [95mlet[0m m = [93mString[0m[2m::[0m[96mfrom[0m[2m([0m[92m"m"[0m[2m)[0m[2m;[0m
+[2m     |[0m             [92m-[0m   [93m-----------------[0m
+[2m  83 |[0m         r = [95m&[0mm[2m;[0m
+[2m     |[0m         [92m---[0m [96m--[0m
+[2m  84 |[0m     [2m}[0m
+[2m  85 |[0m     [95mlet[0m t = r[2m;[0m
+[2m     |[0m         [91m~[0m   [91m~[0m
+[2m  86 |[0m     [96mprintln[0m[96m![0m[2m([0m[92m"{t}"[0m[2m)[0m[2m;[0m
+[2m     |[0m     [91m~~~~~~~~~~~~~~~[0m
+[2m  87 |[0m [2m}[0m
+[2m  88 |[0m 
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable

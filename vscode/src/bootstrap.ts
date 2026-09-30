@@ -176,7 +176,7 @@ export const bootstrapRustowl = async (dirPath: string): Promise<string> => {
               const match = progressPattern.exec(line);
               if (match !== null) {
                 const url = match[1];
-                const percent = parseInt(match[2], 10);
+                const percent = Number.parseInt(match[2], 10);
                 urlProgress.set(url, percent);
 
                 const totalPercent =

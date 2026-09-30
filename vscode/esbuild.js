@@ -53,6 +53,5 @@ async function main() {
 
 // eslint-disable-next-line promise/prefer-await-to-callbacks
 main().catch(async (error) => {
-  console.error(error);
   throw error;
 });

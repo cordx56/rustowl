@@ -5,7 +5,7 @@
   - Fixes #<issue_number>
 -->
 
-## Type Of Change
+## Type of Change
 
 <!-- What types of changes does your code introduce? Remove the options that do not apply. -->
 

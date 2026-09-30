@@ -15,6 +15,13 @@ export let client: LanguageClient | undefined = undefined;
 let decoTimer: ReturnType<typeof setTimeout> | null = null;
 let enabled = true;
 
+const rangeToRange = (range: zInfer<typeof zLspRange>) => {
+  return new vscode.Range(
+    new vscode.Position(range.start.line, range.start.character),
+    new vscode.Position(range.end.line, range.end.character),
+  );
+};
+
 export async function activate(context: vscode.ExtensionContext) {
   // eslint-disable-next-line no-console
   console.log("rustowl activated");
@@ -80,13 +87,6 @@ export async function activate(context: vscode.ExtensionContext) {
     editor: vscode.TextEditor,
     data: zInfer<typeof zLspCursorResponse>,
   ) => {
-    const rangeToRange = (range: zInfer<typeof zLspRange>) => {
-      return new vscode.Range(
-        new vscode.Position(range.start.line, range.start.character),
-        new vscode.Position(range.end.line, range.end.character),
-      );
-    };
-
     const {
       underlineThickness,
       lifetimeColor,
@@ -172,7 +172,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
       }
       if (
-        deco.type != "lifetime" &&
+        deco.type !== "lifetime" &&
         "hover_text" in deco &&
         deco.hover_text !== null &&
         deco.hover_text !== ""

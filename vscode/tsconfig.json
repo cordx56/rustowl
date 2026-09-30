@@ -7,7 +7,7 @@
     "sourceMap": true,
     "outDir": "out",
     "strict": true /* enable all strict type-checking options */,
-    "skipLibCheck": true /* skip type checking of declaration files */
+    "types": ["node", "mocha", "proxyquire", "sinon", "vscode"]
     /* Additional Checks */
     // "noImplicitReturns": true, /* Report error when not all code paths in function return a value. */
     // "noFallthroughCasesInSwitch": true, /* Report errors for fallthrough cases in switch statement. */

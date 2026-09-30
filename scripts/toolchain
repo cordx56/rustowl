@@ -1,7 +1,7 @@
 #!/bin/sh -e
 
 # config
-DEFAULT_TOOLCHAIN_CHANNEL="1.95.0"
+DEFAULT_TOOLCHAIN_CHANNEL="1.98.1"
 DEFAULT_RUST_COMPONENTS="rustc,rust-std,cargo,rustc-dev,llvm-tools $RUST_COMPONENTS"
 
 # script start
@@ -81,39 +81,114 @@ download_component() {
     else
         url="${DIST_BASE}/${DATE}/$(component_filename "$1")${file_ext}"
     fi
-    echo "Downloading from $url" 1>&2
 
-    curl -fsSL "$url"
+    curl -fsSL "$url" || {
+        echo "Failed to download $url" 1>&2
+        return 1
+    }
 }
 
 # install_component <component> <sysroot-path>
+# Note: success is recorded by the parent (install_toolchain) after wait,
+# so concurrent workers never append to installed.txt themselves.
+# All stages use explicit error checks rather than `set -e` propagation,
+# since a failing pipeline does not reliably abort a background (&) job
+# across /bin/sh implementations (dash, bash-as-sh, busybox ash).
 install_component() {
-    temp="$(mktemp -d)"
-    download_component "$1" | tar xzf - -C "$temp" > /dev/null
-    echo "Component $1 extracted" 1>&2
+    temp="$(mktemp -d)" || return 1
+    if ! download_component "$1" | tar xzf - -C "$temp" > /dev/null; then
+        echo "Component $1 failed to download or extract" 1>&2
+        rm -rf "$temp"
+        return 1
+    fi
 
     component="$(component_filename "$1")"
-    for com in $(cat "$temp/$component/components"); do
+    if [ ! -f "$temp/$component/components" ]; then
+        echo "Component $1 has no components list" 1>&2
+        rm -rf "$temp"
+        return 1
+    fi
+    while IFS= read -r com || [ -n "$com" ]; do
+        [ -z "$com" ] && continue
         base="$temp/$component/$com"
-        (cd "$base" && find . -type f | while read -r f; do f="${f#./}"; mkdir -p "$2/$(dirname "$f")" && mv "$base/$f" "$2/$f"; done)
-    done
+        if ! (cd "$base" && find . -type f | while IFS= read -r f || [ -n "$f" ]; do f="${f#./}"; mkdir -p "$2/$(dirname "$f")" && mv "$base/$f" "$2/$f" || exit 1; done); then
+            echo "Component $1 failed to install files" 1>&2
+            rm -rf "$temp"
+            return 1
+        fi
+    done < "$temp/$component/components"
 
     rm -rf "$temp"
-    echo "Component $1 installed." 1>&2
-    echo "$1" >> "$2/installed.txt"
 }
 # install_toolchain <sysroot-path>
+# Progress is printed by the parent only (single writer), so status lines
+# never interleave mid-line the way per-worker chatter would. A fully
+# cached sysroot stays silent.
 install_toolchain() {
     mkdir -p "$1"
     touch "$1/installed.txt"
 
     components=$(echo "$INSTALL_COMPONENTS" | sed 's/,/ /g')
+    pending=""
+    total=0
+    # shellcheck disable=SC2086
     for component in $components; do
+        [ -z "$component" ] && continue
         if ! grep -qxF "$component" "$1/installed.txt"; then
-            install_component "$component" "$1" &
+            pending="$pending $component"
+            total=$((total + 1))
         fi
     done
-    wait
+    if [ "$total" -eq 0 ]; then
+        return 0
+    fi
+
+    echo "Fetching $total toolchain component(s)..." 1>&2
+    pids=""
+    starts=""
+    n=0
+    # shellcheck disable=SC2086
+    for component in $pending; do
+        n=$((n + 1))
+        echo "== [$n/$total] fetching $component..." 1>&2
+        install_component "$component" "$1" &
+        pid=$!
+        pids="$pids $pid:$component"
+        starts="$starts $pid:$(date +%s)"
+    done
+
+    failed=""
+    done_count=0
+    # shellcheck disable=SC2086
+    for entry in $pids; do
+        pid=${entry%%:*}
+        component=${entry#*:}
+        start=""
+        # shellcheck disable=SC2086
+        for m in $starts; do
+            case "$m" in
+                "$pid:"*) start=${m#*:} ;;
+            esac
+        done
+        if wait "$pid"; then
+            done_count=$((done_count + 1))
+            elapsed=$(( $(date +%s) - start ))
+            echo "== [$done_count/$total] $component installed in ${elapsed}s" 1>&2
+            # Single writer: only the parent records success, so concurrent
+            # appends cannot interleave or duplicate entries.
+            if ! grep -qxF "$component" "$1/installed.txt"; then
+                echo "$component" >> "$1/installed.txt"
+            fi
+        else
+            echo "!! $component FAILED" 1>&2
+            failed="$failed $component"
+        fi
+    done
+
+    if [ -n "$failed" ]; then
+        echo "Failed components:$failed" 1>&2
+        return 1
+    fi
 }
 
 #
@@ -121,3 +196,4 @@ install_toolchain() {
 #
 install_toolchain "${SYSROOT}"
 exec "$@"
+

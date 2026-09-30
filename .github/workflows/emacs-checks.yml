@@ -7,7 +7,7 @@ on:
       - rustowl.el
       - emacs-tests/
       - .github/workflows/emacs-checks.yml
-    branches: 
+    branches:
       - main
   pull_request:
     paths:
@@ -16,28 +16,36 @@ on:
       - emacs-tests/
       - .github/workflows/emacs-checks.yml
 
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Emacs
-        uses: jcs090218/setup-emacs@master
+        uses: purcell/setup-emacs@bdc64dc730ae1fcba200bfd52cb1b4cf6159cbe5 # v8.0
         with:
-          version: snapshot
+          version: 31.1
 
-      - name: Set up Eask (snapshot)
-        uses: emacs-eask/setup-eask@master
+      - name: Set up Eask
+        uses: emacs-eask/setup-eask@098ca9e1d90c188dbfee5c91688fbbaa930499b6 # v3
         with:
-          version: snapshot
+          version: 0.12.9
 
       - name: Setup Rustowl
         run: |
           ./scripts/toolchain cargo build --release
-          ./scripts/toolchain cargo install --path . --locked
+          ./scripts/toolchain cargo install --path crates/rustowl --locked
 
       - name: Lint Regexps
         run: eask lint regexps
@@ -68,17 +76,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Emacs
-        uses: jcs090218/setup-emacs@master
+        uses: purcell/setup-emacs@bdc64dc730ae1fcba200bfd52cb1b4cf6159cbe5 # v8.0
         with:
-          version: snapshot
+          version: 31.1
 
-      - name: Set up Eask (snapshot)
-        uses: emacs-eask/setup-eask@master
+      - name: Set up Eask
+        uses: emacs-eask/setup-eask@098ca9e1d90c188dbfee5c91688fbbaa930499b6 # v3
         with:
-          version: snapshot
+          version: 0.12.9
 
       - name: Setup Rustowl
         run: |
@@ -95,12 +105,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Emacs
-        uses: jcs090218/setup-emacs@master
+        uses: purcell/setup-emacs@bdc64dc730ae1fcba200bfd52cb1b4cf6159cbe5 # v8.0
         with:
-          version: snapshot
+          version: 31.1
 
       - name: Setup Rustowl
         run: |
@@ -108,9 +120,9 @@ jobs:
           ./scripts/toolchain cargo install --path . --locked
 
       - name: Setup Eask
-        uses: emacs-eask/setup-eask@master
+        uses: emacs-eask/setup-eask@098ca9e1d90c188dbfee5c91688fbbaa930499b6 # v3
         with:
-          version: snapshot
+          version: 0.12.9
 
       - name: Build And Compile
         run: |
