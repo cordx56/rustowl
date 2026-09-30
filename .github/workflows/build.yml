@@ -82,7 +82,7 @@ jobs:
 
       - name: Check the functionality
         run: |
-          ./target/${host_tuple}/${build_profile}/rustowl${exec_ext} check ./perf-tests/dummy-package
+          ./target/${host_tuple}/${build_profile}/rustowl${exec_ext} check ./crates/rustowl/perf-tests/dummy-package
 
       - name: Set archive name
         run: |

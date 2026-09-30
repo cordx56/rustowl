@@ -1,0 +1,76 @@
+[package]
+name = "rustowl"
+version.workspace = true
+edition.workspace = true
+description = "Visualize Ownership and Lifetimes in Rust"
+documentation.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords = ["lifetime", "lsp", "ownership", "visualization"]
+categories = ["development-tools", "visualization"]
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/rustowl-{ target }{ archive-suffix }"
+pkg-fmt = "tgz"
+disabled-strategies = ["quick-install"]
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[[bench]]
+harness = false
+name = "rustowl_bench_simple"
+
+[dependencies]
+anstyle.workspace = true
+cargo_metadata.workspace = true
+clap = { workspace = true, features = ["cargo"] }
+clap_complete.workspace = true
+clap_complete_nushell.workspace = true
+flate2.workspace = true
+indexmap.workspace = true
+indicatif.workspace = true
+log.workspace = true
+process_alive.workspace = true
+rayon.workspace = true
+reqwest.workspace = true
+rustversion.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+simple_logger.workspace = true
+tar.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tower-lsp.workspace = true
+tree-sitter-highlight.workspace = true
+tree-sitter-rust.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+insta.workspace = true
+
+[build-dependencies]
+clap.workspace = true
+clap_complete.workspace = true
+clap_complete_nushell.workspace = true
+clap_mangen.workspace = true
+regex.workspace = true
+rustc_version.workspace = true
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+tikv-jemalloc-sys.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+zip.workspace = true
+
+[lints]
+workspace = true

@@ -146,10 +146,10 @@ jobs:
         run: ./scripts/toolchain cargo nextest run --no-fail-fast
 
       - name: Install binary
-        run: ./scripts/toolchain cargo install --path . --profile=${build_profile}
+        run: ./scripts/toolchain cargo install --path crates/rustowl --profile=${build_profile}
 
       - name: Test rustowl check
-        run: rustowl check ./perf-tests/dummy-package
+        run: rustowl check ./crates/rustowl/perf-tests/dummy-package
 
   vscode:
     name: VS Code Extension Checks

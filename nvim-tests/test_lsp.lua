@@ -65,20 +65,24 @@ T['start_function_handles_no_root_dir'] = function()
 
   -- Capture vim.notify calls
   local original_notify = vim.notify
-  vim.notify = function()
-    -- Just a placeholder for the mock
+  local notified = nil
+  vim.notify = function(msg, level)
+    notified = { msg = msg, level = level }
   end
 
   local result = lsp.start()
 
-  -- Wait for scheduled notification
-  vim.cmd('doautocmd User')
+  -- Flush the scheduled notification while the mock is still installed
+  vim.wait(1000, function()
+    return notified ~= nil
+  end)
 
   -- Restore original notify
   vim.notify = original_notify
 
   expect.equality(result, nil)
-  -- Note: The notification is scheduled, so we might not catch it in this test
+  expect.equality(notified.msg, 'rustowl: Failed to detect root_dir.')
+  expect.equality(notified.level, vim.log.levels.ERROR)
 end
 
 -- Test stop function
