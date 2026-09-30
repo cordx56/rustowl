@@ -5,7 +5,7 @@ on:
     paths:
       - Eask
       - rustowl.el
-      - emacs-tests/
+      - emacs-tests/**
       - .github/workflows/emacs-checks.yml
     branches:
       - main
@@ -13,7 +13,7 @@ on:
     paths:
       - Eask
       - rustowl.el
-      - emacs-tests/
+      - emacs-tests/**
       - .github/workflows/emacs-checks.yml
 
 permissions:
