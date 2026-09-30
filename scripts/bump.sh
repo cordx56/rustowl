@@ -73,8 +73,8 @@ fi
 # 5. Update Emacs only for stable
 if [ "$IS_PRERELEASE" = false ] && [ -f Eask ] && [ -f rustowl.el ]; then
   echo "Updating Eask And rustowl..."
-  $sed -i "4s/.*/$VERSION_WITHOUT_V/" Eask
-  $sed -i "8s/.*/;; Version: $VERSION_WITHOUT_V/" rustowl.el
+  $sed -i "s/^\([[:space:]]*\)\"[0-9][^\"]*\"\$/\1\"$VERSION_WITHOUT_V\"/" Eask
+  $sed -i "s/^;; Version: .*/;; Version: $VERSION_WITHOUT_V/" rustowl.el
 elif [ -f Eask ] && [ -f rustowl.el ]; then
   echo "Skipping Eask and rustowl.el update for pre-release version"
 else
