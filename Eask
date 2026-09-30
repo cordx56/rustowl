@@ -10,6 +10,8 @@
 (package-file "rustowl.el")
 
 (script "test" "eask test ert emacs-tests/rustowl-test.el")
+(script "format" "eask format elisp-autofmt rustowl.el emacs-tests/rustowl-test.el")
+(script "format-check" "eask format elisp-autofmt rustowl.el emacs-tests/rustowl-test.el && git diff --exit-code --quiet")
 
 (source "gnu")
 (source "melpa")
