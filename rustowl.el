@@ -147,7 +147,8 @@
   (remove-hook 'post-command-hook #'rustowl-reset-cursor-timer t)
   (when rustowl-cursor-timer
     (cancel-timer rustowl-cursor-timer)
-    (setq rustowl-cursor-timer nil)))
+    (setq rustowl-cursor-timer nil))
+  (rustowl-clear-overlays))
 
 ;; Automatically enable cursor-based highlighting for Rust buffers
 (add-hook 'rust-mode-hook #'rustowl-enable-cursor)
