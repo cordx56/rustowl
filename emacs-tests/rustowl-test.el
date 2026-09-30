@@ -3,6 +3,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'cl-lib)
 (require 'rustowl)
 
 ;; Test rustowl-line-number-at-pos
@@ -107,20 +108,17 @@
 
 ;; Test idempotency of rustowl-enable-cursor and rustowl-disable-cursor
 (ert-deftest rustowl-test-enable-disable-idempotent ()
-  (let ((add-count 0)
-        (remove-count 0))
-    (cl-letf (((symbol-function 'add-hook)
-               (lambda (hook fn &optional _depth _local)
-                 (cl-incf add-count)))
-              ((symbol-function 'remove-hook)
-               (lambda (hook fn &optional _local)
-                 (cl-incf remove-count))))
+  (with-temp-buffer
+    (let ((rustowl-cursor-timer nil))
       (rustowl-enable-cursor)
       (rustowl-enable-cursor)
-      (should (>= add-count 2))
+      (should
+       (= (cl-count 'rustowl-reset-cursor-timer post-command-hook) 1))
       (rustowl-disable-cursor)
       (rustowl-disable-cursor)
-      (should (>= remove-count 2)))))
+      (should-not
+       (memq 'rustowl-reset-cursor-timer post-command-hook))
+      (should (null rustowl-cursor-timer)))))
 
 ;; Test rustowl-reset-cursor-timer when timer is nil
 (ert-deftest rustowl-test-reset-cursor-timer-nil ()
@@ -172,7 +170,7 @@
              (puthash "character" 3 end1)
              (puthash "start" start1 range1)
              (puthash "end" end1 range1)
-             (puthash "type" "lifetime" deco1)
+             (puthash "type" "definitely_live" deco1)
              (puthash "range" range1 deco1)
              (puthash "overlapped" nil deco1)
              (puthash "line" 0 start2)
@@ -193,8 +191,7 @@
                    (lambda () '(fake-workspace)))
                   ((symbol-function 'lsp-request-async)
                    (lambda (_method _params cb &rest _args)
-                     (funcall cb response)
-                     (setq called t)))
+                     (funcall cb response)))
                   ((symbol-function 'rustowl-underline)
                    (lambda (start end color _wavy)
                      (setq called (list start end color))
@@ -203,7 +200,7 @@
            '(:position
              (:line 0 :character 0)
              :document (:uri "file:///fake")))
-          (should called))))))
+          (should (equal (nth 2 called) "#0000cc")))))))
 
 ;; Test rustowl-cursor overlays for all type branches and overlapped
 (ert-deftest rustowl-test-cursor-overlays-all-types ()
@@ -267,15 +264,18 @@
              (= (length
                  (cl-remove-if-not
                   (lambda (c) (equal c "#00cc00")) called-types))
-                2)))))))
+                2))))))))
 
-  ;; Test rustowl-cursor-call (mocking buffer and lsp)
-  (ert-deftest rustowl-test-cursor-call ()
-    (let ((called nil))
-      (with-temp-buffer
-        (insert "abc\ndef")
-        (goto-char (point-min))
-        (cl-letf (((symbol-function 'rustowl-line-number-at-pos)
+;; Test rustowl-cursor-call (mocking buffer and lsp)
+(ert-deftest rustowl-test-cursor-call ()
+  (let ((called nil))
+    (with-temp-buffer
+      (insert "abc\ndef")
+      (goto-char (point-min))
+      (let ((lsp-mode t))
+        (cl-letf (((symbol-function 'lsp-workspaces)
+                   (lambda () '(fake-workspace)))
+                  ((symbol-function 'rustowl-line-number-at-pos)
                    (lambda () 0))
                   ((symbol-function 'rustowl-current-column)
                    (lambda () 1))

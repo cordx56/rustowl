@@ -58,25 +58,27 @@ Use-package example:
 
 - The package sends `rustowl/cursor` with position and document URI. The server responds with decorations (type, range, hover text, overlapped).
 - For each non-overlapped decoration, the package maps types to underline colors:
-  - `lifetime` → `#00cc00` (green)
+  - `definitely_live` → `#00cc00` (green, straight)
+  - `maybe_initialized` → `#00cc00` (green, wavy)
   - `imm_borrow` → `#0000cc` (blue)
   - `mut_borrow` → `#cc00cc` (purple)
   - `move` / `call` → `#cccc00` (yellow)
-  - `outlive` → `#cc0000` (red)
+  - `outlive` / `shared_mut` → `#cc0000` (red, wavy)
 - Underlines are implemented via overlays with face `(:underline (:color <color> :style wave))`.
 
 ## Enabling / Disabling
 
-- `enable-rustowl-cursor` — enable cursor-based highlighting for current buffer (adds post-command-hook).
-- `disable-rustowl-cursor` — disable cursor-based highlighting (removes hook and cancels timer).
+- `rustowl-enable-cursor` — enable cursor-based highlighting for current buffer (adds post-command-hook).
+- `rustowl-disable-cursor` — disable cursor-based highlighting (removes hook, cancels timer and clears overlays).
 - Cursor highlighting is automatically enabled for Rust buffers via `rust-mode-hook`, `rust-ts-mode-hook`, and `rustic-mode-hook`.
+- Obsolete aliases `enable-rustowl-cursor` / `disable-rustowl-cursor` remain for backward compatibility.
 
 ## Examples
 
 To disable analyze-on-save globally, remove the hooks or call:
 
 ```elisp
-(remove-hook 'rust-mode-hook #'enable-rustowl-cursor)
+(remove-hook 'rust-mode-hook #'rustowl-enable-cursor)
 ```
 
 To customize the timeout in your config:
