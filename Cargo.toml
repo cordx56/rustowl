@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-default-members = ["crates/rustowl"]
 exclude = ["crates/rustowl/algo-tests", "crates/rustowl/perf-tests/dummy-package"]
+default-members = ["crates/rustowl"]
 
 [workspace.package]
 version = "0.4.0"

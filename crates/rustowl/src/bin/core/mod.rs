@@ -18,10 +18,7 @@ use tokio::{
     task::JoinSet,
 };
 
-#[rustversion::since(1.95.0)]
 use rustc_middle::queries;
-#[rustversion::before(1.95.0)]
-use rustc_middle::query::queries;
 
 pub struct RustcCallback;
 impl rustc_driver::Callbacks for RustcCallback {}
@@ -142,15 +139,6 @@ pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
     println!("{}", serde_json::to_string(&ws).unwrap());
 }
 
-#[rustversion::since(1.95.0)]
-fn handle_exit_code(code: ExitCode) -> ExitCode {
-    code
-}
-#[rustversion::before(1.95.0)]
-fn handle_exit_code(code: i32) -> ExitCode {
-    ExitCode::from(code as u8)
-}
-
 pub fn run_compiler() -> ExitCode {
     let mut args: Vec<String> = env::args().collect();
     // by using `RUSTC_WORKSPACE_WRAPPER`, arguments will be as follows:
@@ -160,21 +148,21 @@ pub fn run_compiler() -> ExitCode {
     if args.first() == args.get(1) {
         args = args.into_iter().skip(1).collect();
     } else {
-        return handle_exit_code(rustc_driver::catch_with_exit_code(|| {
+        return rustc_driver::catch_with_exit_code(|| {
             rustc_driver::run_compiler(&args, &mut RustcCallback)
-        }));
+        });
     }
 
     for arg in &args {
         // utilize default rustc to avoid unexpected behavior if these arguments are passed
         if arg == "-vV" || arg == "--version" || arg.starts_with("--print") {
-            return handle_exit_code(rustc_driver::catch_with_exit_code(|| {
+            return rustc_driver::catch_with_exit_code(|| {
                 rustc_driver::run_compiler(&args, &mut RustcCallback)
-            }));
+            });
         }
     }
 
-    handle_exit_code(rustc_driver::catch_with_exit_code(|| {
+    rustc_driver::catch_with_exit_code(|| {
         rustc_driver::run_compiler(&args, &mut AnalyzerCallback);
-    }))
+    })
 }

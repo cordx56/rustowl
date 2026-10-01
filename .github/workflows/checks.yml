@@ -23,7 +23,7 @@ jobs:
     steps:
       - id: toolchains
         run: |
-          TOOLCHAINS='["1.94.1", "1.95.0", "1.96.0", "1.97.0", "1.98.1"]'
+          TOOLCHAINS='["1.95.0", "1.96.0", "1.97.0", "1.98.1", "1.99.0"]'
           echo "toolchains=$TOOLCHAINS" >> "$GITHUB_OUTPUT"
           echo "latest=$(jq -r '.[-1]' <<< "$TOOLCHAINS")" >> "$GITHUB_OUTPUT"
 
