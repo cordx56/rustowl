@@ -201,9 +201,8 @@ compare_with_baseline() {
 
 		diff=$((current_size - baseline_size))
 
-		# Signed tenths of a percent, then the sign and magnitude split out: the
-		# comparison only cares about growth, and the report reads better as
-		# "decreased by 30.0%" than "decreased by -30.0%".
+		# Sign and magnitude are split: only growth can be a regression, and
+		# "decreased by 30.0%" reads better than "decreased by -30.0%".
 		pct_tenths=$(pct_change_tenths "$baseline_size" "$current_size")
 		if [ "${pct_tenths#-}" != "$pct_tenths" ]; then
 			sign="-"

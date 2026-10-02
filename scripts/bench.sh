@@ -40,10 +40,6 @@ REGRESSION_THRESHOLD="5%"
 REGRESSION_THRESHOLD_TENTHS=50
 TEST_PACKAGE_PATH=""
 
-# ---------------------------------------------------------------------------
-# Output helpers. Every one of these is quiet in --quiet mode.
-# ---------------------------------------------------------------------------
-
 info() {
 	[[ "$SHOW_OUTPUT" == "true" ]] && printf '%b\n' "${YELLOW}$1${NC}"
 	return 0
@@ -177,10 +173,6 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-# ---------------------------------------------------------------------------
-# Timing. Integer milliseconds throughout, so no bc dependency.
-# ---------------------------------------------------------------------------
-
 # Milliseconds since the epoch, or nothing where date(1) has no %N (BSD).
 now_ms() {
 	local ns
@@ -206,10 +198,6 @@ seconds_to_ms() {
 	while [ "${#frac}" -lt 3 ]; do frac="${frac}0"; done
 	printf '%d' "$((whole * 1000 + 10#${frac:0:3}))"
 }
-
-# ---------------------------------------------------------------------------
-# Reporting
-# ---------------------------------------------------------------------------
 
 current_mode_description() {
 	if [[ -n "$SAVE_BASELINE" ]]; then

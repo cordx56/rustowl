@@ -1,29 +1,18 @@
 # shellcheck shell=sh
 # Shared helpers for the RustOwl development scripts.
 #
-# POSIX sh on purpose: scripts/toolchain sources this and runs under dash /
-# busybox-ash in CI. So: no [[ ]], no arrays, no `echo -e` — colours go through
-# printf, which behaves identically in bash and sh.
+# POSIX sh, because scripts/toolchain sources this and runs under dash and
+# busybox-ash in CI: no [[ ]], no arrays, no `echo -e`. No side effects at
+# source time either, which is what makes sourcing it into toolchain safe.
 #
-# This file must have NO side effects at source time (no cd, no export) — that is
-# what makes it safe to source into scripts/toolchain, which sets up its own
-# environment before doing anything.
-#
-# scripts/installer deliberately does NOT source this file. It is piped straight
-# into `sh` from a URL (see docs/installation.md), so it has to stay
-# dependency-free and keeps its own copy of print_host_tuple.
+# scripts/installer deliberately does not source this file: it is piped into
+# `sh` from a URL and has to stay dependency-free.
 
-# ---------------------------------------------------------------------------
-# Colours
-# ---------------------------------------------------------------------------
-# Deliberately plain assignments: scripts that want them unset can do
-# `RED= GREEN=` after sourcing. Each one is exported for consumers, so not every
-# script that sources this file uses every colour.
-# shellcheck disable=SC2034
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+# shellcheck disable=SC2034  # exported for consumers; unused in this file
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
@@ -32,13 +21,8 @@ log_success() { printf '%b\n' "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { printf '%b\n' "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { printf '%b\n' "${RED}[ERROR]${NC} $1"; }
 
-# ---------------------------------------------------------------------------
-# Environment
-# ---------------------------------------------------------------------------
-
-# NixOS/nix-ld runs dynamically linked toolchain binaries without an ELF
-# interpreter, so the system shared libraries (libz in particular) have to be
-# exposed to both the loader and the linker.
+# nix-ld runs toolchain binaries without an ELF interpreter, so the system
+# shared libraries have to be exposed to both loader and linker.
 setup_nix_ld_paths() {
 	if [ -n "${NIX_LD_LIBRARY_PATH:-}" ]; then
 		export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$NIX_LD_LIBRARY_PATH"
@@ -46,12 +30,10 @@ setup_nix_ld_paths() {
 	fi
 }
 
-# Return 0 if $1 names an executable on PATH.
 have_cmd() {
 	command -v "$1" >/dev/null 2>&1
 }
 
-# Print an error and exit 1 unless $1 is on PATH. $2 is an optional hint.
 require_cmd() {
 	if ! have_cmd "$1"; then
 		log_error "$1 is required but was not found."
@@ -62,15 +44,8 @@ require_cmd() {
 	fi
 }
 
-# ---------------------------------------------------------------------------
-# Host tuple
-# ---------------------------------------------------------------------------
-
-# Print "$TOOLCHAIN_ARCH-$TOOLCHAIN_OS", deriving either half from uname when
-# it is not already exported. Exits 1 on an OS or arch we cannot name.
-#
-# TOOLCHAIN_OS / TOOLCHAIN_ARCH are honoured as inputs rather than derived
-# unconditionally, because callers may pin them (cross-compilation, tests).
+# Print "$TOOLCHAIN_ARCH-$TOOLCHAIN_OS". Either half is derived from uname only
+# when not already set, since callers may pin them. Exits 1 if uname is unknown.
 print_host_tuple() {
 	if [ -z "${TOOLCHAIN_OS:-}" ]; then
 		case "$(uname -s)" in
@@ -98,12 +73,7 @@ print_host_tuple() {
 	echo "$TOOLCHAIN_ARCH-$TOOLCHAIN_OS"
 }
 
-# ---------------------------------------------------------------------------
-# Rust toolchain
-# ---------------------------------------------------------------------------
-
-# Print the active rustc version as X.Y[.Z], or nothing if rustc is absent or
-# its version cannot be parsed. Strips any -nightly / -beta suffix.
+# Print the active rustc version as X.Y[.Z], or nothing if unavailable.
 rust_version() {
 	if ! have_cmd rustc; then
 		return 0
@@ -113,25 +83,20 @@ rust_version() {
 		head -1
 }
 
-# Return 0 when version $1 is at least minimum $2. An empty version is never
-# at least anything, so callers can treat a missing rustc as "cannot verify".
+# Return 0 when $1 is at least $2. An empty version is never at least anything,
+# so a missing rustc reads as "cannot verify" rather than "too old".
 #
-# Compares with `sort -V -C`, which orders 1.100 above 1.87. A hand-rolled
-# major/minor comparison gets that wrong (9 < 87), which is why this is shared
-# instead of reimplemented per script.
+# sort -V treats each dot-separated component as a number, so 1.100 sorts above
+# 1.87. A naive string compare would not.
 version_at_least() {
-	# Underscore-prefixed so this cannot clobber a caller's `have`/`want`.
+	# No `local` (not in POSIX). Underscores keep it clear of caller variables.
 	_have="$1"
 	_want="$2"
 	[ -n "$_have" ] || return 1
 	printf '%s\n%s\n' "$_want" "$_have" | sort -V -C 2>/dev/null
 }
 
-# Log the outcome of a rustc version gate and return 0/1. Never exits, so the
-# caller keeps ownership of its own failure accounting.
 check_rust_version() {
-	# No `local` here: it is not in POSIX, and this file has to survive dash and
-	# busybox ash. Underscore-prefixed names keep it from clobbering callers.
 	_min_version="$1"
 	_current="$(rust_version)"
 
@@ -151,16 +116,8 @@ check_rust_version() {
 	return 1
 }
 
-# ---------------------------------------------------------------------------
-# Percentage arithmetic
-# ---------------------------------------------------------------------------
-
-# Render a count of tenths as a percentage: 104 with "+" is +10.4, 300 with "-"
-# is -30.0, 0 with "" is 0.0. Integer-only, so the scripts that need this do not
-# depend on bc.
-#
-# If $1 already carries a minus sign, the sign comes from it rather than from $2,
-# so a caller passing an already-signed value gets "-30.0", never "--30.0".
+# Render tenths as a percentage: 104 "+" -> +10.4, 300 "-" -> -30.0. A minus
+# sign already on $1 wins over $2, so "-30.0" never becomes "--30.0".
 format_tenths() {
 	_tenths="${1#-}"
 	_sign="$2"
@@ -175,9 +132,8 @@ format_tenths() {
 	printf '%s%d.%d' "$_sign" "$((_tenths / 10))" "$((_tenths % 10))"
 }
 
-# Signed change from size $1 to size $2, in tenths of a percent: growth prints
-# unsigned (104), a shrink prints negative (-300). Truncates toward zero, and a
-# non-positive baseline yields 0 rather than dividing by zero.
+# Signed change from $1 to $2 in tenths of a percent: 104 growth, -300 shrink.
+# Truncates toward zero; a non-positive $1 yields 0 instead of dividing by zero.
 pct_change_tenths() {
 	_from="$1"
 	_to="$2"

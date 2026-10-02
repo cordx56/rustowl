@@ -160,10 +160,6 @@ print_section_header() {
 	echo ""
 }
 
-# ---------------------------------------------------------------------------
-# Platform and environment detection
-# ---------------------------------------------------------------------------
-
 # OS detection with more robust platform detection
 detect_platform() {
 	if [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -193,9 +189,8 @@ detect_ci_environment() {
 			CI_PROVIDER="generic CI"
 		fi
 
-		# Deliberately does NOT re-enable auto-installation: an explicit
-		# --no-auto-install has to survive CI detection, which is the only
-		# environment that flag exists for.
+		# Deliberately does not re-enable installation: --no-auto-install must
+		# survive CI detection, the only environment that flag exists for.
 		if [[ $NO_AUTO_INSTALL -eq 1 ]]; then
 			log_info "CI environment detected (${CI_PROVIDER}); auto-installation disabled by --no-auto-install"
 		else
@@ -206,10 +201,9 @@ detect_ci_environment() {
 	fi
 }
 
-# Run a command with a time limit. `timeout` is GNU coreutils, which stock
-# macOS does not ship; Homebrew's coreutils installs it as `gtimeout`. Without
-# this fallback the Instruments probe below short-circuits false on macOS and
-# the trace that security.yml uploads is silently never produced.
+# Run with a time limit. `timeout` is GNU coreutils, which stock macOS lacks;
+# Homebrew installs it as `gtimeout`. Without the fallback the Instruments
+# probe fails on macOS and the trace security.yml uploads is never produced.
 run_with_timeout() { # run_with_timeout <seconds> <command...>
 	local seconds="$1"
 	shift
@@ -265,10 +259,6 @@ auto_configure_tests() {
 
 	echo ""
 }
-
-# ---------------------------------------------------------------------------
-# Tool availability
-# ---------------------------------------------------------------------------
 
 # Detect available tools based on platform
 detect_tools() {
@@ -417,10 +407,6 @@ create_security_summary() {
 	} >"$summary_file"
 }
 
-# ---------------------------------------------------------------------------
-# Installation
-# ---------------------------------------------------------------------------
-
 # Install the system package providing $1, trying the platform's package manager.
 install_system_package() {
 	local package="$1"
@@ -452,9 +438,8 @@ install_system_package() {
 	return 1
 }
 
-# Install/setup Xcode on macOS CI environments. Verifies that `xctrace` is
-# actually usable afterwards, since a present-but-unlicensed Xcode answers the
-# probe slowly and uselessly.
+# Set up Xcode on macOS CI, then confirm xctrace really works: a present but
+# unlicensed Xcode answers the probe slowly and uselessly.
 install_xcode_ci() {
 	if [[ "$OS_TYPE" != "macOS" ]] || [[ $IS_CI -ne 1 ]]; then
 		return 0
@@ -542,10 +527,6 @@ install_required_tools() {
 
 	echo ""
 }
-
-# ---------------------------------------------------------------------------
-# Test runners
-# ---------------------------------------------------------------------------
 
 # Run $1 with $2's environment prefix, streaming to a timestamped log, and
 # return the command's own exit status.
@@ -681,36 +662,26 @@ run_thread_sanitizer_tests() {
 	local args
 	args="$(analysis_args)"
 
-	# No `+nightly`: rust-toolchain.toml already pins a dated nightly, and
-	# `+nightly` would ask rustup for the *floating* nightly instead, forcing a
-	# toolchain download on every CI run. The HAS_NIGHTLY gate above is what
-	# guarantees we are on a nightly already.
-	#
-	# Both flags below are required, not optional:
-	#   -Zbuild-std   -Zsanitizer changes the crate ABI, so core and
-	#                 compiler_builtins have to be rebuilt with the same flag or
-	#                 rustc refuses with "mixing -Zsanitizer will cause an ABI
-	#                 mismatch in crate `core`".
-	#   --target      separates host from target compilation. Without it, build
-	#                 scripts and proc macros are also built with the sanitizer
-	#                 while linking an uninstrumented std, which fails the same
-	#                 way one level up.
+	# All three flags are load-bearing. -Zbuild-std because -Zsanitizer changes the
+	# crate ABI, so core must be rebuilt with the same flag; --target because
+	# without it build scripts link an uninstrumented std and fail one level up.
+	# No +nightly: rust-toolchain.toml already pins a dated nightly.
 	local target
 	target="$(rustc -vV | awk '/^host:/ { print $2 }')"
 
-	# detect_thread_leaks is off because a short-lived CLI exiting while tokio
-	# worker threads are still parked is expected, not a RustOwl defect. Race
-	# detection, which is the point of this suite, is unaffected.
-	local tsan_options="suppressions=$REPO_ROOT/.tsan-suppressions:detect_thread_leaks=0"
+	# report_thread_leaks (not detect_thread_leaks — TSAN has no such flag and
+	# ignores it silently) is off because tokio's blocking-pool workers can still
+	# be parked when a short-lived CLI exits. That is not a RustOwl defect, and
+	# it says nothing about races.
+	local tsan_options="suppressions=$REPO_ROOT/.tsan-suppressions:report_thread_leaks=0"
 	if [[ ! -f "$REPO_ROOT/.tsan-suppressions" ]]; then
-		tsan_options="detect_thread_leaks=0"
+		tsan_options="report_thread_leaks=0"
 	fi
 
 	log_info "Using RUSTFLAGS: -Zsanitizer=thread, target: $target"
 
-	# Build and run are two steps on purpose. An aborted or failed instrumented
-	# run emits zero "WARNING: ThreadSanitizer" lines, so a verdict taken from
-	# the warnings alone would report a broken build as "no races detected".
+	# Two steps because an aborted run emits zero TSAN warnings, so a verdict
+	# from the warnings alone would call a broken build "no races detected".
 	local build_output binary
 	if ! build_output="$(RUSTFLAGS="-Zsanitizer=thread" cargo build -Zbuild-std \
 		--target "$target" --bin rustowl --message-format=json 2>&1)"; then
@@ -721,8 +692,8 @@ run_thread_sanitizer_tests() {
 		return 1
 	fi
 
-	# Ask cargo where it put the artifact. A hardcoded target path is wrong
-	# whenever CARGO_TARGET_DIR is set, which the CI job does.
+	# Ask cargo where the artifact went: a hardcoded path is wrong whenever
+	# CARGO_TARGET_DIR is set, which the CI job does.
 	binary="$(printf '%s\n' "$build_output" |
 		grep -o '"executable":"[^"]*"' | head -1 | cut -d'"' -f4)"
 
@@ -731,18 +702,17 @@ run_thread_sanitizer_tests() {
 		return 1
 	fi
 
-	# Bounded, because a TSan run does not always converge: tokio's own
-	# `test_tuning` in rt_threaded.rs has to be killed after ~27 minutes under
-	# the sanitizer. A hang should fail, not burn a CI runner.
+	# Bounded because TSan runs do not always converge: tokio's `test_tuning`
+	# needs killing after ~27 minutes under the sanitizer.
 	local tsan_log status=0
 	run_logged tsan_rustowl_analysis \
 		"TSAN_OPTIONS='$tsan_options' run_with_timeout 300 '$binary' $args" ||
 		status=$?
 	tsan_log="$(log_path tsan_rustowl_analysis)"
 
-	# Now that the build is known good, the sanitizer's own output is a
-	# trustworthy signal. `rustowl check` still exits non-zero whenever it
-	# reports findings, which is not a race, so the exit code is informational.
+	# With the build known good, the sanitizer output is trustworthy.
+	# `rustowl check` exits non-zero when it reports findings, so its exit
+	# code says nothing about races.
 	if [[ -f "$tsan_log" ]] && grep -q "WARNING: ThreadSanitizer" "$tsan_log"; then
 		local races
 		races=$(grep -c "WARNING: ThreadSanitizer" "$tsan_log" || echo 0)
@@ -894,10 +864,6 @@ run_cargo_machete_tests() {
 
 	echo ""
 }
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 main() {
 	print_section_header "RustOwl Security & Memory Safety Testing" ""

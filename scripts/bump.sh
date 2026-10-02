@@ -11,8 +11,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=scripts/lib/common.sh
 . "$SCRIPT_DIR/lib/common.sh"
 
-# Every path below is relative to the repo root, so resolve it explicitly rather
-# than depending on where bump.sh was invoked from.
+# Paths below are relative to the repo root, so resolve it explicitly rather
+# than depending on the caller's cwd.
 cd "$REPO_ROOT"
 
 usage() {
@@ -30,8 +30,8 @@ usage() {
 	echo "  -h, --help  Show this help"
 }
 
-# In-place editing differs between the two seds: BSD sed (macOS) requires a
-# suffix argument after -i, GNU sed rejects one. gsed is Homebrew's GNU sed.
+# BSD sed (macOS) needs a suffix after -i and GNU sed rejects one; gsed is
+# Homebrew's GNU sed.
 if have_cmd gsed; then
 	SED_CMD=(gsed -i)
 elif [[ "$(uname -s)" == "Darwin" ]]; then
@@ -55,9 +55,8 @@ fi
 VERSION="$1"
 VERSION_WITHOUT_V="${VERSION#v}"
 
-# Refuse anything that is not a release version *before* touching a single file.
-# Without this, `bump.sh --help` rewrote every version string in the repo to
-# "--help", because the only guard was an argument count.
+# Validate before touching any file: the only earlier guard was an argument
+# count, so `bump.sh --help` rewrote the repo's versions to "--help".
 if [[ ! "$VERSION_WITHOUT_V" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
 	log_error "'$VERSION' is not a valid version."
 	log_info "Expected something like v0.3.1 or v1.0.0-rc.1 (got: $0 --help for usage)"
@@ -80,9 +79,8 @@ if [[ ! -f Cargo.toml ]]; then
 	exit 1
 fi
 
-# Rewrite the first line matching <line_regex> in <file> with <replacement>.
-# This is the one place version strings are edited; the callers below only say
-# which file holds which form.
+# Rewrite the first line matching <line_regex> in <file>. The one place version
+# strings are edited; callers only say which file holds which form.
 replace_version_line() {
 	local file="$1"
 	local line_regex="$2"
@@ -121,8 +119,8 @@ update_emacs_version() {
 		return 0
 	fi
 
-	# Eask's version is an indented quoted string, so the leading whitespace is
-	# captured in the pattern and restored by the \1 in the replacement.
+	# Eask's version is indented, so the pattern captures the whitespace and the
+	# replacement restores it via \1.
 	local eask_line='\1"'"$VERSION_WITHOUT_V"'"'
 	replace_version_line Eask '^\([[:space:]]*\)"[0-9][^"]*"$' "$eask_line"
 	replace_version_line rustowl.el '^;; Version: .*' ";; Version: $VERSION_WITHOUT_V"
