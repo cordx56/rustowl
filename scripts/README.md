@@ -51,16 +51,16 @@ Comprehensive security and memory safety testing framework.
 
 **Features:**
 
-- Multi-tool testing (Miri, Valgrind, cargo-audit, cargo-machete)
+- Multi-tool testing (Miri, Valgrind, ThreadSanitizer, cargo-audit, cargo-machete, Instruments)
 - Cross-platform support (Linux, macOS, ARM64)
 - Graceful degradation when tools unavailable
-- Configurable test categories and timeouts
+- Configurable test categories
 - Color-coded output with progress indicators
 
 **Usage:**
 
 ```bash
-# Run all available tests
+# Run all applicable tests for the current platform
 ./scripts/security.sh
 
 # Run specific test categories
@@ -68,9 +68,23 @@ Comprehensive security and memory safety testing framework.
 ./scripts/security.sh --no-valgrind
 ./scripts/security.sh --no-audit
 
+# ThreadSanitizer is opt-in: it instruments every build, so it is slow
+./scripts/security.sh --thread-sanitizer
+
 # Check available tools and configuration
 ./scripts/security.sh --check
 ```
+
+**Platform notes:**
+
+- On Linux, Instruments is disabled and Valgrind covers memory errors.
+- On macOS, Valgrind is disabled and a Time Profiler trace is captured with
+  `xcrun xctrace` instead. The trace is written as
+  `instruments_output_<timestamp>.trace`, which CI uploads as an artifact when
+  the run fails.
+- `cargo-machete` runs on both Linux and macOS.
+- In CI, missing tools are installed automatically unless you pass
+  `--no-auto-install`.
 
 ### 📊 `bench.sh`
 
@@ -127,7 +141,7 @@ In uses `[mini.test](https://github.com/echasnovski/mini.test)` plugin to test.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y valgrind bc gnuplot build-essential
+sudo apt-get install -y valgrind gnuplot build-essential
 ```
 
 #### macOS
@@ -211,3 +225,23 @@ All scripts follow common patterns:
 - **Comprehensive help text** with examples
 - **Error handling** with remediation suggestions
 - **Cross-platform compatibility** with platform-specific optimizations
+
+### Shared code
+
+`lib/common.sh` holds everything the in-repo scripts have in common: the colour
+constants and `log_*` helpers, the NixOS `nix-ld` path setup, `have_cmd` /
+`require_cmd`, `print_host_tuple`, the rustc version gate, and the integer
+percentage helpers. Scripts source it as `lib/common.sh` relative to their own
+directory:
+
+```sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPT_DIR/lib/common.sh"
+```
+
+The library is POSIX `sh` — no `[[ ]]`, no arrays, no `echo -e` — because
+`toolchain` sources it and runs under dash and busybox-ash in CI. It also has no
+side effects at source time.
+
+`installer` is the one exception. It is piped into `sh` from a URL and so has
+to stay self-contained; it keeps its own copy of `print_host_tuple`.
