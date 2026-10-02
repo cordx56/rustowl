@@ -110,12 +110,8 @@ check_build() {
 	fi
 }
 
-# Run the unit tests once and report from that single run's status.
-#
-# This used to invoke `cargo test --lib --bins` twice — once to count tests and
-# again to actually run them. The count is derived from the same output, so the
-# second run was pure duplicated work; a plain assignment would also have let
-# `set -e` abort the whole script on the first failing test.
+# One run, not two: the test count comes from the same output, and a plain
+# assignment here would let `set -e` abort the script on the first failure.
 check_tests() {
 	log_info "Checking for unit tests..."
 
@@ -229,18 +225,9 @@ main() {
 
 	local failed_checks=0
 
-	# Every check runs even if an earlier one failed, so one broken check does
-	# not hide the rest.
-	#
-	# Calls are written out rather than dispatched from a loop over function
-	# names: a loop is tidier, but it hides every function here from the
-	# never-invoked-function check, and that check is how the dead code in
-	# security.sh was found in the first place.
-	#
-	# The increment MUST be `failed_checks=$((failed_checks + 1))`. The obvious
-	# `((failed_checks++))` returns the *pre*-increment value, so the first
-	# failure evaluates to 0, the `||` list returns non-zero, and `set -e` kills
-	# the script right there — the failure count was therefore unreachable.
+	# Written out rather than looped: a loop would hide every function here from
+	# the never-invoked-function lint. And `((failed_checks++))` returns the
+	# pre-increment value, so the first failure would trip `set -e`.
 	check_toolchain_version || failed_checks=$((failed_checks + 1))
 	check_formatting || failed_checks=$((failed_checks + 1))
 	check_clippy || failed_checks=$((failed_checks + 1))
