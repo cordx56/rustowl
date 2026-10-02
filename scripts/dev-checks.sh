@@ -8,24 +8,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
 cd "$REPO_ROOT"
 
-# NixOS/nix-ld: expose system shared libraries (e.g. libz) to toolchain
-# binaries and test executables.
-if [ -n "${NIX_LD_LIBRARY_PATH:-}" ]; then
-	export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$NIX_LD_LIBRARY_PATH"
-	export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$NIX_LD_LIBRARY_PATH"
-fi
+setup_nix_ld_paths
 
 RUST_MIN_VERSION="1.87"
 AUTO_FIX=false
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
 
 show_help() {
 	echo "RustOwl Development Checks and Fixes"
@@ -41,9 +32,10 @@ show_help() {
 	echo "CHECKS PERFORMED:"
 	echo "    - Rust toolchain version (minimum $RUST_MIN_VERSION)"
 	echo "    - Code formatting (rustfmt)"
-	echo "    - Linting (clippy)"
-	echo "    - Build test"
-	echo "    - VS Code extension checks (if pnpm is available)"
+	echo "    - Linting (clippy, all targets and features)"
+	echo "    - Release build"
+	echo "    - Unit tests (library and binaries)"
+	echo "    - VS Code extension checks (skipped if pnpm is unavailable)"
 	echo ""
 	echo "FIXES APPLIED (with --fix):"
 	echo "    - Format code with rustfmt"
@@ -56,52 +48,9 @@ show_help() {
 	echo "    $0 --check-only    # Explicitly run checks only"
 }
 
-log_info() {
-	echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-log_success() {
-	echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_warning() {
-	echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-log_error() {
-	echo -e "${RED}[ERROR]${NC} $1"
-}
-
-check_rust_version() {
-	log_info "Checking Rust version..."
-
-	if ! command -v rustc &>/dev/null; then
-		log_error "rustc not found. Please install Rust."
-		return 1
-	fi
-
-	local rust_version
-	rust_version=$(rustc --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
-
-	if [ -z "$rust_version" ]; then
-		log_error "Could not determine Rust version"
-		return 1
-	fi
-
-	# Compare versions (basic comparison for major.minor)
-	local min_major min_minor cur_major cur_minor
-	min_major=$(echo "$RUST_MIN_VERSION" | cut -d. -f1)
-	min_minor=$(echo "$RUST_MIN_VERSION" | cut -d. -f2)
-	cur_major=$(echo "$rust_version" | cut -d. -f1)
-	cur_minor=$(echo "$rust_version" | cut -d. -f2)
-
-	if [ "$cur_major" -lt "$min_major" ] ||
-		([ "$cur_major" -eq "$min_major" ] && [ "$cur_minor" -lt "$min_minor" ]); then
-		log_error "Rust version $rust_version is below minimum required version $RUST_MIN_VERSION"
-		return 1
-	fi
-
-	log_success "Rust version $rust_version >= $RUST_MIN_VERSION"
+# Thin wrapper so every check in the loop below has the same signature.
+check_toolchain_version() {
+	check_rust_version "$RUST_MIN_VERSION"
 }
 
 check_formatting() {
@@ -115,13 +64,14 @@ check_formatting() {
 			log_error "Failed to format code"
 			return 1
 		fi
+		return 0
+	fi
+
+	if cargo fmt --check; then
+		log_success "Code is properly formatted"
 	else
-		if cargo fmt --check; then
-			log_success "Code is properly formatted"
-		else
-			log_error "Code formatting issues found. Run with --fix to auto-format."
-			return 1
-		fi
+		log_error "Code formatting issues found. Run with --fix to auto-format."
+		return 1
 	fi
 }
 
@@ -130,25 +80,23 @@ check_clippy() {
 
 	if $AUTO_FIX; then
 		log_info "Applying clippy fixes where possible..."
-		# First try to fix what we can
-		if cargo clippy --fix --allow-dirty --allow-staged 2>/dev/null || true; then
-			log_info "Applied some clippy fixes"
-		fi
-		# Then check for remaining issues
-		if cargo clippy --all-targets --all-features -- -D warnings; then
-			log_success "All clippy checks passed"
-		else
-			log_warning "Some clippy issues remain that couldn't be auto-fixed"
-			return 1
-		fi
-	else
-		if cargo clippy --all-targets --all-features -- -D warnings; then
-			log_success "All clippy checks passed"
-		else
-			log_error "Clippy found issues. Run with --fix to apply automatic fixes."
-			return 1
-		fi
+		# Best effort only: most clippy suggestions are not machine-applicable,
+		# and a failure here must not skip the real lint run below.
+		cargo clippy --fix --allow-dirty --allow-staged 2>/dev/null ||
+			log_info "No automatically applicable clippy fixes"
 	fi
+
+	if cargo clippy --all-targets --all-features -- -D warnings; then
+		log_success "All clippy checks passed"
+		return 0
+	fi
+
+	if $AUTO_FIX; then
+		log_warning "Some clippy issues remain that couldn't be auto-fixed"
+	else
+		log_error "Clippy found issues. Run with --fix to apply automatic fixes."
+	fi
+	return 1
 }
 
 check_build() {
@@ -162,31 +110,46 @@ check_build() {
 	fi
 }
 
+# Run the unit tests once and report from that single run's status.
+#
+# This used to invoke `cargo test --lib --bins` twice — once to count tests and
+# again to actually run them. The count is derived from the same output, so the
+# second run was pure duplicated work; a plain assignment would also have let
+# `set -e` abort the whole script on the first failing test.
 check_tests() {
 	log_info "Checking for unit tests..."
 
-	# Check if there are actual unit tests (not doc tests)
-	local unit_test_output
-	unit_test_output=$(cargo test --lib --bins 2>&1)
+	local output status count
 
-	# Count only unit tests, not doc tests
-	local unit_test_count
-	unit_test_count=$(echo "$unit_test_output" | grep -E "running [0-9]+ tests" | awk '{sum += $2} END {print sum+0}')
+	if output="$(cargo test --lib --bins 2>&1)"; then
+		status=0
+	else
+		status=$?
+	fi
 
-	if [ "$unit_test_count" -eq 0 ]; then
+	# `running N tests` is printed once per test binary; doc tests are excluded
+	# because we only pass --lib --bins.
+	count="$(printf '%s\n' "$output" | awk '/^running [0-9]+ tests?$/ { sum += $2 } END { print sum + 0 }')"
+
+	# The output of the single run stands in for the old second run.
+	printf '%s\n' "$output"
+
+	if [ "$count" -eq 0 ]; then
 		log_info "No unit tests found (this is expected for RustOwl)"
 		return 0
-	else
-		log_info "Running $unit_test_count unit tests..."
-		if cargo test --lib --bins; then
-			log_success "All unit tests passed"
-		else
-			log_error "Some unit tests failed"
-			return 1
-		fi
 	fi
+
+	if [ "$status" -eq 0 ]; then
+		log_success "All $count unit tests passed"
+		return 0
+	fi
+
+	log_error "Some unit tests failed"
+	return 1
 }
 
+# Run entirely in a subshell so the `cd vscode` cannot leak into the next check
+# and no manual `cd "$REPO_ROOT"` restore is needed on each error path.
 check_vscode_extension() {
 	if [ ! -d "vscode" ]; then
 		log_info "VS Code extension directory not found, skipping"
@@ -195,50 +158,45 @@ check_vscode_extension() {
 
 	log_info "Checking VS Code extension..."
 
-	if ! command -v pnpm &>/dev/null; then
+	if ! have_cmd pnpm; then
 		log_warning "pnpm not found, skipping VS Code extension checks"
 		return 0
 	fi
 
-	cd vscode
+	(
+		cd vscode
 
-	# Install dependencies if needed
-	if [ ! -d "node_modules" ]; then
-		log_info "Installing VS Code extension dependencies..."
-		pnpm install --frozen-lockfile
-	fi
-
-	if $AUTO_FIX; then
-		log_info "Formatting VS Code extension code..."
-		if pnpm prettier --write src; then
-			log_success "VS Code extension code formatted"
-		else
-			log_warning "Failed to format VS Code extension code"
+		if [ ! -d "node_modules" ]; then
+			log_info "Installing VS Code extension dependencies..."
+			pnpm install --frozen-lockfile
 		fi
-	else
-		if pnpm prettier --check src; then
+
+		# Use the extension's own scripts (see vscode/package.json) so the scope
+		# we check is the scope the project formats.
+		if $AUTO_FIX; then
+			log_info "Formatting VS Code extension code..."
+			if pnpm run fmt; then
+				log_success "VS Code extension code formatted"
+			else
+				log_warning "Failed to format VS Code extension code"
+			fi
+		elif pnpm exec prettier --check .; then
 			log_success "VS Code extension code is properly formatted"
 		else
 			log_error "VS Code extension formatting issues found. Run with --fix to auto-format."
-			cd "$REPO_ROOT"
-			return 1
+			exit 1
 		fi
-	fi
 
-	# Type checking and linting
-	if pnpm lint && pnpm check-types; then
-		log_success "VS Code extension checks passed"
-	else
-		log_error "VS Code extension checks failed"
-		cd "$REPO_ROOT"
-		return 1
-	fi
-
-	cd "$REPO_ROOT"
+		if pnpm run lint && pnpm run check-types; then
+			log_success "VS Code extension checks passed"
+		else
+			log_error "VS Code extension checks failed"
+			exit 1
+		fi
+	)
 }
 
 main() {
-	# Parse arguments
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 		-h | --help)
@@ -271,25 +229,36 @@ main() {
 
 	local failed_checks=0
 
-	# Run all checks
-	check_rust_version || ((failed_checks++))
-	check_formatting || ((failed_checks++))
-	check_clippy || ((failed_checks++))
-	check_build || ((failed_checks++))
-	check_tests || ((failed_checks++))
-	check_vscode_extension || ((failed_checks++))
+	# Every check runs even if an earlier one failed, so one broken check does
+	# not hide the rest.
+	#
+	# Calls are written out rather than dispatched from a loop over function
+	# names: a loop is tidier, but it hides every function here from the
+	# never-invoked-function check, and that check is how the dead code in
+	# security.sh was found in the first place.
+	#
+	# The increment MUST be `failed_checks=$((failed_checks + 1))`. The obvious
+	# `((failed_checks++))` returns the *pre*-increment value, so the first
+	# failure evaluates to 0, the `||` list returns non-zero, and `set -e` kills
+	# the script right there — the failure count was therefore unreachable.
+	check_toolchain_version || failed_checks=$((failed_checks + 1))
+	check_formatting || failed_checks=$((failed_checks + 1))
+	check_clippy || failed_checks=$((failed_checks + 1))
+	check_build || failed_checks=$((failed_checks + 1))
+	check_tests || failed_checks=$((failed_checks + 1))
+	check_vscode_extension || failed_checks=$((failed_checks + 1))
 
 	echo ""
-	if [ $failed_checks -eq 0 ]; then
+	if [ "$failed_checks" -eq 0 ]; then
 		log_success "All development checks passed! ✅"
 		exit 0
-	else
-		log_error "$failed_checks check(s) failed"
-		if ! $AUTO_FIX; then
-			log_info "Try running with --fix to automatically resolve some issues"
-		fi
-		exit 1
 	fi
+
+	log_error "$failed_checks check(s) failed"
+	if ! $AUTO_FIX; then
+		log_info "Try running with --fix to automatically resolve some issues"
+	fi
+	exit 1
 }
 
 main "$@"
