@@ -89,9 +89,18 @@ Comprehensive security and memory safety testing framework.
   `compiler_builtins` with the same flag — without it rustc fails with
   "mixing `-Zsanitizer` will cause an ABI mismatch".
 - Findings matching [`.tsan-suppressions`](../.tsan-suppressions) are
-  suppressed. It currently covers tokio's I/O reactor registration path, which
-  ThreadSanitizer reports but which involves no RustOwl code; every entry states
-  what would make it safe to remove.
+  suppressed. They are not real races: any program building a multi-threaded
+  tokio runtime reproduces them when the synchronisation sits inside
+  `OnceLock`/`Mutex` or is driven through epoll, and tokio's own suite is clean
+  under `-Zbuild-std`. The file records the evidence and what would make each
+  entry safe to remove.
+- The instrumented build and the instrumented run are two separate steps. An
+  aborted run produces zero ThreadSanitizer warnings and would otherwise be
+  indistinguishable from a clean one, so a failed build fails the suite rather
+  than reporting "no races detected".
+- The run is bounded at 300s, because a TSan run does not always converge —
+  tokio's `test_tuning` in `rt_threaded.rs` has to be killed after ~27 minutes
+  under the sanitizer.
 - `cargo-shear` runs on both Linux and macOS.
 - In CI, missing tools are installed automatically unless you pass
   `--no-auto-install`, which is honoured even though CI detection would

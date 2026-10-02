@@ -708,15 +708,38 @@ run_thread_sanitizer_tests() {
 
 	log_info "Using RUSTFLAGS: -Zsanitizer=thread, target: $target"
 
+	# Build and run are two separate steps on purpose.
+	#
+	# An aborted or failed instrumented run emits zero "WARNING: ThreadSanitizer"
+	# lines, which is indistinguishable from a clean one if you only look for
+	# warnings. Deciding from the warnings alone would let a broken build report
+	# "no races detected" and pass CI. So the build is checked first and fails
+	# the suite on its own.
+	if ! run_logged tsan_build \
+		"RUSTFLAGS=\"-Zsanitizer=thread\" cargo build -Zbuild-std --target $target --bin rustowl"; then
+		log_error "Failed to build RustOwl with ThreadSanitizer; no race check was performed"
+		log_info "  Full output captured in: $(log_path tsan_build)"
+		return 1
+	fi
+
+	local binary="./target/$target/debug/rustowl"
+	if [[ ! -f "$binary" ]]; then
+		log_error "Instrumented binary not found at $binary"
+		return 1
+	fi
+
+	# Bounded, because a TSan run does not always converge: tokio's own
+	# `test_tuning` in rt_threaded.rs has to be killed after ~27 minutes under
+	# the sanitizer. A hang should fail, not burn a CI runner.
 	local tsan_log status=0
 	run_logged tsan_rustowl_analysis \
-		"TSAN_OPTIONS='$tsan_options' RUSTFLAGS=\"-Zsanitizer=thread\" cargo run -Zbuild-std --target $target --bin rustowl -- $args" ||
+		"TSAN_OPTIONS='$tsan_options' run_with_timeout 300 '$binary' $args" ||
 		status=$?
 	tsan_log="$(log_path tsan_rustowl_analysis)"
 
-	# Decide on the sanitizer's own output, not on the exit code: `rustowl
-	# check` exits non-zero whenever it reports findings or cannot run, and
-	# that must not be mistaken for a detected data race.
+	# Now that the build is known good, the sanitizer's own output is a
+	# trustworthy signal. `rustowl check` still exits non-zero whenever it
+	# reports findings, which is not a race, so the exit code is informational.
 	if [[ -f "$tsan_log" ]] && grep -q "WARNING: ThreadSanitizer" "$tsan_log"; then
 		local races
 		races=$(grep -c "WARNING: ThreadSanitizer" "$tsan_log" || echo 0)
@@ -725,14 +748,16 @@ run_thread_sanitizer_tests() {
 		return 1
 	fi
 
-	if [[ $status -ne 0 ]]; then
-		# No sanitizer output, so the profiled command itself failed.
-		log_warning "ThreadSanitizer found no races, but the profiled run exited $status"
-		log_info "  Full output captured in: $tsan_log"
-		return 0
+	if [[ $status -eq 124 ]]; then
+		log_error "The instrumented run did not finish within 300s and was killed"
+		log_info "  Partial output captured in: $tsan_log"
+		return 1
 	fi
 
-	log_success "RustOwl analysis completed with ThreadSanitizer (no races detected)"
+	log_success "RustOwl analysis completed under ThreadSanitizer (no races detected)"
+	if [[ $status -ne 0 ]]; then
+		log_info "  Note: the analysis itself exited $status, which is not a race finding"
+	fi
 
 	echo ""
 }
