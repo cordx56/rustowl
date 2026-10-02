@@ -1,0 +1,89 @@
+name: Arch Linux Container Validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/aur-checks.yml"
+      - "aur/**"
+  push:
+    paths:
+      - ".github/workflows/aur-checks.yml"
+      - "aur/**"
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  archlinux-validation:
+    name: Archlinux package validation
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux/archlinux:base-devel
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache Pacman Dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /var/cache/pacman/pkg
+          key: ${{ runner.os }}-pacman
+          restore-keys: |
+            ${{ runner.os }}-pacman-
+
+      - name: Install base dependencies
+        run: |
+          pacman -Syu --noconfirm
+
+          pacman -S --noconfirm \
+            namcap \
+            shellcheck
+
+      - name: Validate PKGBUILD files
+        run: |
+          set -e
+
+          # Color codes
+          RED='\033[0;31m'
+          GREEN='\033[0;32m'
+          YELLOW='\033[1;33m'
+          BLUE='\033[0;34m'
+          MAGENTA='\033[0;35m'
+          CYAN='\033[0;36m'
+          WHITE='\033[1;37m'
+          NC='\033[0m' # No Color
+
+          for pathname in aur/PKGBUILD*; do
+            if [ -f "${pathname}" ]; then
+              filename=$(basename ${pathname})
+              dirname=$(dirname ${pathname})
+
+              echo -e "${CYAN}============ Validating [${NC}${filename}${CYAN}] ============${NC}\n\n"
+
+              echo -e "${YELLOW}============ Running Shellcheck On${NC} ${filename} ${YELLOW}============${NC}\n"
+              if shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 "${pathname}"; then
+                echo -e "${GREEN}✅ Shellcheck passed${NC}"
+              else
+                echo -e "${RED}❌ Shellcheck failed${NC}"
+                exit 1
+              fi
+
+              echo -e "${BLUE}============ Running Namcap On${NC} ${filename} ${BLUE}============${NC}\n"
+              if namcap "${pathname}"; then
+                echo -e "${GREEN}✅ Namcap passed${NC}"
+              else
+                echo -e "${RED}❌ Namcap failed${NC}"
+                exit 1
+              fi
+
+              echo -e "${GREEN}🎉 ${filename} Validation Completed Successfully!${NC}"
+              echo ""
+            fi
+          done
+
+          echo -e "${GREEN}🚀 All PKGBUILD files validated successfully!${NC}"
