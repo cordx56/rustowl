@@ -578,6 +578,32 @@ analysis_args() {
 
 log_path() { echo "$LOG_DIR/$1_${TIMESTAMP}.log"; }
 
+# Build rustowlc, the RUSTC wrapper rustowl drives, and print its path.
+#
+# Without it rustowl cannot resolve an analysis target and logs "Invalid
+# analysis target" then "Analyze failed" -- so the memory suites would appear to
+# pass while analysing nothing. rustowl picks it up from the RUSTOWLC env var.
+#
+# Built without the sanitizer on purpose: rustowlc only spawns rustc, so
+# instrumenting it adds nothing and risks TSAN noise across its IPC.
+ensure_rustowlc() {
+	local out path
+	if ! out="$(cargo build --bin rustowlc --message-format=json 2>&1)"; then
+		log_error "Failed to build rustowlc"
+		return 1
+	fi
+
+	path="$(printf '%s\n' "$out" |
+		grep -o '"executable":"[^"]*"' | head -1 | cut -d'"' -f4)"
+
+	if [[ -z "$path" || ! -f "$path" ]]; then
+		log_error "cargo reported no usable executable for rustowlc"
+		return 1
+	fi
+
+	echo "$path"
+}
+
 # Locate the release rustowl binary, building it if necessary.
 rustowl_release_binary() {
 	local binary="./target/release/rustowl"
@@ -682,7 +708,7 @@ run_thread_sanitizer_tests() {
 
 	# Two steps because an aborted run emits zero TSAN warnings, so a verdict
 	# from the warnings alone would call a broken build "no races detected".
-	local build_output binary
+	local build_output binary rustowlc
 	if ! build_output="$(RUSTFLAGS="-Zsanitizer=thread" cargo build -Zbuild-std \
 		--target "$target" --bin rustowl --message-format=json 2>&1)"; then
 		mkdir -p "$LOG_DIR"
@@ -702,11 +728,13 @@ run_thread_sanitizer_tests() {
 		return 1
 	fi
 
+	rustowlc="$(ensure_rustowlc)" || return 1
+
 	# Bounded because TSan runs do not always converge: tokio's `test_tuning`
 	# needs killing after ~27 minutes under the sanitizer.
 	local tsan_log status=0
 	run_logged tsan_rustowl_analysis \
-		"TSAN_OPTIONS='$tsan_options' run_with_timeout 300 '$binary' $args" ||
+		"TSAN_OPTIONS='$tsan_options' RUSTOWLC='$rustowlc' run_with_timeout 300 '$binary' $args" ||
 		status=$?
 	tsan_log="$(log_path tsan_rustowl_analysis)"
 
@@ -746,8 +774,9 @@ run_valgrind_tests() {
 	print_section_header "Running Valgrind Tests" \
 		"Valgrind detects memory errors, leaks, and memory corruption"
 
-	local binary
+	local binary rustowlc
 	binary="$(rustowl_release_binary)" || return 1
+	rustowlc="$(ensure_rustowlc)" || return 1
 
 	local suppressions=""
 	if [[ -f ".valgrind-suppressions" ]]; then
@@ -762,7 +791,7 @@ run_valgrind_tests() {
 	log_info "Running RustOwl with Valgrind..."
 	log_info "Using Valgrind flags: --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes"
 
-	if run_logged valgrind_analysis "$flags $binary $args"; then
+	if run_logged valgrind_analysis "RUSTOWLC='$rustowlc' $flags $binary $args"; then
 		log_success "RustOwl analysis completed with Valgrind (no memory errors detected)"
 	else
 		log_error "Valgrind detected memory errors in RustOwl analysis"
