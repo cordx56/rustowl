@@ -1,7 +1,7 @@
 #!/bin/sh -e
 
 # config
-DEFAULT_TOOLCHAIN_CHANNEL="1.98.1"
+DEFAULT_TOOLCHAIN_CHANNEL="1.99.0"
 DEFAULT_RUST_COMPONENTS="rustc,rust-std,cargo,rustc-dev,llvm-tools $RUST_COMPONENTS"
 
 # script start
