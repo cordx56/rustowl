@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   archlinux-validation:
-    name: Arch Linux Container Build & Test
+    name: Archlinux package validation
     runs-on: ubuntu-latest
     container:
       image: archlinux/archlinux:base-devel
