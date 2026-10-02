@@ -708,23 +708,26 @@ run_thread_sanitizer_tests() {
 
 	log_info "Using RUSTFLAGS: -Zsanitizer=thread, target: $target"
 
-	# Build and run are two separate steps on purpose.
-	#
-	# An aborted or failed instrumented run emits zero "WARNING: ThreadSanitizer"
-	# lines, which is indistinguishable from a clean one if you only look for
-	# warnings. Deciding from the warnings alone would let a broken build report
-	# "no races detected" and pass CI. So the build is checked first and fails
-	# the suite on its own.
-	if ! run_logged tsan_build \
-		"RUSTFLAGS=\"-Zsanitizer=thread\" cargo build -Zbuild-std --target $target --bin rustowl"; then
+	# Build and run are two steps on purpose. An aborted or failed instrumented
+	# run emits zero "WARNING: ThreadSanitizer" lines, so a verdict taken from
+	# the warnings alone would report a broken build as "no races detected".
+	local build_output binary
+	if ! build_output="$(RUSTFLAGS="-Zsanitizer=thread" cargo build -Zbuild-std \
+		--target "$target" --bin rustowl --message-format=json 2>&1)"; then
+		mkdir -p "$LOG_DIR"
+		printf '%s\n' "$build_output" >"$(log_path tsan_build)"
 		log_error "Failed to build RustOwl with ThreadSanitizer; no race check was performed"
 		log_info "  Full output captured in: $(log_path tsan_build)"
 		return 1
 	fi
 
-	local binary="./target/$target/debug/rustowl"
-	if [[ ! -f "$binary" ]]; then
-		log_error "Instrumented binary not found at $binary"
+	# Ask cargo where it put the artifact. A hardcoded target path is wrong
+	# whenever CARGO_TARGET_DIR is set, which the CI job does.
+	binary="$(printf '%s\n' "$build_output" |
+		grep -o '"executable":"[^"]*"' | head -1 | cut -d'"' -f4)"
+
+	if [[ -z "$binary" || ! -f "$binary" ]]; then
+		log_error "cargo reported no usable executable for the instrumented build"
 		return 1
 	fi
 
