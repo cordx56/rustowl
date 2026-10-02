@@ -149,3 +149,35 @@ check_rust_version() {
 	log_info "Update Rust with: rustup update"
 	return 1
 }
+
+# ---------------------------------------------------------------------------
+# Percentage arithmetic
+# ---------------------------------------------------------------------------
+
+# Render a count of tenths as a signed percentage: 104 with "+" is +10.4,
+# 300 with "-" is -30.0, 0 with "" is 0.0. Integer-only, so the scripts that
+# need this do not depend on bc.
+format_tenths() {
+	printf '%s%d.%d' "$2" "$(($1 / 10))" "$(($1 % 10))"
+}
+
+# Signed change from size $1 to size $2, in tenths of a percent: growth prints
+# unsigned (104), a shrink prints negative (-300). Truncates toward zero, and a
+# non-positive baseline yields 0 rather than dividing by zero.
+pct_change_tenths() {
+	_from="$1"
+	_to="$2"
+	_diff=$((_to - _from))
+
+	[ "$_from" -gt 0 ] || {
+		echo 0
+		return 0
+	}
+
+	_tenths=$(((_diff < 0 ? -_diff : _diff) * 1000 / _from))
+	if [ "$_diff" -lt 0 ]; then
+		echo "-$_tenths"
+	else
+		echo "$_tenths"
+	fi
+}
