@@ -15,6 +15,80 @@ env:
   RUSTC_BOOTSTRAP: 1
 
 jobs:
+  cargo-deny:
+    name: Dependency Policy (cargo-deny)
+    # cargo-deny is OS-independent, so this runs once rather than once per matrix
+    # entry. The matrix job below passes --no-audit so the two do not duplicate
+    # each other's work.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check advisories, licenses, bans and sources
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: ./Cargo.toml
+          command: check
+          # Graph settings (all-features) live in deny.toml so that a local
+          # `cargo deny check` and this job evaluate exactly the same thing.
+          log-level: warn
+
+  thread-sanitizer:
+    name: ThreadSanitizer
+    # A dedicated job rather than a step in the OS matrix: ThreadSanitizer needs a
+    # nightly toolchain and only works on Linux, and rebuilding std under the
+    # sanitizer is expensive enough that it should run once with a warm cache.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          # rust-src is required by -Zbuild-std, which rebuilds std with the
+          # sanitizer so the crate ABI matches.
+          components: rust-src,rustc-dev,llvm-tools-preview
+          cache: false
+
+      - name: Cache the sanitizer build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/tsan
+          key: tsan-${{ hashFiles('Cargo.lock') }}
+          restore-keys: tsan-
+
+      - name: Run ThreadSanitizer
+        shell: bash
+        env:
+          # Keep the instrumented build out of the default target dir so it does
+          # not thrash the cache of any other job.
+          CARGO_TARGET_DIR: target/tsan
+        run: |
+          if ! ./scripts/security.sh \
+            --thread-sanitizer \
+            --no-miri \
+            --no-valgrind \
+            --no-audit \
+            --no-cargo-shear \
+            --no-instruments; then
+            echo "::error::ThreadSanitizer reported issues"
+            exit 1
+          fi
+
+      - name: Upload ThreadSanitizer logs (on failure only)
+        if: failure()
+        uses: actions/upload-artifact@043bf46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tsan-logs-${{ github.run_id }}
+          path: security-logs/
+          retention-days: 7
+
   security-checks:
     name: Security & Memory Safety Analysis
     strategy:
@@ -53,9 +127,11 @@ jobs:
       - name: Run comprehensive security checks
         shell: bash
         run: |
-          # The security script will auto-detect CI environment and install missing tools
-          # Exit with proper code to fail CI if security tests fail
-          if ! ./scripts/security.sh; then
+          # The security script auto-detects CI and installs missing tools.
+          # --no-audit because the cargo-deny job already covers the
+          # vulnerability check, and resolving the full dependency graph is
+          # wasteful to repeat on every OS. ThreadSanitizer has its own job.
+          if ! ./scripts/security.sh --no-audit; then
             echo "::error::Security tests failed"
             exit 1
           fi

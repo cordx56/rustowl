@@ -51,7 +51,7 @@ Comprehensive security and memory safety testing framework.
 
 **Features:**
 
-- Multi-tool testing (Miri, Valgrind, ThreadSanitizer, cargo-audit, cargo-machete, Instruments)
+- Multi-tool testing (Miri, Valgrind, ThreadSanitizer, cargo-deny, cargo-shear, Instruments)
 - Cross-platform support (Linux, macOS, ARM64)
 - Graceful degradation when tools unavailable
 - Configurable test categories
@@ -82,9 +82,58 @@ Comprehensive security and memory safety testing framework.
   `xcrun xctrace` instead. The trace is written as
   `instruments_output_<timestamp>.trace`, which CI uploads as an artifact when
   the run fails.
-- `cargo-machete` runs on both Linux and macOS.
+- ThreadSanitizer requires a nightly toolchain and runs on Linux only. CI
+  exercises it in a dedicated job; locally it is opt-in via
+  `--thread-sanitizer`. It needs `rust-src`, because `-Zsanitizer` changes the
+  crate ABI and therefore requires `-Zbuild-std` to rebuild `core` and
+  `compiler_builtins` with the same flag — without it rustc fails with
+  "mixing `-Zsanitizer` will cause an ABI mismatch".
+- Findings matching [`.tsan-suppressions`](../.tsan-suppressions) are
+  suppressed. It currently covers tokio's I/O reactor registration path, which
+  ThreadSanitizer reports but which involves no RustOwl code; every entry states
+  what would make it safe to remove.
+- `cargo-shear` runs on both Linux and macOS.
 - In CI, missing tools are installed automatically unless you pass
-  `--no-auto-install`.
+  `--no-auto-install`, which is honoured even though CI detection would
+  otherwise enable installation.
+
+### Dependency policy: `cargo-deny`
+
+[`cargo-deny`](https://embarkstudios.github.io/cargo-deny/) checks the
+dependency graph for known advisories, disallowed licences, banned crates and
+unexpected sources. Its rules live in [`deny.toml`](../deny.toml) at the repo
+root; `cargo deny check` must pass locally before pushing.
+
+```bash
+cargo deny check                     # all four checks
+cargo deny check advisories          # just the vulnerability check
+```
+
+CI runs this in a separate job via
+[`EmbarkStudios/cargo-deny-action`](https://github.com/EmbarkStudios/cargo-deny-action),
+so `security.sh` is invoked there with `--no-audit` to avoid resolving the full
+graph three times across the OS matrix.
+
+Notes on the current configuration:
+
+- `multiple-versions` is a **warning**: duplicate versions are normal in a real
+  graph and unifying them is rarely worth the churn.
+- MPL-2.0 is **not** in the blanket allow list. `rustowl` is MPL-2.0, and it is
+  permitted by name, so adding another MPL-2.0 dependency has to be a deliberate
+  edit rather than an accident.
+- Other per-crate exceptions exist for `r-efi` (LGPL-2.1-or-later),
+  `webpki-root-certs` (CDLA-Permissive-2.0) and `libbz2-rs-sys`
+  (`bzip2-1.0.6`), each with a comment explaining why.
+
+### Unused dependencies: `cargo-shear`
+
+[`cargo-shear`](https://crates.io/crates/cargo-shear) replaces `cargo-machete`.
+`security.sh` runs it with `--check-test-targets`, so a dependency used only
+from a test target is not reported as unused.
+
+```bash
+cargo shear --check-test-targets
+```
 
 ### 📊 `bench.sh`
 

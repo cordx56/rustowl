@@ -120,10 +120,11 @@ rust_version() {
 # major/minor comparison gets that wrong (9 < 87), which is why this is shared
 # instead of reimplemented per script.
 version_at_least() {
-	have="$1"
-	want="$2"
-	[ -n "$have" ] || return 1
-	printf '%s\n%s\n' "$want" "$have" | sort -V -C 2>/dev/null
+	# Underscore-prefixed so this cannot clobber a caller's `have`/`want`.
+	_have="$1"
+	_want="$2"
+	[ -n "$_have" ] || return 1
+	printf '%s\n%s\n' "$_want" "$_have" | sort -V -C 2>/dev/null
 }
 
 # Log the outcome of a rustc version gate and return 0/1. Never exits, so the
@@ -154,11 +155,24 @@ check_rust_version() {
 # Percentage arithmetic
 # ---------------------------------------------------------------------------
 
-# Render a count of tenths as a signed percentage: 104 with "+" is +10.4,
-# 300 with "-" is -30.0, 0 with "" is 0.0. Integer-only, so the scripts that
-# need this do not depend on bc.
+# Render a count of tenths as a percentage: 104 with "+" is +10.4, 300 with "-"
+# is -30.0, 0 with "" is 0.0. Integer-only, so the scripts that need this do not
+# depend on bc.
+#
+# If $1 already carries a minus sign, the sign comes from it rather than from $2,
+# so a caller passing an already-signed value gets "-30.0", never "--30.0".
 format_tenths() {
-	printf '%s%d.%d' "$2" "$(($1 / 10))" "$(($1 % 10))"
+	_tenths="${1#-}"
+	_sign="$2"
+	case $1 in
+	-*)
+		case $_sign in
+		-*) ;;
+		*) _sign="-${_sign}" ;;
+		esac
+		;;
+	esac
+	printf '%s%d.%d' "$_sign" "$((_tenths / 10))" "$((_tenths % 10))"
 }
 
 # Signed change from size $1 to size $2, in tenths of a percent: growth prints

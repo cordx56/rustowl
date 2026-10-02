@@ -1,0 +1,21 @@
+# ThreadSanitizer suppressions for RustOwl.
+#
+# Referenced by scripts/security.sh (run_thread_sanitizer_tests) via
+# TSAN_OPTIONS=suppressions=.tsan-suppressions.
+#
+# Each entry must state WHY the pattern is suppressed, and what would make it
+# safe to remove. Silently listing a frame defeats the purpose of running a race
+# detector at all.
+
+# tokio's I/O reactor registers a source on one thread and then reads its
+# ScheduledIo from a reactor worker thread. The handoff goes through tokio's
+# internal locking, which ThreadSanitizer cannot see, so it reports the
+# allocation-time write in `RegistrationSet::allocate` against the later
+# `ScheduledIo::set_readiness` atomic load. No RustOwl code is involved in the
+# racing accesses themselves.
+#
+# Remove once tokio either annotates this handoff for TSAN or ships its own
+# suppression list.
+race:tokio::runtime::io::scheduled_io
+race:tokio::runtime::io::registration_set
+race:tokio::runtime::io::registration

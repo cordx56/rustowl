@@ -34,6 +34,10 @@ COMPARE_MODE=false
 CLEAN_BUILD=false
 SHOW_OUTPUT=true
 REGRESSION_THRESHOLD="5%"
+# Parsed once from REGRESSION_THRESHOLD and validated, so the comparison never
+# re-parses user input into an arithmetic expression. Units are tenths of a
+# percent, matching pct_change_tenths.
+REGRESSION_THRESHOLD_TENTHS=50
 TEST_PACKAGE_PATH=""
 
 # ---------------------------------------------------------------------------
@@ -94,6 +98,24 @@ require_value() { # require_value <flag> <value> <example>
 	fi
 }
 
+# Accept a whole number of percent, with an optional trailing %.
+validate_threshold() { # validate_threshold <value>
+	local value="${1//%/}"
+	case "$value" in
+	'' | *[!0-9]*)
+		warn "Error: --threshold must be a whole number of percent, got: $1"
+		detail "Example: $0 --threshold 3%"
+		exit 1
+		;;
+	esac
+	# Strip leading zeros so the value is never read as octal ("08" would be
+	# rejected as an invalid octal literal inside $(( ))).
+	REGRESSION_THRESHOLD_TENTHS=$((10#${value#0} * 10))
+	# Normalise the display form so "--threshold 7" and "--threshold 7%" report
+	# identically in the header and in benchmark-summary.txt.
+	REGRESSION_THRESHOLD="${value#0}%"
+}
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
 	case $1 in
@@ -115,6 +137,7 @@ while [[ $# -gt 0 ]]; do
 	--threshold)
 		require_value "$1" "${2:-}" "--threshold 3%"
 		REGRESSION_THRESHOLD="$2"
+		validate_threshold "$2"
 		shift 2
 		;;
 	--test-package)
@@ -426,26 +449,37 @@ compare_analysis_times() {
 	fi
 
 	# Signed tenths of a percent, so the threshold comparison is integer-only.
-	local change magnitude threshold_pct threshold_tenths
+	# Sign and magnitude are kept apart: the comparison must be signed (an
+	# improvement has a negative change), while the prose wants a magnitude.
+	local change magnitude sign threshold_tenths
 	change="$(pct_change_tenths "$(seconds_to_ms "$baseline_time")" "$(seconds_to_ms "$current_time")")"
-	magnitude="$(format_tenths "${change#-}" "")"
-	threshold_pct="${REGRESSION_THRESHOLD//[^0-9]/}"
-	threshold_tenths=$((threshold_pct * 10))
+	if [[ "${change#-}" != "$change" ]]; then
+		sign="-"
+	else
+		# No leading '+', matching what the old bc-formatted output printed.
+		sign=""
+	fi
+	magnitude="${change#-}"
+	threshold_tenths=$((REGRESSION_THRESHOLD_TENTHS))
 
 	detail "Analysis Time Comparison:"
 	detail "  Baseline: ${baseline_time}s"
 	detail "  Current:  ${current_time}s"
-	detail "  Change:   ${change:+$change}%"
+	detail "  Change:   $(format_tenths "$magnitude" "$sign")%"
 	detail ""
 
-	if ((${change#-} > threshold_tenths)); then
-		warn "⚠ Performance regression detected! (+${magnitude}% > ${REGRESSION_THRESHOLD})"
+	# A slowdown is a regression. Compare the SIGNED value, otherwise a large
+	# improvement matches "magnitude > threshold" and is reported as a
+	# regression — which also aborted the run under `set -e`, so no summary was
+	# ever written.
+	if ((change > threshold_tenths)); then
+		warn "⚠ Performance regression detected! (+$(format_tenths "$magnitude" "")% > ${REGRESSION_THRESHOLD})"
 		return 1
 	fi
 	if ((change < -threshold_tenths)); then
-		note "✓ Performance improvement detected! (${magnitude}%)"
+		note "✓ Performance improvement detected! ($(format_tenths "$magnitude" "")%)"
 	else
-		note "✓ Performance within acceptable range (±${threshold_pct}%)"
+		note "✓ Performance within acceptable range (±$(format_tenths "$threshold_tenths" "")%)"
 	fi
 }
 

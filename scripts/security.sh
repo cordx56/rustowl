@@ -25,23 +25,26 @@ TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
 
 # CI environment detection
 IS_CI=0
-CI_AUTO_INSTALL=0
+CI_PROVIDER="generic CI"
 MODE="run"
+# Sticky opt-out set only by --no-auto-install. Nothing else writes it, so CI
+# detection cannot re-enable what the caller asked to disable.
+NO_AUTO_INSTALL=0
 
 # Test flags (can be overridden via command line options)
 RUN_MIRI=1
 RUN_VALGRIND=1
-RUN_AUDIT=1
+RUN_CARGO_DENY=1
 RUN_INSTRUMENTS=1
 RUN_THREAD_SANITIZER=0
-RUN_CARGO_MACHETE=0
+RUN_CARGO_SHEAR=0
 
 # Tool availability detection
 HAS_MIRI=0
 HAS_VALGRIND=0
-HAS_CARGO_AUDIT=0
+HAS_CARGO_DENY=0
 HAS_INSTRUMENTS=0
-HAS_CARGO_MACHETE=0
+HAS_CARGO_SHEAR=0
 
 # Resolved once: repeated `rustup show active-toolchain` calls are noisy and slow.
 ACTIVE_TOOLCHAIN=""
@@ -61,14 +64,14 @@ usage() {
 	echo "  --no-auto-install    Disable automatic installation in CI"
 	echo "  --no-miri            Skip Miri tests"
 	echo "  --no-valgrind        Skip Valgrind tests"
-	echo "  --no-audit           Skip cargo audit security check"
+	echo "  --no-audit           Skip the cargo-deny vulnerability check"
 	echo "  --no-instruments     Skip Instruments tests"
 	echo "  --thread-sanitizer   Also run ThreadSanitizer tests (off by default;"
 	echo "                      it instruments every build and is slow)"
 	echo ""
 	echo "Platform Support:"
-	echo "  Linux:   Miri, Valgrind, cargo-audit, cargo-machete"
-	echo "  macOS:   Miri, cargo-audit, cargo-machete, Instruments"
+	echo "  Linux:   Miri, Valgrind, cargo-deny, cargo-shear"
+	echo "  macOS:   Miri, cargo-deny, cargo-shear, Instruments"
 	echo ""
 	echo "CI Environment:"
 	echo "  The script automatically detects CI environments. Missing tools are"
@@ -78,8 +81,8 @@ usage() {
 	echo "  - Miri: Detects undefined behavior in Rust code"
 	echo "  - Valgrind: Memory error detection (Linux)"
 	echo "  - ThreadSanitizer: Data race detection (opt-in)"
-	echo "  - cargo-audit: Security vulnerability scanning"
-	echo "  - cargo-machete: Unused dependency detection"
+	echo "  - cargo-deny: Advisory, license, ban and source checks"
+	echo "  - cargo-shear: Unused dependency detection (test targets included)"
 	echo "  - Instruments: Time Profiler trace (macOS)"
 	echo ""
 	echo "Examples:"
@@ -109,11 +112,10 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--ci)
 		IS_CI=1
-		CI_AUTO_INSTALL=1
 		shift
 		;;
 	--no-auto-install)
-		CI_AUTO_INSTALL=0
+		NO_AUTO_INSTALL=1
 		shift
 		;;
 	--no-miri)
@@ -125,7 +127,7 @@ while [[ $# -gt 0 ]]; do
 		shift
 		;;
 	--no-audit)
-		RUN_AUDIT=0
+		RUN_CARGO_DENY=0
 		shift
 		;;
 	--no-instruments)
@@ -136,8 +138,8 @@ while [[ $# -gt 0 ]]; do
 		RUN_THREAD_SANITIZER=1
 		shift
 		;;
-	--no-cargo-machete)
-		RUN_CARGO_MACHETE=0
+	--no-cargo-shear)
+		RUN_CARGO_SHEAR=0
 		shift
 		;;
 	*)
@@ -186,16 +188,46 @@ detect_platform() {
 detect_ci_environment() {
 	if [[ -n "${CI:-}" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then
 		IS_CI=1
-		CI_AUTO_INSTALL=1
+		CI_PROVIDER="GitHub Actions"
+		if [[ -z "${GITHUB_ACTIONS:-}" ]]; then
+			CI_PROVIDER="generic CI"
+		fi
 
-		if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-			log_info "CI environment detected (GitHub Actions); auto-installation enabled"
+		# Deliberately does NOT re-enable auto-installation: an explicit
+		# --no-auto-install has to survive CI detection, which is the only
+		# environment that flag exists for.
+		if [[ $NO_AUTO_INSTALL -eq 1 ]]; then
+			log_info "CI environment detected (${CI_PROVIDER}); auto-installation disabled by --no-auto-install"
 		else
-			log_info "CI environment detected; auto-installation enabled"
+			log_info "CI environment detected (${CI_PROVIDER}); auto-installation enabled"
 		fi
 	else
 		log_info "Interactive environment detected"
 	fi
+}
+
+# Run a command with a time limit. `timeout` is GNU coreutils, which stock
+# macOS does not ship; Homebrew's coreutils installs it as `gtimeout`. Without
+# this fallback the Instruments probe below short-circuits false on macOS and
+# the trace that security.yml uploads is silently never produced.
+run_with_timeout() { # run_with_timeout <seconds> <command...>
+	local seconds="$1"
+	shift
+	if have_cmd timeout; then
+		timeout "${seconds}s" "$@"
+	elif have_cmd gtimeout; then
+		gtimeout "${seconds}s" "$@"
+	else
+		# No timeout available: run it anyway rather than skipping the check.
+		"$@"
+	fi
+}
+
+# True if xctrace is installed and actually responds. Probing it can be slow and
+# may need a first-run permission prompt, hence the short limit.
+instruments_available() {
+	have_cmd xcrun || return 1
+	run_with_timeout 10 xcrun xctrace version >/dev/null 2>&1
 }
 
 # Resolve the active toolchain once and remember whether it is nightly.
@@ -211,16 +243,16 @@ auto_configure_tests() {
 
 	case "$OS_TYPE" in
 	"Linux")
-		log_info "  Linux detected: enabling Miri, Valgrind, Audit and cargo-machete"
+		log_info "  Linux detected: enabling Miri, Valgrind, cargo-deny and cargo-shear"
 		# Instruments is a macOS-only tool.
 		RUN_INSTRUMENTS=0
-		RUN_CARGO_MACHETE=1
+		RUN_CARGO_SHEAR=1
 		;;
 	"macOS")
-		log_info "  macOS detected: enabling Miri, Audit, cargo-machete and Instruments"
+		log_info "  macOS detected: enabling Miri, cargo-deny, cargo-shear and Instruments"
 		log_info "  Disabling Valgrind (unreliable on macOS)"
 		RUN_VALGRIND=0
-		RUN_CARGO_MACHETE=1
+		RUN_CARGO_SHEAR=1
 		;;
 	*)
 		log_info "  Unknown platform: enabling basic tests only"
@@ -242,24 +274,24 @@ auto_configure_tests() {
 detect_tools() {
 	log_info "Detecting available security tools..."
 
-	if have_cmd cargo-audit; then
-		HAS_CARGO_AUDIT=1
-		log_success "cargo-audit available"
+	if have_cmd cargo-deny; then
+		HAS_CARGO_DENY=1
+		log_success "cargo-deny available"
 	else
-		log_warning "! cargo-audit not found"
+		log_warning "! cargo-deny not found"
 	fi
 
-	if have_cmd cargo-machete; then
-		HAS_CARGO_MACHETE=1
-		log_success "cargo-machete available"
+	if have_cmd cargo-shear; then
+		HAS_CARGO_SHEAR=1
+		log_success "cargo-shear available"
 	else
-		log_warning "! cargo-machete not found"
+		log_warning "! cargo-shear not found"
 	fi
 
 	if [[ "$OS_TYPE" == "macOS" ]]; then
 		# xctrace replaced the deprecated `instruments` CLI. Probing it is slow
 		# and may need a first-run permission prompt, so keep the probe short.
-		if have_cmd xcrun && timeout 10s xcrun xctrace version >/dev/null 2>&1; then
+		if instruments_available; then
 			HAS_INSTRUMENTS=1
 			log_success "Instruments (xctrace) available"
 		else
@@ -327,7 +359,7 @@ show_tool_status() {
 	printf '  %-30s %b\n' "Miri (UB detection)" "$(availability_badge "$HAS_MIRI")"
 	[[ "$OS_TYPE" == "Linux" ]] &&
 		printf '  %-30s %b\n' "Valgrind (memory errors)" "$(availability_badge "$HAS_VALGRIND")"
-	printf '  %-30s %b\n' "cargo-audit (vulnerabilities)" "$(availability_badge "$HAS_CARGO_AUDIT")"
+	printf '  %-30s %b\n' "cargo-deny (vulnerabilities)" "$(availability_badge "$HAS_CARGO_DENY")"
 	[[ "$OS_TYPE" == "macOS" ]] &&
 		printf '  %-30s %b\n' "Instruments (time profiler)" "$(availability_badge "$HAS_INSTRUMENTS")"
 
@@ -345,7 +377,7 @@ show_tool_status() {
 	echo "Test Configuration:"
 	local flag
 	for flag in "Miri:$RUN_MIRI" "Valgrind:$RUN_VALGRIND" "ThreadSanitizer:$RUN_THREAD_SANITIZER" \
-		"Audit:$RUN_AUDIT" "Instruments:$RUN_INSTRUMENTS" "cargo-machete:$RUN_CARGO_MACHETE"; do
+		"cargo-deny:$RUN_CARGO_DENY" "Instruments:$RUN_INSTRUMENTS" "cargo-shear:$RUN_CARGO_SHEAR"; do
 		if [[ "${flag#*:}" -eq 1 ]]; then
 			printf '  %-30s %b\n' "Run ${flag%%:*}" "${GREEN}Enabled${NC}"
 		else
@@ -379,7 +411,7 @@ create_security_summary() {
 		echo "|------|--------|-------|"
 		echo "| Miri | $(markdown_state "$HAS_MIRI" "Missing") | Undefined behavior detection |"
 		echo "| Valgrind | $(markdown_state "$HAS_VALGRIND" "Missing/N/A") | Memory error detection (Linux) |"
-		echo "| cargo-audit | $(markdown_state "$HAS_CARGO_AUDIT" "Missing") | Security vulnerability scanning |"
+		echo "| cargo-deny | $(markdown_state "$HAS_CARGO_DENY" "Missing") | Security vulnerability scanning |"
 		echo "| Instruments | $(markdown_state "$HAS_INSTRUMENTS" "Missing/N/A") | Time Profiler trace (macOS) |"
 		echo ""
 	} >"$summary_file"
@@ -454,7 +486,7 @@ install_xcode_ci() {
 
 	log_info "Xcode developer directory: $(xcode-select -p)"
 
-	if have_cmd xcrun && timeout 10s xcrun xctrace version >/dev/null 2>&1; then
+	if instruments_available; then
 		HAS_INSTRUMENTS=1
 		log_success "Instruments (xctrace) is now available"
 		return 0
@@ -468,23 +500,23 @@ install_xcode_ci() {
 install_required_tools() {
 	log_info "Installing missing security tools..."
 
-	if [[ $HAS_CARGO_AUDIT -eq 0 && $RUN_AUDIT -eq 1 ]]; then
-		log_info "Installing cargo-audit..."
-		if cargo install cargo-audit; then
-			HAS_CARGO_AUDIT=1
-			log_success "cargo-audit installed"
+	if [[ $HAS_CARGO_DENY -eq 0 && $RUN_CARGO_DENY -eq 1 ]]; then
+		log_info "Installing cargo-deny..."
+		if cargo install --locked cargo-deny; then
+			HAS_CARGO_DENY=1
+			log_success "cargo-deny installed"
 		else
-			log_error "Failed to install cargo-audit"
+			log_error "Failed to install cargo-deny"
 		fi
 	fi
 
-	if [[ $HAS_CARGO_MACHETE -eq 0 && $RUN_CARGO_MACHETE -eq 1 ]]; then
-		log_info "Installing cargo-machete..."
-		if cargo install cargo-machete; then
-			HAS_CARGO_MACHETE=1
-			log_success "cargo-machete installed"
+	if [[ $HAS_CARGO_SHEAR -eq 0 && $RUN_CARGO_SHEAR -eq 1 ]]; then
+		log_info "Installing cargo-shear..."
+		if cargo install --locked cargo-shear; then
+			HAS_CARGO_SHEAR=1
+			log_success "cargo-shear installed"
 		else
-			log_error "Failed to install cargo-machete"
+			log_error "Failed to install cargo-shear"
 		fi
 	fi
 
@@ -615,7 +647,7 @@ run_miri_tests() {
 		analysis_log="miri_rustowl_analysis"
 		analysis_desc="RustOwl analysis"
 	else
-		args="--help"
+		# analysis_args already resolved to --help; only the naming differs.
 		analysis_log="miri_basic_execution"
 		analysis_desc="basic RustOwl execution"
 		log_warning "No test target found at $TEST_TARGET_PATH; falling back to --help"
@@ -641,23 +673,66 @@ run_thread_sanitizer_tests() {
 		"ThreadSanitizer detects data races and threading issues"
 
 	if [[ $HAS_NIGHTLY -eq 0 ]]; then
-		log_warning "ThreadSanitizer needs a nightly toolchain (active: ${ACTIVE_TOOLCHAIN:-unknown})"
-		log_info "  Full output captured in: $(log_path tsan_rustowl_analysis)"
+		# No log file is written on this path, so do not name one.
+		log_warning "ThreadSanitizer needs a nightly toolchain (active: ${ACTIVE_TOOLCHAIN:-unknown}); skipping"
 		return 0
 	fi
 
 	local args
 	args="$(analysis_args)"
 
-	log_info "Using RUSTFLAGS: -Zsanitizer=thread"
-	if run_logged tsan_rustowl_analysis \
-		"RUSTFLAGS=\"-Zsanitizer=thread\" cargo +nightly run --bin rustowl -- $args"; then
-		log_success "RustOwl analysis completed with ThreadSanitizer"
-	else
-		log_warning "ThreadSanitizer reported issues (see log)"
-		log_info "  Full output captured in: $(log_path tsan_rustowl_analysis)"
+	# No `+nightly`: rust-toolchain.toml already pins a dated nightly, and
+	# `+nightly` would ask rustup for the *floating* nightly instead, forcing a
+	# toolchain download on every CI run. The HAS_NIGHTLY gate above is what
+	# guarantees we are on a nightly already.
+	#
+	# Both flags below are required, not optional:
+	#   -Zbuild-std   -Zsanitizer changes the crate ABI, so core and
+	#                 compiler_builtins have to be rebuilt with the same flag or
+	#                 rustc refuses with "mixing -Zsanitizer will cause an ABI
+	#                 mismatch in crate `core`".
+	#   --target      separates host from target compilation. Without it, build
+	#                 scripts and proc macros are also built with the sanitizer
+	#                 while linking an uninstrumented std, which fails the same
+	#                 way one level up.
+	local target
+	target="$(rustc -vV | awk '/^host:/ { print $2 }')"
+
+	# detect_thread_leaks is off because a short-lived CLI exiting while tokio
+	# worker threads are still parked is expected, not a RustOwl defect. Race
+	# detection, which is the point of this suite, is unaffected.
+	local tsan_options="suppressions=$REPO_ROOT/.tsan-suppressions:detect_thread_leaks=0"
+	if [[ ! -f "$REPO_ROOT/.tsan-suppressions" ]]; then
+		tsan_options="detect_thread_leaks=0"
+	fi
+
+	log_info "Using RUSTFLAGS: -Zsanitizer=thread, target: $target"
+
+	local tsan_log status=0
+	run_logged tsan_rustowl_analysis \
+		"TSAN_OPTIONS='$tsan_options' RUSTFLAGS=\"-Zsanitizer=thread\" cargo run -Zbuild-std --target $target --bin rustowl -- $args" ||
+		status=$?
+	tsan_log="$(log_path tsan_rustowl_analysis)"
+
+	# Decide on the sanitizer's own output, not on the exit code: `rustowl
+	# check` exits non-zero whenever it reports findings or cannot run, and
+	# that must not be mistaken for a detected data race.
+	if [[ -f "$tsan_log" ]] && grep -q "WARNING: ThreadSanitizer" "$tsan_log"; then
+		local races
+		races=$(grep -c "WARNING: ThreadSanitizer" "$tsan_log" || echo 0)
+		log_error "ThreadSanitizer reported $races finding(s)"
+		log_info "  Full output captured in: $tsan_log"
 		return 1
 	fi
+
+	if [[ $status -ne 0 ]]; then
+		# No sanitizer output, so the profiled command itself failed.
+		log_warning "ThreadSanitizer found no races, but the profiled run exited $status"
+		log_info "  Full output captured in: $tsan_log"
+		return 0
+	fi
+
+	log_success "RustOwl analysis completed with ThreadSanitizer (no races detected)"
 
 	echo ""
 }
@@ -739,17 +814,17 @@ run_instruments_tests() {
 }
 
 run_audit_check() {
-	if [[ $RUN_AUDIT -eq 0 ]]; then
+	if [[ $RUN_CARGO_DENY -eq 0 ]]; then
 		return 0
 	fi
 
-	if [[ $HAS_CARGO_AUDIT -eq 0 ]]; then
-		log_warning "Skipping cargo-audit (not installed)"
+	if [[ $HAS_CARGO_DENY -eq 0 ]]; then
+		log_warning "Skipping cargo-deny (not installed)"
 		return 0
 	fi
 
 	log_info "Scanning dependencies for vulnerabilities..."
-	if cargo audit; then
+	if cargo deny check advisories; then
 		log_success "No known vulnerabilities found"
 	else
 		log_error "Security vulnerabilities detected"
@@ -760,25 +835,25 @@ run_audit_check() {
 }
 
 run_cargo_machete_tests() {
-	[[ $RUN_CARGO_MACHETE -eq 1 ]] || return 0
+	[[ $RUN_CARGO_SHEAR -eq 1 ]] || return 0
 
-	if [[ $HAS_CARGO_MACHETE -eq 0 ]]; then
-		log_warning "Skipping cargo-machete tests (not installed)"
+	if [[ $HAS_CARGO_SHEAR -eq 0 ]]; then
+		log_warning "Skipping cargo-shear tests (not installed)"
 		return 0
 	fi
 
-	print_section_header "Running cargo-machete Tests" \
-		"cargo-machete detects unused dependencies in Cargo.toml"
+	print_section_header "Running cargo-shear Tests" \
+		"cargo-shear detects unused dependencies in Cargo.toml"
 
 	log_info "Scanning for unused dependencies..."
 
-	# cargo-machete exits non-zero when it finds unused dependencies, which is a
+	# cargo-shear exits non-zero when it finds unused dependencies, which is a
 	# warning for us rather than a suite failure, so never let it fail the run.
-	if run_logged cargo_machete_analysis "cargo machete"; then
-		log_success "cargo-machete analysis completed"
+	if run_logged cargo_shear_analysis "cargo shear --check-test-targets"; then
+		log_success "cargo-shear analysis completed"
 	else
-		log_warning "cargo-machete found potential issues"
-		log_warning "  Note: cargo-machete may report false positives for conditionally used deps"
+		log_warning "cargo-shear found potential issues"
+		log_warning "  Note: cargo-shear may report false positives for conditionally used deps"
 	fi
 
 	local log_file
@@ -818,18 +893,24 @@ main() {
 	log_info "Running security and memory safety analysis..."
 	echo ""
 
-	detect_tools
+	# Same order as the --check path: apply platform defaults, then re-detect
+	# against them, so what is reported is what will actually run.
 	auto_configure_tests
+	detect_tools
 
-	# CI_AUTO_INSTALL is what --no-auto-install clears, so honouring the flag
-	# means consulting it here rather than only IS_CI.
-	if [[ $CI_AUTO_INSTALL -eq 1 && $IS_CI -eq 1 ]] || [[ "$MODE" == "install" ]]; then
+	# --install is an explicit request and always wins. Otherwise only a
+	# detected CI run installs, and --no-auto-install vetoes even that.
+	if [[ "$MODE" == "install" ]] ||
+		{ [[ $IS_CI -eq 1 ]] && [[ $NO_AUTO_INSTALL -eq 0 ]]; }; then
 		install_required_tools
 		# Re-detect after installing.
 		detect_tools
 	fi
 
 	check_rust_version "$MIN_RUST_VERSION"
+
+	# Report the final, post-install configuration before running anything.
+	show_tool_status
 
 	echo ""
 	log_info "Running security tests..."

@@ -172,7 +172,7 @@ compare_with_baseline() {
 
 	local threshold_tenths=$((SIZE_THRESHOLD_PCT * 10))
 	local any_issues=false
-	local binary name baseline_size current_size diff sign
+	local binary name baseline_size current_size diff sign pct_tenths abs_diff
 	local pct_tenths pct_change pct_magnitude baseline_fmt current_fmt diff_fmt
 
 	echo ""
