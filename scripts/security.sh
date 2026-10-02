@@ -597,7 +597,7 @@ run_miri_tests() {
 
 	# These flags are what let RustOwl spawn the cargo/rustc processes it needs.
 	local miri_env='MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" RUSTFLAGS="--cfg miri"'
-	local args
+	local args analysis_log analysis_desc
 	args="$(analysis_args)"
 
 	log_info "Running RustOwl unit tests with Miri..."
@@ -609,21 +609,26 @@ run_miri_tests() {
 		return 1
 	fi
 
+	# Prefer the real analysis run; fall back to --help when the test package is
+	# absent, so there is always something for Miri to execute.
 	if [[ -d "$TEST_TARGET_PATH" ]]; then
-		log_warning "Testing RustOwl execution with Miri..."
-		log_info "Running RustOwl analysis with Miri..."
-		if run_logged miri_rustowl_analysis "$miri_env cargo miri run --bin rustowl -- $args"; then
-			log_success "RustOwl analysis completed with Miri"
-		else
-			log_warning "Miri could not complete analysis (process spawning limitations)"
-			log_warning "  This is expected: RustOwl spawns cargo processes which Miri doesn't support"
-			log_warning "  Core RustOwl memory safety is validated by the system allocator switch"
-			log_info "  Full output captured in: $(log_path miri_rustowl_analysis)"
-		fi
+		analysis_log="miri_rustowl_analysis"
+		analysis_desc="RustOwl analysis"
 	else
-		log_warning "No test target found at $TEST_TARGET_PATH"
-		log_warning "Miri could not complete basic execution"
-		log_info "  Full output captured in: $(log_path miri_basic_execution)"
+		args="--help"
+		analysis_log="miri_basic_execution"
+		analysis_desc="basic RustOwl execution"
+		log_warning "No test target found at $TEST_TARGET_PATH; falling back to --help"
+	fi
+
+	log_info "Testing ${analysis_desc} with Miri..."
+	if run_logged "$analysis_log" "$miri_env cargo miri run --bin rustowl -- $args"; then
+		log_success "${analysis_desc} completed with Miri"
+	else
+		log_warning "Miri could not complete ${analysis_desc} (process spawning limitations)"
+		log_warning "  This is expected: RustOwl spawns cargo processes which Miri doesn't support"
+		log_warning "  Core RustOwl memory safety is validated by the system allocator switch"
+		log_info "  Full output captured in: $(log_path "$analysis_log")"
 	fi
 
 	echo ""
