@@ -79,14 +79,6 @@ format_size() {
 	fi
 }
 
-# Render a signed count of tenths as a percentage: 104 and "+" becomes +10.4,
-# 300 and "-" becomes -30.0. Integer-only so no bc is needed.
-format_tenths() {
-	local tenths="$1"
-	local sign="$2"
-	printf '%s%d.%d' "$sign" "$((tenths / 10))" "$((tenths % 10))"
-}
-
 # Reject thresholds that are not whole percent. The arithmetic below is integer
 # tenths, so a fractional threshold like 2.5 would be a $(( )) syntax error
 # rather than a usable value.
@@ -180,7 +172,7 @@ compare_with_baseline() {
 
 	local threshold_tenths=$((SIZE_THRESHOLD_PCT * 10))
 	local any_issues=false
-	local binary name baseline_size current_size diff abs_diff sign
+	local binary name baseline_size current_size diff sign
 	local pct_tenths pct_change pct_magnitude baseline_fmt current_fmt diff_fmt
 
 	echo ""
@@ -209,28 +201,22 @@ compare_with_baseline() {
 
 		diff=$((current_size - baseline_size))
 
-		# Keep the magnitude and the sign apart: the comparison only cares about
-		# growth, and the report reads better as "decreased by 30.0%" than
-		# "decreased by -30.0%".
-		if [ "$diff" -lt 0 ]; then
-			abs_diff=$((-diff))
+		# Signed tenths of a percent, then the sign and magnitude split out: the
+		# comparison only cares about growth, and the report reads better as
+		# "decreased by 30.0%" than "decreased by -30.0%".
+		pct_tenths=$(pct_change_tenths "$baseline_size" "$current_size")
+		if [ "${pct_tenths#-}" != "$pct_tenths" ]; then
 			sign="-"
+			abs_diff="${pct_tenths#-}"
 		else
-			abs_diff="$diff"
 			sign="+"
+			abs_diff="$pct_tenths"
 		fi
 
-		# Tenths of a percent, integer arithmetic only. Guard the divide: a
-		# non-positive baseline would otherwise be an arithmetic error.
-		if [ "$baseline_size" -gt 0 ]; then
-			pct_tenths=$((abs_diff * 1000 / baseline_size))
-		else
-			pct_tenths=0
-		fi
-		pct_change="$(format_tenths "$pct_tenths" "$sign")"
+		pct_change="$(format_tenths "$abs_diff" "$sign")"
 		# "increased by 10.4%" reads better than "increased by +10.4%", so the
 		# prose uses the magnitude and the sign only in the table above.
-		pct_magnitude="$(format_tenths "$pct_tenths" "")"
+		pct_magnitude="$(format_tenths "$abs_diff" "")"
 
 		# Format for display
 		baseline_fmt=$(format_size "$baseline_size")
