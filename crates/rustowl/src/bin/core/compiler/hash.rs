@@ -5,10 +5,7 @@ use rustc_data_structures::stable_hash::StableHash;
 #[rustversion::before(1.97.0)]
 use rustc_data_structures::stable_hasher::HashStable;
 
-#[rustversion::since(1.95.0)]
 use rustc_middle::ich;
-#[rustversion::before(1.95.0)]
-use rustc_query_system::ich;
 
 pub trait Hasher<T> {
     fn get_hash(&self, target: T) -> String;

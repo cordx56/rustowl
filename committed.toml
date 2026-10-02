@@ -1,16 +1,4 @@
 style = "conventional"
 ignore_author_re = "(dependabot|renovate)"
 subject_capitalized = false
-allowed_types = [
-  "feat",
-  "fix",
-  "refactor",
-  "style",
-  "docs",
-  "test",
-  "chore",
-  "perf",
-  "ci",
-  "build"
-]
-
+allowed_types = ["feat", "fix", "refactor", "style", "docs", "test", "chore", "perf", "ci", "build"]

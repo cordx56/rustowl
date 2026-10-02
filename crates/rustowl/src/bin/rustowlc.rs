@@ -18,9 +18,6 @@ pub extern crate rustc_span;
 pub extern crate rustc_stable_hash;
 pub extern crate rustc_type_ir;
 
-#[rustversion::before(1.95.0)]
-pub extern crate rustc_query_system;
-
 pub mod core;
 
 // Cited from rustc
