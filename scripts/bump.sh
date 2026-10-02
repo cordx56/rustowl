@@ -18,15 +18,34 @@ cd "$REPO_ROOT"
 usage() {
 	echo "Usage: $0 <version>"
 	echo "Example: $0 v0.3.1"
+	echo ""
+	echo "Rewrites the version in Cargo.toml, vscode/package.json and the AUR"
+	echo "PKGBUILDs, then creates a git tag for it."
+	echo ""
+	echo "  <version>   A release version such as v0.3.1 or v1.0.0-rc.1."
+	echo "              A leading 'v' is optional. Pre-releases (containing"
+	echo "              alpha, beta, rc, dev, pre or snapshot) leave the AUR"
+	echo "              PKGBUILDs untouched, since those are not published."
+	echo ""
+	echo "  -h, --help  Show this help"
 }
 
-# BSD sed (macOS) needs `sed -i ''`, GNU sed does not accept the extra argument.
-# gsed is the GNU sed on Homebrew, so prefer it when present.
+# In-place editing differs between the two seds: BSD sed (macOS) requires a
+# suffix argument after -i, GNU sed rejects one. gsed is Homebrew's GNU sed.
 if have_cmd gsed; then
-	SED_BIN=(gsed)
+	SED_CMD=(gsed -i)
+elif [[ "$(uname -s)" == "Darwin" ]]; then
+	SED_CMD=(sed -i '')
 else
-	SED_BIN=(sed)
+	SED_CMD=(sed -i)
 fi
+
+case "${1:-}" in
+-h | --help)
+	usage
+	exit 0
+	;;
+esac
 
 if [[ $# -ne 1 ]]; then
 	usage
@@ -35,6 +54,15 @@ fi
 
 VERSION="$1"
 VERSION_WITHOUT_V="${VERSION#v}"
+
+# Refuse anything that is not a release version *before* touching a single file.
+# Without this, `bump.sh --help` rewrote every version string in the repo to
+# "--help", because the only guard was an argument count.
+if [[ ! "$VERSION_WITHOUT_V" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+	log_error "'$VERSION' is not a valid version."
+	log_info "Expected something like v0.3.1 or v1.0.0-rc.1 (got: $0 --help for usage)"
+	exit 1
+fi
 
 log_info "Updating to version: $VERSION"
 
@@ -65,7 +93,7 @@ replace_version_line() {
 		return 0
 	fi
 
-	"${SED_BIN[@]}" -i "0,/$line_regex/{s/$line_regex/$replacement/}" "$file"
+	"${SED_CMD[@]}" "0,/$line_regex/{s/$line_regex/$replacement/}" "$file"
 	log_info "Updated $file"
 }
 
@@ -100,6 +128,13 @@ update_emacs_version() {
 	replace_version_line rustowl.el '^;; Version: .*' ";; Version: $VERSION_WITHOUT_V"
 }
 
+# Check the tag before editing anything, so a refusal cannot leave the files
+# rewritten without a matching tag.
+if git rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null; then
+	log_error "Tag $VERSION already exists; delete it first or pick another version"
+	exit 1
+fi
+
 # Only the first `version = ` line is replaced, so a workspace-level version
 # above the package table is left intact.
 replace_version_line Cargo.toml '^version = .*' "version = \"$VERSION_WITHOUT_V\""
@@ -107,11 +142,6 @@ replace_version_line vscode/package.json '"version": ".*"' "\"version\": \"$VERS
 update_pkgver PKGBUILD
 update_pkgver PKGBUILD-BIN
 update_emacs_version
-
-if git rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null; then
-	log_error "Tag $VERSION already exists; delete it first or pick another version"
-	exit 1
-fi
 
 log_info "Creating git tag: $VERSION"
 git tag "$VERSION"
