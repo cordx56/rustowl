@@ -16,10 +16,12 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-log_info() { printf '%b\n' "${BLUE}[INFO]${NC} $1"; }
-log_success() { printf '%b\n' "${GREEN}[SUCCESS]${NC} $1"; }
-log_warning() { printf '%b\n' "${YELLOW}[WARNING]${NC} $1"; }
-log_error() { printf '%b\n' "${RED}[ERROR]${NC} $1"; }
+# Diagnostics go to stderr so that helpers whose stdout is a value -- e.g.
+# rustowl_release_binary, which echoes a path -- stay capturable via $(...).
+log_info() { printf '%b\n' "${BLUE}[INFO]${NC} $1" >&2; }
+log_success() { printf '%b\n' "${GREEN}[SUCCESS]${NC} $1" >&2; }
+log_warning() { printf '%b\n' "${YELLOW}[WARNING]${NC} $1" >&2; }
+log_error() { printf '%b\n' "${RED}[ERROR]${NC} $1" >&2; }
 
 # nix-ld runs toolchain binaries without an ELF interpreter, so the system
 # shared libraries have to be exposed to both loader and linker.
