@@ -370,9 +370,17 @@ show_tool_status() {
 
 	echo ""
 	echo "Test Configuration:"
+	# Report what will actually run. auto_configure_tests re-enables cargo-shear
+	# on Linux and macOS after argument parsing, so RUN_CARGO_SHEAR alone would
+	# claim "Enabled" for a suite that --no-cargo-shear switched off.
+	local tsan_state shear_state
+	tsan_state=$RUN_THREAD_SANITIZER
+	shear_state=$RUN_CARGO_SHEAR
+	[[ $NO_CARGO_SHEAR -eq 1 ]] && shear_state=0
+
 	local flag
-	for flag in "Miri:$RUN_MIRI" "Valgrind:$RUN_VALGRIND" "ThreadSanitizer:$RUN_THREAD_SANITIZER" \
-		"cargo-deny:$RUN_CARGO_DENY" "Instruments:$RUN_INSTRUMENTS" "cargo-shear:$RUN_CARGO_SHEAR"; do
+	for flag in "Miri:$RUN_MIRI" "Valgrind:$RUN_VALGRIND" "ThreadSanitizer:$tsan_state" \
+		"cargo-deny:$RUN_CARGO_DENY" "Instruments:$RUN_INSTRUMENTS" "cargo-shear:$shear_state"; do
 		if [[ "${flag#*:}" -eq 1 ]]; then
 			printf '  %-30s %b\n' "Run ${flag%%:*}" "${GREEN}Enabled${NC}"
 		else
@@ -384,6 +392,18 @@ show_tool_status() {
 }
 
 # Create security summary with tool outputs
+declare -A TEST_RESULTS=()
+SUITE_FAILURES=0
+
+record_result() { # record_result <suite> <outcome> [detail]
+	local detail="${3:-}"
+	if [[ -n "$detail" ]]; then
+		TEST_RESULTS["$1"]="$2 — $detail"
+	else
+		TEST_RESULTS["$1"]="$2"
+	fi
+}
+
 create_security_summary() {
 	local summary_file="$LOG_DIR/security_summary_${TIMESTAMP}.md"
 
@@ -402,12 +422,39 @@ create_security_summary() {
 		echo ""
 		echo "## Tool Availability"
 		echo ""
-		echo "| Tool | Status | Notes |"
-		echo "|------|--------|-------|"
-		echo "| Miri | $(markdown_state "$HAS_MIRI" "Missing") | Undefined behavior detection |"
+		echo "| Tool | Status | Purpose |"
+		echo "|------|--------|---------|"
+		echo "| Miri | $(markdown_state "$HAS_MIRI" "Missing") | Undefined behaviour detection |"
 		echo "| Valgrind | $(markdown_state "$HAS_VALGRIND" "Missing/N/A") | Memory error detection (Linux) |"
-		echo "| cargo-deny | $(markdown_state "$HAS_CARGO_DENY" "Missing") | Security vulnerability scanning |"
+		echo "| ThreadSanitizer | $(markdown_state "$HAS_NIGHTLY" "Needs nightly") | Data race detection (built into rustc) |"
+		echo "| cargo-deny | $(markdown_state "$HAS_CARGO_DENY" "Missing") | Advisory, licence, ban and source checks |"
+		echo "| cargo-shear | $(markdown_state "$HAS_CARGO_SHEAR" "Missing") | Unused dependency detection |"
 		echo "| Instruments | $(markdown_state "$HAS_INSTRUMENTS" "Missing/N/A") | Time Profiler trace (macOS) |"
+		echo ""
+		echo "## Test Results"
+		echo ""
+		echo "| Suite | Outcome |"
+		echo "|-------|---------|"
+		local suite outcome
+		for suite in "${!TEST_RESULTS[@]}"; do
+			outcome="${TEST_RESULTS[$suite]}"
+			echo "| $suite | $outcome |"
+		done | sort
+		echo ""
+		local failures="${SUITE_FAILURES:-0}"
+		if [[ $failures -eq 0 ]]; then
+			echo "All suites passed or were skipped."
+		else
+			echo "**$failures suite(s) failed.**"
+		fi
+		echo ""
+		echo "## Logs"
+		echo ""
+		local log
+		for log in "$LOG_DIR"/*.log; do
+			[[ -f "$log" ]] || continue
+			echo "- \`$(basename "$log")\`"
+		done
 		echo ""
 	} >"$summary_file"
 }
@@ -630,10 +677,14 @@ rustowl_release_binary() {
 }
 
 run_miri_tests() {
-	[[ $RUN_MIRI -eq 1 ]] || return 0
+	[[ $RUN_MIRI -eq 1 ]] || {
+		record_result Miri "Skipped (--no-miri)"
+		return 0
+	}
 
 	if [[ $HAS_MIRI -eq 0 ]]; then
 		log_warning "Skipping Miri tests (component not installed)"
+		record_result Miri "Skipped (Miri not installed)"
 		return 0
 	fi
 
@@ -646,8 +697,10 @@ run_miri_tests() {
 
 	log_info "Running RustOwl unit tests with Miri..."
 	if run_logged miri_unit_tests "$miri_env cargo miri test --lib"; then
+		record_result Miri "Passed"
 		log_success "RustOwl unit tests passed with Miri"
 	else
+		record_result Miri "FAILED" "unit tests failed under Miri"
 		log_error "RustOwl unit tests failed with Miri"
 		log_info "  Full output captured in: $(log_path miri_unit_tests)"
 		return 1
@@ -679,7 +732,10 @@ run_miri_tests() {
 }
 
 run_thread_sanitizer_tests() {
-	[[ $RUN_THREAD_SANITIZER -eq 1 ]] || return 0
+	[[ $RUN_THREAD_SANITIZER -eq 1 ]] || {
+		record_result ThreadSanitizer "Skipped (not requested)"
+		return 0
+	}
 
 	print_section_header "Running ThreadSanitizer Tests" \
 		"ThreadSanitizer detects data races and threading issues"
@@ -687,6 +743,7 @@ run_thread_sanitizer_tests() {
 	if [[ $HAS_NIGHTLY -eq 0 ]]; then
 		# No log file is written on this path, so do not name one.
 		log_warning "ThreadSanitizer needs a nightly toolchain (active: ${ACTIVE_TOOLCHAIN:-unknown}); skipping"
+		record_result ThreadSanitizer "Skipped (stable toolchain)"
 		return 0
 	fi
 
@@ -733,7 +790,10 @@ run_thread_sanitizer_tests() {
 		return 1
 	fi
 
-	rustowlc="$(ensure_rustowlc)" || return 1
+	if ! rustowlc="$(ensure_rustowlc)"; then
+		record_result ThreadSanitizer "FAILED" "could not build rustowlc"
+		return 1
+	fi
 
 	# Bounded because TSan runs do not always converge: tokio's `test_tuning`
 	# needs killing after ~27 minutes under the sanitizer.
@@ -749,17 +809,20 @@ run_thread_sanitizer_tests() {
 	if [[ -f "$tsan_log" ]] && grep -q "WARNING: ThreadSanitizer" "$tsan_log"; then
 		local races
 		races=$(grep -c "WARNING: ThreadSanitizer" "$tsan_log" || echo 0)
+		record_result ThreadSanitizer "FAILED" "$races finding(s)"
 		log_error "ThreadSanitizer reported $races finding(s)"
 		log_info "  Full output captured in: $tsan_log"
 		return 1
 	fi
 
 	if [[ $status -eq 124 ]]; then
+		record_result ThreadSanitizer "FAILED" "did not converge within 300s"
 		log_error "The instrumented run did not finish within 300s and was killed"
 		log_info "  Partial output captured in: $tsan_log"
 		return 1
 	fi
 
+	record_result ThreadSanitizer "Passed" "no races detected"
 	log_success "RustOwl analysis completed under ThreadSanitizer (no races detected)"
 	if [[ $status -ne 0 ]]; then
 		log_info "  Note: the analysis itself exited $status, which is not a race finding"
@@ -769,10 +832,14 @@ run_thread_sanitizer_tests() {
 }
 
 run_valgrind_tests() {
-	[[ $RUN_VALGRIND -eq 1 ]] || return 0
+	[[ $RUN_VALGRIND -eq 1 ]] || {
+		record_result Valgrind "Skipped (--no-valgrind)"
+		return 0
+	}
 
 	if [[ $HAS_VALGRIND -eq 0 ]]; then
 		log_warning "Skipping Valgrind tests (not available on this platform)"
+		record_result Valgrind "Skipped (not available)"
 		return 0
 	fi
 
@@ -780,8 +847,14 @@ run_valgrind_tests() {
 		"Valgrind detects memory errors, leaks, and memory corruption"
 
 	local binary rustowlc
-	binary="$(rustowl_release_binary)" || return 1
-	rustowlc="$(ensure_rustowlc)" || return 1
+	if ! binary="$(rustowl_release_binary)"; then
+		record_result Valgrind "FAILED" "rustowl binary unavailable"
+		return 1
+	fi
+	if ! rustowlc="$(ensure_rustowlc)"; then
+		record_result Valgrind "FAILED" "could not build rustowlc"
+		return 1
+	fi
 
 	local suppressions=""
 	if [[ -f ".valgrind-suppressions" ]]; then
@@ -797,8 +870,10 @@ run_valgrind_tests() {
 	log_info "Using Valgrind flags: --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes"
 
 	if run_logged valgrind_analysis "RUSTOWLC='$rustowlc' $flags $binary $args"; then
+		record_result Valgrind "Passed" "no memory errors detected"
 		log_success "RustOwl analysis completed with Valgrind (no memory errors detected)"
 	else
+		record_result Valgrind "FAILED" "memory errors reported"
 		log_error "Valgrind detected memory errors in RustOwl analysis"
 		log_info "  Full output captured in: $(log_path valgrind_analysis)"
 		return 1
@@ -808,10 +883,14 @@ run_valgrind_tests() {
 }
 
 run_instruments_tests() {
-	[[ $RUN_INSTRUMENTS -eq 1 ]] || return 0
+	[[ $RUN_INSTRUMENTS -eq 1 ]] || {
+		record_result Instruments "Skipped (--no-instruments or unsupported platform)"
+		return 0
+	}
 
 	if [[ $HAS_INSTRUMENTS -eq 0 ]]; then
 		log_warning "Skipping Instruments tests (not available on this platform)"
+		record_result Instruments "Skipped (xctrace unavailable)"
 		return 0
 	fi
 
@@ -832,11 +911,13 @@ run_instruments_tests() {
 	if run_logged instruments_analysis \
 		"xcrun xctrace record --template 'Time Profiler' --time-limit 60s --output '$trace' --launch -- '$binary' $args"; then
 		if [[ -d "$trace" || -f "$trace" ]]; then
+			record_result Instruments "Passed" "trace captured"
 			log_success "Instruments trace captured: $trace"
 		else
 			log_warning "xctrace reported success but produced no trace at $trace"
 		fi
 	else
+		record_result Instruments "FAILED" "trace recording failed"
 		log_error "Instruments failed to record a trace"
 		log_info "  Full output captured in: $(log_path instruments_analysis)"
 		return 1
@@ -847,18 +928,22 @@ run_instruments_tests() {
 
 run_audit_check() {
 	if [[ $RUN_CARGO_DENY -eq 0 ]]; then
+		record_result cargo-deny "Skipped (--no-audit)"
 		return 0
 	fi
 
 	if [[ $HAS_CARGO_DENY -eq 0 ]]; then
 		log_warning "Skipping cargo-deny (not installed)"
+		record_result cargo-deny "Skipped (not installed)"
 		return 0
 	fi
 
 	log_info "Scanning dependencies for vulnerabilities..."
 	if cargo deny check advisories; then
+		record_result cargo-deny "Passed" "no advisories found"
 		log_success "No known vulnerabilities found"
 	else
+		record_result cargo-deny "FAILED" "advisories reported"
 		log_error "Security vulnerabilities detected"
 		return 1
 	fi
@@ -867,10 +952,14 @@ run_audit_check() {
 }
 
 run_cargo_machete_tests() {
-	[[ $NO_CARGO_SHEAR -eq 0 && $RUN_CARGO_SHEAR -eq 1 ]] || return 0
+	[[ $NO_CARGO_SHEAR -eq 0 && $RUN_CARGO_SHEAR -eq 1 ]] || {
+		record_result cargo-shear "Skipped (--no-cargo-shear)"
+		return 0
+	}
 
 	if [[ $HAS_CARGO_SHEAR -eq 0 ]]; then
 		log_warning "Skipping cargo-shear tests (not installed)"
+		record_result cargo-shear "Skipped (not installed)"
 		return 0
 	fi
 
@@ -944,6 +1033,8 @@ main() {
 	log_info "Running security tests..."
 	echo ""
 
+	# Written up front so the file exists even if a suite aborts the run; the
+	# real one with per-suite outcomes is written after the suites finish.
 	create_security_summary
 
 	local test_failures=0
@@ -956,6 +1047,11 @@ main() {
 	run_audit_check || test_failures=$((test_failures + 1))
 	run_cargo_machete_tests || test_failures=$((test_failures + 1))
 	run_instruments_tests || test_failures=$((test_failures + 1))
+
+	# Written after the suites so it can report what each one actually did, not
+	# just which tools were present beforehand.
+	SUITE_FAILURES="$test_failures"
+	create_security_summary
 
 	echo ""
 	if [[ $test_failures -eq 0 ]]; then
