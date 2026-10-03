@@ -57,7 +57,7 @@ VERSION_WITHOUT_V="${VERSION#v}"
 
 # Validate before touching any file: the only earlier guard was an argument
 # count, so `bump.sh --help` rewrote the repo's versions to "--help".
-if [[ ! "$VERSION_WITHOUT_V" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+if [[ ! $VERSION_WITHOUT_V =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
 	log_error "'$VERSION' is not a valid version."
 	log_info "Expected something like v0.3.1 or v1.0.0-rc.1 (got: $0 --help for usage)"
 	exit 1
@@ -66,7 +66,7 @@ fi
 log_info "Updating to version: $VERSION"
 
 # Pre-releases are not published to the AUR, so they leave those files alone.
-if [[ "$VERSION_WITHOUT_V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ $VERSION_WITHOUT_V =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 	IS_PRERELEASE=false
 	log_info "Stable version detected ($VERSION_WITHOUT_V)."
 else
@@ -86,7 +86,7 @@ replace_version_line() {
 	local line_regex="$2"
 	local replacement="$3"
 
-	if [[ ! -f "$file" ]]; then
+	if [[ ! -f $file ]]; then
 		log_warning "$file not found, skipping"
 		return 0
 	fi
@@ -111,7 +111,7 @@ update_pkgver() {
 	local file="aur/$1"
 
 	if [[ $IS_PRERELEASE == true ]]; then
-		if [[ -f "$file" ]]; then
+		if [[ -f $file ]]; then
 			log_info "Skipping $file update for pre-release version"
 		fi
 		return 0
