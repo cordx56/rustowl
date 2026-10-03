@@ -643,19 +643,47 @@ log_path() { echo "$LOG_DIR/$1_${TIMESTAMP}.log"; }
 #
 # Built without the sanitizer on purpose: rustowlc only spawns rustc, so
 # instrumenting it adds nothing and risks TSAN noise across its IPC.
-ensure_rustowlc() {
-	local out path
-	# Must go through scripts/toolchain, the same wrapper rustowl_release_binary
-	# uses. That wrapper exports TOOLCHAIN_CHANNEL (1.99.0), which build.rs bakes
-	# into rustowl as RUSTOWL_TOOLCHAIN, so the rustowl binary only ever drives a
-	# rustowlc built for that same toolchain. Building rustowlc with plain cargo
-	# instead picks up rust-toolchain.toml, and a rustowlc compiled against one
-	# nightly's rustc internals cannot drive another version's sysroot: every
-	# crate in the target then fails to compile with a bare "could not compile".
-	if ! out="$(./scripts/toolchain cargo build --bin rustowlc --message-format=json 2>&1)"; then
-		log_error "Failed to build rustowlc"
-		printf '%s\n' "$out" | tail -5 >&2
+# ensure_rustowlc [toolchain-channel]
+#
+# Must go through scripts/toolchain, the same wrapper that builds the rustowl
+# binary driving it. rustowlc links librustc_driver-*.so out of that toolchain's
+# sysroot, and rustowl hands rustowlc a --sysroot for the toolchain baked into
+# *itself*. Build the two with different toolchains and rustowlc dies at load
+# time with "cannot open shared object file", which surfaces as a bare
+# "cargo metadata exited with 101".
+#
+# Pass a channel when the suite needs a toolchain other than the default one --
+# ThreadSanitizer needs a nightly for -Zsanitizer.
+# The toolchain channel rust-toolchain.toml pins, which is what -Zsanitizer has
+# to build with. Read from the file rather than hardcoded so bumping the pin
+# cannot leave this suite building with a stale nightly.
+pinned_toolchain_channel() {
+	local channel
+	channel="$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $2; exit }' \
+		"$REPO_ROOT/rust-toolchain.toml" 2>/dev/null || true)"
+	if [[ -z $channel ]]; then
+		log_error "Could not read the channel from rust-toolchain.toml"
 		return 1
+	fi
+	printf '%s\n' "$channel"
+}
+
+ensure_rustowlc() {
+	local channel="${1:-}"
+	local out path
+	if [[ -n $channel ]]; then
+		out="$(TOOLCHAIN_CHANNEL="$channel" RUST_COMPONENTS=rust-src \
+			./scripts/toolchain cargo build --bin rustowlc --message-format=json 2>&1)" || {
+			log_error "Failed to build rustowlc with $channel"
+			printf '%s\n' "$out" | tail -5 >&2
+			return 1
+		}
+	else
+		out="$(./scripts/toolchain cargo build --bin rustowlc --message-format=json 2>&1)" || {
+			log_error "Failed to build rustowlc"
+			printf '%s\n' "$out" | tail -5 >&2
+			return 1
+		}
 	fi
 
 	path="$(printf '%s\n' "$out" |
@@ -785,12 +813,23 @@ run_thread_sanitizer_tests() {
 		tsan_options="report_thread_leaks=0"
 	fi
 
+	# Build through scripts/toolchain, like every other rustowl build here, and
+	# hand ensure_rustowlc the same channel. Building rustowl with bare cargo
+	# baked RUSTOWL_TOOLCHAIN from the rustup nightly, so at run time rustowl
+	# found no ~/.rustowl/sysroot for it and downloaded one -- and the rustowlc
+	# built for the default channel could not find its librustc_driver in it.
+	# -Zsanitizer needs a nightly, so the channel comes from rust-toolchain.toml.
+	local tsan_channel
+	tsan_channel="$(pinned_toolchain_channel)" || return 1
+
 	log_info "Using RUSTFLAGS: -Zsanitizer=thread, target: $target"
+	log_info "Building with scripts/toolchain channel: $tsan_channel"
 
 	# Two steps because an aborted run emits zero TSAN warnings, so a verdict
 	# from the warnings alone would call a broken build "no races detected".
 	local build_output binary rustowlc
-	if ! build_output="$(RUSTFLAGS="-Zsanitizer=thread" cargo build -Zbuild-std \
+	if ! build_output="$(TOOLCHAIN_CHANNEL="$tsan_channel" RUST_COMPONENTS=rust-src \
+		RUSTFLAGS="-Zsanitizer=thread" ./scripts/toolchain cargo build -Zbuild-std \
 		--target "$target" --bin rustowl --message-format=json 2>&1)"; then
 		mkdir -p "$LOG_DIR"
 		printf '%s\n' "$build_output" >"$(log_path tsan_build)"
@@ -809,7 +848,7 @@ run_thread_sanitizer_tests() {
 		return 1
 	fi
 
-	if ! rustowlc="$(ensure_rustowlc)"; then
+	if ! rustowlc="$(ensure_rustowlc "$tsan_channel")"; then
 		record_result ThreadSanitizer "FAILED" "could not build rustowlc"
 		return 1
 	fi
