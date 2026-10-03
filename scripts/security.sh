@@ -166,15 +166,15 @@ print_section_header() {
 	local description="${2:-}"
 	printf '%b\n' "${BLUE}${BOLD}$title${NC}" >&2
 	printf '%b\n' "${BLUE}================================${NC}" >&2
-	[[ -n "$description" ]] && echo "$description" >&2
+	[[ -n $description ]] && echo "$description" >&2
 	echo "" >&2
 }
 
 # OS detection with more robust platform detection
 detect_platform() {
-	if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+	if [[ $OSTYPE == "linux-gnu"* ]]; then
 		OS_TYPE="Linux"
-	elif [[ "$OSTYPE" == "darwin"* ]]; then
+	elif [[ $OSTYPE == "darwin"* ]]; then
 		OS_TYPE="macOS"
 	else
 		# Fallback to uname
@@ -192,10 +192,10 @@ detect_platform() {
 
 # Detect CI environment and configure accordingly
 detect_ci_environment() {
-	if [[ -n "${CI:-}" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+	if [[ -n ${CI:-} ]] || [[ -n ${GITHUB_ACTIONS:-} ]]; then
 		IS_CI=1
 		CI_PROVIDER="GitHub Actions"
-		if [[ -z "${GITHUB_ACTIONS:-}" ]]; then
+		if [[ -z ${GITHUB_ACTIONS:-} ]]; then
 			CI_PROVIDER="generic CI"
 		fi
 
@@ -237,7 +237,7 @@ instruments_available() {
 # Resolve the active toolchain once and remember whether it is nightly.
 resolve_toolchain() {
 	ACTIVE_TOOLCHAIN="$(rustup show active-toolchain 2>/dev/null | cut -d' ' -f1 || true)"
-	[[ "$ACTIVE_TOOLCHAIN" == *"nightly"* ]] && HAS_NIGHTLY=1
+	[[ $ACTIVE_TOOLCHAIN == *"nightly"* ]] && HAS_NIGHTLY=1
 	return 0
 }
 
@@ -288,7 +288,7 @@ detect_tools() {
 		log_warning "! cargo-shear not found"
 	fi
 
-	if [[ "$OS_TYPE" == "macOS" ]]; then
+	if [[ $OS_TYPE == "macOS" ]]; then
 		# xctrace replaced the deprecated `instruments` CLI. Probing it is slow
 		# and may need a first-run permission prompt, so keep the probe short.
 		if instruments_available; then
@@ -299,7 +299,7 @@ detect_tools() {
 		fi
 	fi
 
-	if [[ "$OS_TYPE" == "Linux" ]]; then
+	if [[ $OS_TYPE == "Linux" ]]; then
 		if have_cmd valgrind; then
 			HAS_VALGRIND=1
 			log_success "Valgrind available"
@@ -357,10 +357,10 @@ show_tool_status() {
 	echo "Security Tools:"
 
 	printf '  %-30s %b\n' "Miri (UB detection)" "$(availability_badge "$HAS_MIRI")"
-	[[ "$OS_TYPE" == "Linux" ]] &&
+	[[ $OS_TYPE == "Linux" ]] &&
 		printf '  %-30s %b\n' "Valgrind (memory errors)" "$(availability_badge "$HAS_VALGRIND")"
 	printf '  %-30s %b\n' "cargo-deny (vulnerabilities)" "$(availability_badge "$HAS_CARGO_DENY")"
-	[[ "$OS_TYPE" == "macOS" ]] &&
+	[[ $OS_TYPE == "macOS" ]] &&
 		printf '  %-30s %b\n' "Instruments (time profiler)" "$(availability_badge "$HAS_INSTRUMENTS")"
 
 	echo ""
@@ -386,7 +386,7 @@ show_tool_status() {
 	local flag
 	for flag in "Miri:$RUN_MIRI" "Valgrind:$RUN_VALGRIND" "ThreadSanitizer:$tsan_state" \
 		"cargo-deny:$RUN_CARGO_DENY" "Instruments:$RUN_INSTRUMENTS" "cargo-shear:$shear_state"; do
-		if [[ "${flag#*:}" -eq 1 ]]; then
+		if [[ ${flag#*:} -eq 1 ]]; then
 			printf '  %-30s %b\n' "Run ${flag%%:*}" "${GREEN}Enabled${NC}"
 		else
 			printf '  %-30s %b\n' "Run ${flag%%:*}" "${YELLOW}Disabled${NC}"
@@ -402,7 +402,7 @@ SUITE_FAILURES=0
 
 record_result() { # record_result <suite> <outcome> [detail]
 	local detail="${3:-}"
-	if [[ -n "$detail" ]]; then
+	if [[ -n $detail ]]; then
 		TEST_RESULTS["$1"]="$2 — $detail"
 	else
 		TEST_RESULTS["$1"]="$2"
@@ -457,7 +457,7 @@ create_security_summary() {
 		echo ""
 		local log
 		for log in "$LOG_DIR"/*.log; do
-			[[ -f "$log" ]] || continue
+			[[ -f $log ]] || continue
 			echo "- \`$(basename "$log")\`"
 		done
 		echo ""
@@ -498,7 +498,7 @@ install_system_package() {
 # Set up Xcode on macOS CI, then confirm xctrace really works: a present but
 # unlicensed Xcode answers the probe slowly and uselessly.
 install_xcode_ci() {
-	if [[ "$OS_TYPE" != "macOS" ]] || [[ $IS_CI -ne 1 ]]; then
+	if [[ $OS_TYPE != "macOS" ]] || [[ $IS_CI -ne 1 ]]; then
 		return 0
 	fi
 
@@ -572,7 +572,7 @@ install_required_tools() {
 		fi
 	fi
 
-	if [[ "$OS_TYPE" == "Linux" && $HAS_VALGRIND -eq 0 && $RUN_VALGRIND -eq 1 ]]; then
+	if [[ $OS_TYPE == "Linux" && $HAS_VALGRIND -eq 0 && $RUN_VALGRIND -eq 1 ]]; then
 		if install_system_package valgrind; then
 			HAS_VALGRIND=1
 		fi
@@ -626,7 +626,7 @@ run_logged() {
 # Pick the analysis argument: the test package when it exists, else --help.
 # Same shape as the original `if [ -d ... ] else ... fi` in every runner.
 analysis_args() {
-	if [[ -d "$TEST_TARGET_PATH" ]]; then
+	if [[ -d $TEST_TARGET_PATH ]]; then
 		echo "check $TEST_TARGET_PATH"
 	else
 		echo "--help"
@@ -661,7 +661,7 @@ ensure_rustowlc() {
 	path="$(printf '%s\n' "$out" |
 		grep -o '"executable":"[^"]*"' | head -1 | cut -d'"' -f4)"
 
-	if [[ -z "$path" || ! -f "$path" ]]; then
+	if [[ -z $path || ! -f $path ]]; then
 		log_error "cargo reported no usable executable for rustowlc"
 		return 1
 	fi
@@ -673,7 +673,7 @@ ensure_rustowlc() {
 rustowl_release_binary() {
 	local binary="./target/release/rustowl"
 
-	if [[ ! -f "$binary" ]]; then
+	if [[ ! -f $binary ]]; then
 		log_info "Building RustOwl for this test..."
 		if ! ./scripts/toolchain cargo build --release >/dev/null 2>&1; then
 			log_error "Failed to build RustOwl"
@@ -681,7 +681,7 @@ rustowl_release_binary() {
 		fi
 	fi
 
-	if [[ ! -f "$binary" ]]; then
+	if [[ ! -f $binary ]]; then
 		log_error "RustOwl binary not found at $binary"
 		return 1
 	fi
@@ -721,7 +721,7 @@ run_miri_tests() {
 
 	# Prefer the real analysis run; fall back to --help when the test package is
 	# absent, so there is always something for Miri to execute.
-	if [[ -d "$TEST_TARGET_PATH" ]]; then
+	if [[ -d $TEST_TARGET_PATH ]]; then
 		analysis_log="miri_rustowl_analysis"
 		analysis_desc="RustOwl analysis"
 	else
@@ -804,7 +804,7 @@ run_thread_sanitizer_tests() {
 	binary="$(printf '%s\n' "$build_output" |
 		grep -o '"executable":"[^"]*"' | head -1 | cut -d'"' -f4)"
 
-	if [[ -z "$binary" || ! -f "$binary" ]]; then
+	if [[ -z $binary || ! -f $binary ]]; then
 		log_error "cargo reported no usable executable for the instrumented build"
 		return 1
 	fi
@@ -825,7 +825,7 @@ run_thread_sanitizer_tests() {
 	# With the build known good, the sanitizer output is trustworthy.
 	# `rustowl check` exits non-zero when it reports findings, so its exit
 	# code says nothing about races.
-	if [[ -f "$tsan_log" ]] && grep -q "WARNING: ThreadSanitizer" "$tsan_log"; then
+	if [[ -f $tsan_log ]] && grep -q "WARNING: ThreadSanitizer" "$tsan_log"; then
 		local races
 		races=$(grep -c "WARNING: ThreadSanitizer" "$tsan_log" || echo 0)
 		record_result ThreadSanitizer "FAILED" "$races finding(s)"
@@ -958,7 +958,7 @@ run_instruments_tests() {
 	log_info "Using: xcrun xctrace record --template 'Time Profiler' --launch"
 	if run_logged instruments_analysis \
 		"xcrun xctrace record --template 'Time Profiler' --time-limit 60s --output '$trace' --launch -- '$binary' $args"; then
-		if [[ -d "$trace" || -f "$trace" ]]; then
+		if [[ -d $trace || -f $trace ]]; then
 			record_result Instruments "Passed" "trace captured"
 			log_success "Instruments trace captured: $trace"
 		else
@@ -1029,7 +1029,7 @@ run_cargo_machete_tests() {
 
 	local log_file
 	log_file="$(log_path cargo_shear_analysis)"
-	if [[ -f "$log_file" ]] && grep -q "unused dependencies" "$log_file" 2>/dev/null; then
+	if [[ -f $log_file ]] && grep -q "unused dependencies" "$log_file" 2>/dev/null; then
 		log_warning "Found potential unused dependencies - check $log_file for details"
 	else
 		log_success "No unused dependencies detected"
@@ -1044,7 +1044,7 @@ main() {
 	detect_platform
 	detect_ci_environment
 
-	if [[ "$MODE" == "check" ]]; then
+	if [[ $MODE == "check" ]]; then
 		log_info "Checking tool availability and system readiness..."
 		echo ""
 		# Apply the platform defaults first so the summary reports the
@@ -1067,7 +1067,7 @@ main() {
 
 	# --install is an explicit request and always wins. Otherwise only a
 	# detected CI run installs, and --no-auto-install vetoes even that.
-	if [[ "$MODE" == "install" ]] ||
+	if [[ $MODE == "install" ]] ||
 		{ [[ $IS_CI -eq 1 ]] && [[ $NO_AUTO_INSTALL -eq 0 ]]; }; then
 		install_required_tools
 		# Re-detect after installing.

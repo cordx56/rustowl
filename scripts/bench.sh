@@ -45,19 +45,19 @@ ANALYSIS_REGRESSION=false
 TEST_PACKAGE_PATH=""
 
 info() {
-	[[ "$SHOW_OUTPUT" == "true" ]] && printf '%b\n' "${YELLOW}$1${NC}"
+	[[ $SHOW_OUTPUT == "true" ]] && printf '%b\n' "${YELLOW}$1${NC}"
 	return 0
 }
 note() {
-	[[ "$SHOW_OUTPUT" == "true" ]] && printf '%b\n' "${GREEN}$1${NC}"
+	[[ $SHOW_OUTPUT == "true" ]] && printf '%b\n' "${GREEN}$1${NC}"
 	return 0
 }
 warn() {
-	[[ "$SHOW_OUTPUT" == "true" ]] && printf '%b\n' "${RED}$1${NC}"
+	[[ $SHOW_OUTPUT == "true" ]] && printf '%b\n' "${RED}$1${NC}"
 	return 0
 }
 detail() {
-	[[ "$SHOW_OUTPUT" == "true" ]] && printf '%b\n' "$1"
+	[[ $SHOW_OUTPUT == "true" ]] && printf '%b\n' "$1"
 	return 0
 }
 
@@ -91,7 +91,7 @@ usage() {
 }
 
 require_value() { # require_value <flag> <value> <example>
-	if [[ -z "${2:-}" ]]; then
+	if [[ -z ${2:-} ]]; then
 		warn "Error: $1 requires a value"
 		detail "Example: $0 $3"
 		exit 1
@@ -212,9 +212,9 @@ seconds_to_ms() {
 }
 
 current_mode_description() {
-	if [[ -n "$SAVE_BASELINE" ]]; then
+	if [[ -n $SAVE_BASELINE ]]; then
 		echo "Save baseline ($SAVE_BASELINE)"
-	elif [[ "$COMPARE_MODE" == "true" ]]; then
+	elif [[ $COMPARE_MODE == "true" ]]; then
 		echo "Compare against $LOAD_BASELINE"
 	else
 		echo "Standard run"
@@ -231,15 +231,15 @@ write_summary_header() {
 }
 
 print_header() {
-	if [[ "$SHOW_OUTPUT" == "true" ]]; then
+	if [[ $SHOW_OUTPUT == "true" ]]; then
 		printf '%b\n' "${BLUE}${BOLD}=====================================${NC}"
 		printf '%b\n' "${BLUE}${BOLD}  RustOwl Performance Benchmarks${NC}"
 		printf '%b\n' "${BLUE}${BOLD}=====================================${NC}"
 		echo ""
 
-		if [[ -n "$SAVE_BASELINE" ]]; then
+		if [[ -n $SAVE_BASELINE ]]; then
 			note "Mode: Save baseline as '$SAVE_BASELINE'"
-		elif [[ "$COMPARE_MODE" == "true" ]]; then
+		elif [[ $COMPARE_MODE == "true" ]]; then
 			note "Mode: Compare against '$LOAD_BASELINE' baseline"
 			note "Regression threshold: $REGRESSION_THRESHOLD"
 		else
@@ -250,8 +250,8 @@ print_header() {
 }
 
 find_test_package() {
-	if [[ -n "$TEST_PACKAGE_PATH" ]]; then
-		if [[ -d "$TEST_PACKAGE_PATH" ]]; then
+	if [[ -n $TEST_PACKAGE_PATH ]]; then
+		if [[ -d $TEST_PACKAGE_PATH ]]; then
 			note "✓ Using specified test package: $TEST_PACKAGE_PATH"
 			return 0
 		fi
@@ -262,7 +262,7 @@ find_test_package() {
 	# Auto-detect existing test packages
 	local test_dir
 	for test_dir in "${TEST_PACKAGES[@]}"; do
-		[[ -d "$test_dir" ]] || continue
+		[[ -d $test_dir ]] || continue
 
 		# A directory of Rust sources is a package in its own right...
 		if find "$test_dir" -name "*.rs" -print -quit | grep -q .; then
@@ -274,7 +274,7 @@ find_test_package() {
 		# ...otherwise fall back to the first nested package we can find.
 		local nested
 		nested="$(find "$test_dir" -name "Cargo.toml" -print -quit)"
-		if [[ -n "$nested" ]]; then
+		if [[ -n $nested ]]; then
 			TEST_PACKAGE_PATH="$(dirname "$nested")"
 			note "✓ Found test package: $TEST_PACKAGE_PATH"
 			return 0
@@ -327,7 +327,7 @@ check_prerequisites() {
 }
 
 clean_build() {
-	if [[ "$CLEAN_BUILD" == "true" ]]; then
+	if [[ $CLEAN_BUILD == "true" ]]; then
 		info "Cleaning build artifacts..."
 		./scripts/toolchain cargo clean
 		note "✓ Build artifacts cleaned"
@@ -339,7 +339,7 @@ build_rustowl() {
 	info "Building RustOwl in release mode..."
 
 	local -a args=(cargo build --release)
-	[[ "$SHOW_OUTPUT" == "true" ]] || args+=(--quiet)
+	[[ $SHOW_OUTPUT == "true" ]] || args+=(--quiet)
 	./scripts/toolchain "${args[@]}"
 
 	note "✓ Build completed"
@@ -357,13 +357,13 @@ run_criterion_benchmarks() {
 	local -a bench_args=()
 
 	# cargo-criterion only makes sense for a plain run, not for baseline I/O.
-	if have_cmd cargo-criterion && [[ -z "$SAVE_BASELINE" && "$COMPARE_MODE" != "true" ]]; then
+	if have_cmd cargo-criterion && [[ -z $SAVE_BASELINE && $COMPARE_MODE != "true" ]]; then
 		bench_cmd=(./scripts/toolchain cargo criterion)
 	fi
 
-	if [[ -n "$SAVE_BASELINE" ]]; then
+	if [[ -n $SAVE_BASELINE ]]; then
 		bench_args+=(--bench "$BENCHMARK_NAME" -- --save-baseline "$SAVE_BASELINE")
-	elif [[ "$COMPARE_MODE" == "true" && -n "$LOAD_BASELINE" ]]; then
+	elif [[ $COMPARE_MODE == "true" && -n $LOAD_BASELINE ]]; then
 		bench_args+=(--bench "$BENCHMARK_NAME" -- --baseline "$LOAD_BASELINE")
 	else
 		bench_args+=(--bench "$BENCHMARK_NAME")
@@ -372,7 +372,7 @@ run_criterion_benchmarks() {
 	info "Running performance benchmarks..."
 
 	local bench_status=0
-	if [[ "$SHOW_OUTPUT" == "true" ]]; then
+	if [[ $SHOW_OUTPUT == "true" ]]; then
 		detail "${bench_cmd[*]} ${bench_args[*]}"
 		"${bench_cmd[@]}" "${bench_args[@]}" || bench_status=$?
 	else
@@ -381,7 +381,7 @@ run_criterion_benchmarks() {
 
 	# Criterion exiting non-zero is how it reports a regression; our own
 	# comparison below decides the verdict, so don't abort the whole run.
-	if [[ "$bench_status" -ne 0 ]]; then
+	if [[ $bench_status -ne 0 ]]; then
 		info "! Criterion exited with status $bench_status"
 	fi
 }
@@ -404,7 +404,7 @@ run_analysis_benchmark() {
 	timeout 120 "$rustowl_binary" check "$TEST_PACKAGE_PATH" >/dev/null 2>&1 || true
 	end_ms="$(now_ms)"
 
-	if [[ -n "$start_ms" && -n "$end_ms" ]]; then
+	if [[ -n $start_ms && -n $end_ms ]]; then
 		duration="$(format_ms "$((end_ms - start_ms))")"
 	else
 		duration="N/A"
@@ -412,7 +412,7 @@ run_analysis_benchmark() {
 
 	note "✓ Analysis completed in ${duration}s"
 
-	if [[ -n "$SAVE_BASELINE" ]]; then
+	if [[ -n $SAVE_BASELINE ]]; then
 		local dir="baselines/performance/$SAVE_BASELINE"
 		mkdir -p "$dir"
 		{
@@ -425,7 +425,7 @@ run_analysis_benchmark() {
 		fi
 	fi
 
-	if [[ "$COMPARE_MODE" == "true" && -f "baselines/performance/$LOAD_BASELINE/analysis_time.txt" ]]; then
+	if [[ $COMPARE_MODE == "true" && -f "baselines/performance/$LOAD_BASELINE/analysis_time.txt" ]]; then
 		local baseline_time
 		baseline_time="$(cat "baselines/performance/$LOAD_BASELINE/analysis_time.txt")"
 		# Recorded, not propagated: returning 1 here under `set -e` would exit
@@ -446,7 +446,7 @@ compare_analysis_times() {
 	local baseline_time="$1"
 	local current_time="$2"
 
-	if [[ "$baseline_time" == "N/A" || "$current_time" == "N/A" ]]; then
+	if [[ $baseline_time == "N/A" || $current_time == "N/A" ]]; then
 		info "! Could not compare analysis times (timing unavailable)"
 		return 0
 	fi
@@ -456,7 +456,7 @@ compare_analysis_times() {
 	# improvement has a negative change), while the prose wants a magnitude.
 	local change magnitude sign threshold_tenths
 	change="$(pct_change_tenths "$(seconds_to_ms "$baseline_time")" "$(seconds_to_ms "$current_time")")"
-	if [[ "${change#-}" != "$change" ]]; then
+	if [[ ${change#-} != "$change" ]]; then
 		sign="-"
 	else
 		# No leading '+', matching what the old bc-formatted output printed.
@@ -511,7 +511,7 @@ write_criterion_details() {
 
 		local measurement_time
 		measurement_time="$(find "$criterion_dir" -name "estimates.json" -exec jq -r '.measurement_time' {} + 2>/dev/null | head -1)"
-		[[ -n "$measurement_time" && "$measurement_time" != "null" ]] || measurement_time=300
+		[[ -n $measurement_time && $measurement_time != "null" ]] || measurement_time=300
 
 		{
 			echo ""
@@ -523,13 +523,13 @@ write_criterion_details() {
 	else
 		{
 			echo "### Quick Summary (grep extracted)"
-			find "$criterion_dir" -name "*.json" -exec grep -h "\"mean\"" {} \; 2>/dev/null | head -10
+			find "$criterion_dir" -name "*.json" -exec grep -h '"mean"' {} \; 2>/dev/null | head -10
 		} >>benchmark-summary.txt 2>/dev/null || true
 	fi
 }
 
 analyze_regressions() {
-	if [[ "$COMPARE_MODE" != "true" ]]; then
+	if [[ $COMPARE_MODE != "true" ]]; then
 		return 0
 	fi
 
@@ -538,10 +538,10 @@ analyze_regressions() {
 	local criterion_dir="target/criterion"
 	local regression_found=false
 
-	[[ -d "$criterion_dir" ]] || return 0
+	[[ -d $criterion_dir ]] || return 0
 
 	# Only do the detailed HTML scan in non-verbose (CI) mode
-	if [[ "$SHOW_OUTPUT" == "false" ]]; then
+	if [[ $SHOW_OUTPUT == "false" ]]; then
 		if find "$criterion_dir" -name "*.html" -print0 2>/dev/null |
 			xargs -0 grep -l "regressed\|slower" 2>/dev/null |
 			head -1 | grep -q .; then
@@ -564,7 +564,7 @@ analyze_regressions() {
 
 		write_criterion_details "$criterion_dir"
 
-		if [[ "$regression_found" == "true" ]]; then
+		if [[ $regression_found == "true" ]]; then
 			{
 				echo ""
 				echo "## Regression Analysis"
@@ -581,7 +581,7 @@ analyze_regressions() {
 		fi
 	fi
 
-	if [[ "$regression_found" == "true" ]]; then
+	if [[ $regression_found == "true" ]]; then
 		warn "⚠ Performance regressions detected in detailed analysis"
 		detail "Check the HTML report for details: target/criterion/report/index.html"
 		return 1
@@ -591,9 +591,9 @@ analyze_regressions() {
 }
 
 open_report() {
-	[[ "$OPEN_REPORT" == "true" ]] || return 0
+	[[ $OPEN_REPORT == "true" ]] || return 0
 	local report="target/criterion/report/index.html"
-	[[ -f "$report" ]] || return 0
+	[[ -f $report ]] || return 0
 
 	info "Opening benchmark report..."
 
@@ -609,13 +609,13 @@ open_report() {
 }
 
 show_results_location() {
-	[[ "$SHOW_OUTPUT" == "true" ]] || return 0
+	[[ $SHOW_OUTPUT == "true" ]] || return 0
 
 	printf '%b\n' "${BLUE}${BOLD}Results Location:${NC}"
 
 	[[ -f "target/criterion/report/index.html" ]] &&
 		note "✓ HTML Report: target/criterion/report/index.html"
-	[[ -n "$SAVE_BASELINE" && -d "baselines/performance/$SAVE_BASELINE" ]] &&
+	[[ -n $SAVE_BASELINE && -d "baselines/performance/$SAVE_BASELINE" ]] &&
 		note "✓ Saved baseline: baselines/performance/$SAVE_BASELINE/"
 	[[ -f "benchmark-summary.txt" ]] &&
 		note "✓ Summary: benchmark-summary.txt"
@@ -645,14 +645,14 @@ create_basic_summary() {
 	} >benchmark-summary.txt
 
 	local analysis_time baseline_time
-	if [[ -n "$SAVE_BASELINE" && -f "baselines/performance/$SAVE_BASELINE/analysis_time.txt" ]]; then
+	if [[ -n $SAVE_BASELINE && -f "baselines/performance/$SAVE_BASELINE/analysis_time.txt" ]]; then
 		analysis_time="$(cat "baselines/performance/$SAVE_BASELINE/analysis_time.txt")"
 		{
 			echo "Analysis Time: ${analysis_time}s"
 		} >>benchmark-summary.txt
 	fi
 
-	if [[ "$COMPARE_MODE" == "true" && -f "baselines/performance/$LOAD_BASELINE/analysis_time.txt" ]]; then
+	if [[ $COMPARE_MODE == "true" && -f "baselines/performance/$LOAD_BASELINE/analysis_time.txt" ]]; then
 		baseline_time="$(cat "baselines/performance/$LOAD_BASELINE/analysis_time.txt")"
 		{
 			echo "Baseline Time: ${baseline_time}s"
@@ -686,7 +686,7 @@ main() {
 	open_report
 	show_results_location
 
-	if [[ "$SHOW_OUTPUT" == "true" ]]; then
+	if [[ $SHOW_OUTPUT == "true" ]]; then
 		if [[ $exit_code -eq 0 ]]; then
 			printf '%b\n' "${GREEN}${BOLD}✓ Benchmark completed successfully!${NC}"
 		else
