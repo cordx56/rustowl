@@ -43,6 +43,10 @@ RUN_INSTRUMENTS=1
 RUN_THREAD_SANITIZER=0
 RUN_CARGO_SHEAR=0
 
+# Exit code valgrind substitutes when it counts a memory error. Lets the suite
+# tell "valgrind found a problem" apart from "RustOwl exited non-zero".
+VALGRIND_ERROR_EXIT=42
+
 # Tool availability detection
 HAS_MIRI=0
 HAS_VALGRIND=0
@@ -640,8 +644,16 @@ log_path() { echo "$LOG_DIR/$1_${TIMESTAMP}.log"; }
 # instrumenting it adds nothing and risks TSAN noise across its IPC.
 ensure_rustowlc() {
 	local out path
-	if ! out="$(cargo build --bin rustowlc --message-format=json 2>&1)"; then
+	# Must go through scripts/toolchain, the same wrapper rustowl_release_binary
+	# uses. That wrapper exports TOOLCHAIN_CHANNEL (1.99.0), which build.rs bakes
+	# into rustowl as RUSTOWL_TOOLCHAIN, so the rustowl binary only ever drives a
+	# rustowlc built for that same toolchain. Building rustowlc with plain cargo
+	# instead picks up rust-toolchain.toml, and a rustowlc compiled against one
+	# nightly's rustc internals cannot drive another version's sysroot: every
+	# crate in the target then fails to compile with a bare "could not compile".
+	if ! out="$(./scripts/toolchain cargo build --bin rustowlc --message-format=json 2>&1)"; then
 		log_error "Failed to build rustowlc"
+		printf '%s\n' "$out" | tail -5 >&2
 		return 1
 	fi
 
@@ -720,11 +732,17 @@ run_miri_tests() {
 
 	log_info "Testing ${analysis_desc} with Miri..."
 	if run_logged "$analysis_log" "$miri_env cargo miri run --bin rustowl -- $args"; then
+		record_result Miri "Passed" "unit tests and $analysis_desc"
 		log_success "${analysis_desc} completed with Miri"
 	else
-		log_warning "Miri could not complete ${analysis_desc} (process spawning limitations)"
-		log_warning "  This is expected: RustOwl spawns cargo processes which Miri doesn't support"
-		log_warning "  Core RustOwl memory safety is validated by the system allocator switch"
+		# A real Miri limitation, not a regression: RustOwl spawns cargo, which
+		# Miri cannot do. So the unit tests still stand and the build must not
+		# fail, but the outcome has to say the analysis never ran rather than
+		# leaving the earlier bare "Passed" standing.
+		record_result Miri "Passed (unit tests only)" \
+			"$analysis_desc did not run: RustOwl spawns cargo, which Miri cannot do"
+		log_warning "Miri could not complete ${analysis_desc}: RustOwl spawns cargo processes"
+		log_warning "  Only the unit tests were validated; the analysis step is unsupported under Miri"
 		log_info "  Full output captured in: $(log_path "$analysis_log")"
 	fi
 
@@ -862,19 +880,40 @@ run_valgrind_tests() {
 		log_info "Using suppressions file: $REPO_ROOT/.valgrind-suppressions"
 	fi
 
-	local flags="valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes $suppressions"
+	# --error-exitcode only fires when valgrind itself counts an error, so this
+	# sentinel separates "valgrind found memory errors" from "the program under
+	# test exited non-zero". Without it valgrind exits 0 regardless of what it
+	# finds, and the suite's verdict is just RustOwl's exit code. Only definite
+	# and indirect leaks count; reachable and possible are live statics and
+	# thread-local storage, which .valgrind-suppressions already targets.
+	local flags="valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes"
+	flags+=" --errors-for-leak-kinds=definite,indirect --error-exitcode=$VALGRIND_ERROR_EXIT"
+	flags+=" $suppressions"
+
 	local args
 	args="$(analysis_args)"
 
 	log_info "Running RustOwl with Valgrind..."
-	log_info "Using Valgrind flags: --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes"
+	log_info "Using Valgrind flags: --tool=memcheck --leak-check=full --show-leak-kinds=all"
+	log_info "Leak kinds counted as errors: definite, indirect"
 
-	if run_logged valgrind_analysis "RUSTOWLC='$rustowlc' $flags $binary $args"; then
+	local status=0
+	run_logged valgrind_analysis "RUSTOWLC='$rustowlc' $flags $binary $args" || status=$?
+
+	if [[ $status -eq 0 ]]; then
 		record_result Valgrind "Passed" "no memory errors detected"
 		log_success "RustOwl analysis completed with Valgrind (no memory errors detected)"
-	else
-		record_result Valgrind "FAILED" "memory errors reported"
+	elif [[ $status -eq $VALGRIND_ERROR_EXIT ]]; then
+		record_result Valgrind "FAILED" "valgrind reported memory errors"
 		log_error "Valgrind detected memory errors in RustOwl analysis"
+		log_info "  Full output captured in: $(log_path valgrind_analysis)"
+		return 1
+	else
+		# RustOwl exited non-zero but valgrind counted nothing: the analysis
+		# itself failed, which is a different problem from a memory error.
+		record_result Valgrind "FAILED" "rustowl exited $status under valgrind, no memory errors"
+		log_error "RustOwl exited $status under Valgrind (valgrind reported no memory errors)"
+		log_warning "This is an analysis failure, not a memory error -- check the log for the cause"
 		log_info "  Full output captured in: $(log_path valgrind_analysis)"
 		return 1
 	fi
