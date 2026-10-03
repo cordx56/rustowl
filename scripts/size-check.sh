@@ -8,25 +8,22 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
 cd "$REPO_ROOT"
 
-# NixOS/nix-ld: expose system shared libraries (e.g. libz) to toolchain
-# binaries and test executables.
-if [ -n "${NIX_LD_LIBRARY_PATH:-}" ]; then
-	export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$NIX_LD_LIBRARY_PATH"
-	export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$NIX_LD_LIBRARY_PATH"
-fi
+setup_nix_ld_paths
 
 # Configuration
 SIZE_BASELINE_FILE="baselines/size_baseline.txt"
-SIZE_THRESHOLD_PCT=10 # Warn if binary size increases by more than 10%
+SIZE_THRESHOLD_PCT=10 # Warn if a binary grows by more than this many percent
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# The binaries we track. Used by every command below.
+BINARIES=(
+	"target/release/rustowl"
+	"target/release/rustowlc"
+)
 
 show_help() {
 	echo "RustOwl Binary Size Monitoring"
@@ -41,31 +38,18 @@ show_help() {
 	echo "    clean          Remove baseline file"
 	echo ""
 	echo "OPTIONS:"
-	echo "    -h, --help     Show this help message"
-	echo "    -t, --threshold <PCT>  Set size increase threshold (default: ${SIZE_THRESHOLD_PCT}%)"
-	echo "    -v, --verbose  Show verbose output"
+	echo "    -h, --help            Show this help message"
+	echo "    -t, --threshold <PCT> Fail if a binary grows by more than PCT percent"
+	echo "                         (default: ${SIZE_THRESHOLD_PCT}; whole numbers only)"
 	echo ""
 	echo "EXAMPLES:"
 	echo "    $0                    # Check current binary sizes"
 	echo "    $0 baseline           # Create baseline from current build"
 	echo "    $0 compare            # Compare with baseline"
 	echo "    $0 -t 15 compare      # Compare with 15% threshold"
-}
-
-log_info() {
-	echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-log_success() {
-	echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_warning() {
-	echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-log_error() {
-	echo -e "${RED}[ERROR]${NC} $1"
+	echo ""
+	echo "Only growth is treated as a regression: a binary that got smaller never"
+	echo "fails the comparison, whatever the threshold."
 }
 
 # Get binary size in bytes
@@ -81,42 +65,51 @@ get_binary_size() {
 # Format size for human reading
 format_size() {
 	local size="$1"
-	if command -v numfmt &>/dev/null; then
+	if have_cmd numfmt; then
 		numfmt --to=iec-i --suffix=B "$size"
 	else
 		# Fallback formatting
 		if [ "$size" -ge 1048576 ]; then
-			echo "$(($size / 1048576))MB"
+			echo "$((size / 1048576))MB"
 		elif [ "$size" -ge 1024 ]; then
-			echo "$(($size / 1024))KB"
+			echo "$((size / 1024))KB"
 		else
 			echo "${size}B"
 		fi
 	fi
 }
 
+# Reject thresholds that are not whole percent. The arithmetic below is integer
+# tenths, so a fractional threshold like 2.5 would be a $(( )) syntax error
+# rather than a usable value. Leading zeros are stripped for the same reason:
+# "08" is all digits but reads as an invalid octal literal inside $(( )).
+validate_threshold() {
+	case "$1" in
+	'' | *[!0-9]*)
+		log_error "Threshold must be a whole number of percent, got: $1"
+		log_info "Example: $0 -t 10 compare"
+		exit 1
+		;;
+	esac
+	SIZE_THRESHOLD_PCT="${1#"${1%%[!0]*}"}"
+	# All digits were zeros, so the strip above emptied it.
+	SIZE_THRESHOLD_PCT="${SIZE_THRESHOLD_PCT:-0}"
+	return 0
+}
+
 # Build binaries if they don't exist
 ensure_binaries_built() {
-	local binaries=(
-		"target/release/rustowl"
-		"target/release/rustowlc"
-	)
-
-	local need_build=false
-	for binary in "${binaries[@]}"; do
+	local binary
+	for binary in "${BINARIES[@]}"; do
 		if [ ! -f "$binary" ]; then
-			need_build=true
-			break
+			log_info "Building release binaries..."
+			if ! ./scripts/toolchain cargo build --release; then
+				log_error "Failed to build release binaries"
+				exit 1
+			fi
+			return 0
 		fi
 	done
-
-	if $need_build; then
-		log_info "Building release binaries..."
-		if ! ./scripts/toolchain cargo build --release; then
-			log_error "Failed to build release binaries"
-			exit 1
-		fi
-	fi
 }
 
 # Check current binary sizes
@@ -125,22 +118,15 @@ check_sizes() {
 
 	ensure_binaries_built
 
-	local binaries=(
-		"target/release/rustowl"
-		"target/release/rustowlc"
-	)
-
+	local binary size formatted name
 	echo ""
 	printf "%-20s %10s %15s\n" "Binary" "Size" "Formatted"
 	printf "%-20s %10s %15s\n" "------" "----" "---------"
 
-	for binary in "${binaries[@]}"; do
-		local size
+	for binary in "${BINARIES[@]}"; do
 		size=$(get_binary_size "$binary")
-		local formatted
 		formatted=$(format_size "$size")
-		local name
-		name=$(basename "$binary")
+		name="${binary##*/}"
 
 		printf "%-20s %10d %15s\n" "$name" "$size" "$formatted"
 	done
@@ -153,24 +139,17 @@ create_baseline() {
 
 	ensure_binaries_built
 
-	local binaries=(
-		"target/release/rustowl"
-		"target/release/rustowlc"
-	)
-
 	# Create target directory if it doesn't exist
 	mkdir -p "$(dirname "$SIZE_BASELINE_FILE")"
 
-	# Write baseline
+	local binary size name
 	{
 		echo "# RustOwl Binary Size Baseline"
 		echo "# Generated on $(date)"
 		echo "# Format: binary_name:size_in_bytes"
-		for binary in "${binaries[@]}"; do
-			local size
+		for binary in "${BINARIES[@]}"; do
 			size=$(get_binary_size "$binary")
-			local name
-			name=$(basename "$binary")
+			name="${binary##*/}"
 			echo "$name:$size"
 		done
 	} >"$SIZE_BASELINE_FILE"
@@ -195,23 +174,19 @@ compare_with_baseline() {
 
 	ensure_binaries_built
 
-	local binaries=(
-		"target/release/rustowl"
-		"target/release/rustowlc"
-	)
-
+	local threshold_tenths=$((SIZE_THRESHOLD_PCT * 10))
 	local any_issues=false
+	local binary name baseline_size current_size diff sign pct_tenths abs_diff
+	local pct_tenths pct_change pct_magnitude baseline_fmt current_fmt diff_fmt
 
 	echo ""
 	printf "%-20s %12s %12s %10s %8s\n" "Binary" "Baseline" "Current" "Diff" "Change"
 	printf "%-20s %12s %12s %10s %8s\n" "------" "--------" "-------" "----" "------"
 
-	for binary in "${binaries[@]}"; do
-		local name
-		name=$(basename "$binary")
+	for binary in "${BINARIES[@]}"; do
+		name="${binary##*/}"
 
 		# Get baseline size
-		local baseline_size
 		baseline_size=$(grep "^$name:" "$SIZE_BASELINE_FILE" | cut -d: -f2 || echo "0")
 
 		if [ "$baseline_size" = "0" ]; then
@@ -220,7 +195,6 @@ compare_with_baseline() {
 		fi
 
 		# Get current size
-		local current_size
 		current_size=$(get_binary_size "$binary")
 
 		if [ "$current_size" = "0" ]; then
@@ -229,40 +203,45 @@ compare_with_baseline() {
 			continue
 		fi
 
-		# Calculate difference
-		local diff=$((current_size - baseline_size))
-		local pct_change=0
+		diff=$((current_size - baseline_size))
 
-		if [ "$baseline_size" -gt 0 ]; then
-			pct_change=$(echo "scale=1; $diff * 100 / $baseline_size" | bc 2>/dev/null || echo "0")
+		# Sign and magnitude are split: only growth can be a regression, and
+		# "decreased by 30.0%" reads better than "decreased by -30.0%".
+		pct_tenths=$(pct_change_tenths "$baseline_size" "$current_size")
+		if [ "${pct_tenths#-}" != "$pct_tenths" ]; then
+			sign="-"
+			abs_diff="${pct_tenths#-}"
+		else
+			sign="+"
+			abs_diff="$pct_tenths"
 		fi
 
+		pct_change="$(format_tenths "$abs_diff" "$sign")"
+		# "increased by 10.4%" reads better than "increased by +10.4%", so the
+		# prose uses the magnitude and the sign only in the table above.
+		pct_magnitude="$(format_tenths "$abs_diff" "")"
+
 		# Format for display
-		local baseline_fmt current_fmt diff_fmt
 		baseline_fmt=$(format_size "$baseline_size")
 		current_fmt=$(format_size "$current_size")
 
 		if [ "$diff" -gt 0 ]; then
 			diff_fmt="+$(format_size "$diff")"
 		elif [ "$diff" -lt 0 ]; then
-			diff_fmt="-$(format_size $((-diff)))"
+			diff_fmt="-$(format_size "$((-diff))")"
 		else
 			diff_fmt="0B"
 		fi
 
 		printf "%-20s %12s %12s %10s %7s%%\n" "$name" "$baseline_fmt" "$current_fmt" "$diff_fmt" "$pct_change"
 
-		# Check threshold
-		local abs_pct_change
-		abs_pct_change=$(echo "$pct_change" | tr -d '-')
-
-		if (($(echo "$abs_pct_change > $SIZE_THRESHOLD_PCT" | bc -l))); then
-			if [ "$diff" -gt 0 ]; then
-				log_warning "$name size increased by $pct_change% (threshold: ${SIZE_THRESHOLD_PCT}%)"
-			else
-				log_info "$name size decreased by $pct_change%"
-			fi
+		# Only growth can be a regression. Comparing the magnitude meant a 30%
+		# shrink used to trip this branch and fail the run.
+		if [ "$diff" -gt 0 ] && [ "$pct_tenths" -gt "$threshold_tenths" ]; then
+			log_warning "$name size increased by ${pct_magnitude}% (threshold: ${SIZE_THRESHOLD_PCT}%)"
 			any_issues=true
+		elif [ "$diff" -lt 0 ]; then
+			log_info "$name size decreased by ${pct_magnitude}%"
 		fi
 	done
 
@@ -271,9 +250,9 @@ compare_with_baseline() {
 	if $any_issues; then
 		log_warning "Some binaries exceeded size thresholds"
 		exit 1
-	else
-		log_success "All binary sizes within acceptable ranges"
 	fi
+
+	log_success "All binary sizes within acceptable ranges"
 }
 
 # Clean baseline
@@ -288,9 +267,7 @@ clean_baseline() {
 
 main() {
 	local command="check"
-	local verbose=false
 
-	# Parse arguments
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 		-h | --help)
@@ -303,11 +280,8 @@ main() {
 				exit 1
 			fi
 			SIZE_THRESHOLD_PCT="$2"
+			validate_threshold "$SIZE_THRESHOLD_PCT"
 			shift 2
-			;;
-		-v | --verbose)
-			verbose=true
-			shift
 			;;
 		check | baseline | compare | clean)
 			command="$1"
@@ -320,13 +294,6 @@ main() {
 			;;
 		esac
 	done
-
-	# Ensure bc is available for calculations
-	if ! command -v bc &>/dev/null; then
-		log_error "bc (basic calculator) is required but not installed"
-		log_info "Install with: apt-get install bc"
-		exit 1
-	fi
 
 	case $command in
 	check)

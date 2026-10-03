@@ -51,16 +51,16 @@ Comprehensive security and memory safety testing framework.
 
 **Features:**
 
-- Multi-tool testing (Miri, Valgrind, cargo-audit, cargo-machete)
+- Multi-tool testing (Miri, Valgrind, ThreadSanitizer, cargo-deny, cargo-shear, Instruments)
 - Cross-platform support (Linux, macOS, ARM64)
 - Graceful degradation when tools unavailable
-- Configurable test categories and timeouts
+- Configurable test categories
 - Color-coded output with progress indicators
 
 **Usage:**
 
 ```bash
-# Run all available tests
+# Run all applicable tests for the current platform
 ./scripts/security.sh
 
 # Run specific test categories
@@ -68,8 +68,80 @@ Comprehensive security and memory safety testing framework.
 ./scripts/security.sh --no-valgrind
 ./scripts/security.sh --no-audit
 
+# ThreadSanitizer is opt-in: it instruments every build, so it is slow
+./scripts/security.sh --thread-sanitizer
+
 # Check available tools and configuration
 ./scripts/security.sh --check
+```
+
+**Platform notes:**
+
+- On Linux, Instruments is disabled and Valgrind covers memory errors.
+- On macOS, Valgrind is disabled and a Time Profiler trace is captured with
+  `xcrun xctrace` instead. The trace is written as
+  `instruments_output_<timestamp>.trace`, which CI uploads as an artifact when
+  the run fails.
+- ThreadSanitizer requires a nightly toolchain and is opt-in on any platform
+  via `--thread-sanitizer`. CI exercises it in a dedicated Linux job. It needs
+  `rust-src`, because `-Zsanitizer` changes the
+  crate ABI and therefore requires `-Zbuild-std` to rebuild `core` and
+  `compiler_builtins` with the same flag — without it rustc fails with
+  "mixing `-Zsanitizer` will cause an ABI mismatch".
+- Findings matching [`.tsan-suppressions`](../.tsan-suppressions) are
+  suppressed. They are not real races: any program building a multi-threaded
+  tokio runtime reproduces them when the synchronisation sits inside
+  `OnceLock`/`Mutex` or is driven through epoll, and tokio's own suite is clean
+  under `-Zbuild-std`. The file records the evidence and what would make each
+  entry safe to remove.
+- The instrumented build and the instrumented run are two separate steps. An
+  aborted run produces zero ThreadSanitizer warnings and would otherwise be
+  indistinguishable from a clean one, so a failed build fails the suite rather
+  than reporting "no races detected".
+- The run is bounded at 300s, because a TSan run does not always converge —
+  tokio's `test_tuning` in `rt_threaded.rs` has to be killed after ~27 minutes
+  under the sanitizer.
+- `cargo-shear` runs on both Linux and macOS.
+- In CI, missing tools are installed automatically unless you pass
+  `--no-auto-install`, which is honoured even though CI detection would
+  otherwise enable installation.
+
+### Dependency policy: `cargo-deny`
+
+[`cargo-deny`](https://embarkstudios.github.io/cargo-deny/) checks the
+dependency graph for known advisories, disallowed licences, banned crates and
+unexpected sources. Its rules live in [`deny.toml`](../deny.toml) at the repo
+root; `cargo deny check` must pass locally before pushing.
+
+```bash
+cargo deny check                     # all four checks
+cargo deny check advisories          # just the vulnerability check
+```
+
+CI runs this in a separate job via
+[`EmbarkStudios/cargo-deny-action`](https://github.com/EmbarkStudios/cargo-deny-action),
+so `security.sh` is invoked there with `--no-audit` to avoid resolving the full
+graph three times across the OS matrix.
+
+Notes on the current configuration:
+
+- `multiple-versions` is a **warning**: duplicate versions are normal in a real
+  graph and unifying them is rarely worth the churn.
+- MPL-2.0 is **not** in the blanket allow list. `rustowl` is MPL-2.0, and it is
+  permitted by name, so adding another MPL-2.0 dependency has to be a deliberate
+  edit rather than an accident.
+- Other per-crate exceptions exist for `r-efi` (LGPL-2.1-or-later),
+  `webpki-root-certs` (CDLA-Permissive-2.0) and `libbz2-rs-sys`
+  (`bzip2-1.0.6`), each with a comment explaining why.
+
+### Unused dependencies: `cargo-shear`
+
+[`cargo-shear`](https://crates.io/crates/cargo-shear) replaces `cargo-machete`.
+`security.sh` runs it with `--check-test-targets`, so a dependency used only
+from a test target is not reported as unused.
+
+```bash
+cargo shear --check-test-targets
 ```
 
 ### 📊 `bench.sh`
@@ -127,7 +199,7 @@ In uses `[mini.test](https://github.com/echasnovski/mini.test)` plugin to test.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y valgrind bc gnuplot build-essential
+sudo apt-get install -y valgrind gnuplot build-essential
 ```
 
 #### macOS
@@ -211,3 +283,23 @@ All scripts follow common patterns:
 - **Comprehensive help text** with examples
 - **Error handling** with remediation suggestions
 - **Cross-platform compatibility** with platform-specific optimizations
+
+### Shared code
+
+`lib/common.sh` holds everything the in-repo scripts have in common: the colour
+constants and `log_*` helpers, the NixOS `nix-ld` path setup, `have_cmd` /
+`require_cmd`, `print_host_tuple`, the rustc version gate, and the integer
+percentage helpers. Scripts source it as `lib/common.sh` relative to their own
+directory:
+
+```sh
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/common.sh"
+```
+
+The library is POSIX `sh` — no `[[ ]]`, no arrays, no `echo -e` — because
+`toolchain` sources it and runs under dash and busybox-ash in CI. It also has no
+side effects at source time.
+
+`installer` is the one exception. It is piped into `sh` from a URL and so has
+to stay self-contained; it keeps its own copy of `print_host_tuple`.
