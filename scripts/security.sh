@@ -159,10 +159,10 @@ done
 print_section_header() {
 	local title="$1"
 	local description="${2:-}"
-	printf '%b\n' "${BLUE}${BOLD}$title${NC}"
-	printf '%b\n' "${BLUE}================================${NC}"
-	[[ -n "$description" ]] && echo "$description"
-	echo ""
+	printf '%b\n' "${BLUE}${BOLD}$title${NC}" >&2
+	printf '%b\n' "${BLUE}================================${NC}" >&2
+	[[ -n "$description" ]] && echo "$description" >&2
+	echo "" >&2
 }
 
 # OS detection with more robust platform detection
