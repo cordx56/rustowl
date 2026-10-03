@@ -74,6 +74,7 @@ usage() {
 	echo "  --no-valgrind        Skip Valgrind tests"
 	echo "  --no-audit           Skip the cargo-deny vulnerability check"
 	echo "  --no-instruments     Skip Instruments tests"
+	echo "  --no-cargo-shear    Skip cargo-shear unused dependency detection"
 	echo "  --thread-sanitizer   Also run ThreadSanitizer tests (off by default;"
 	echo "                      it instruments every build and is slow)"
 	echo ""
@@ -840,11 +841,19 @@ run_thread_sanitizer_tests() {
 		return 1
 	fi
 
+	# Any other non-zero status with no race report is the analysis failing,
+	# not a clean run: a missing rustowlc exits 127, an aborted launch exits
+	# something else. Recording a pass there reports a check that never ran.
+	if [[ $status -ne 0 ]]; then
+		record_result ThreadSanitizer "FAILED" "analysis exited $status"
+		log_error "The instrumented analysis exited $status without reporting a race"
+		log_warning "  This is an analysis failure, not a data race -- check the log for the cause"
+		log_info "  Partial output captured in: $tsan_log"
+		return 1
+	fi
+
 	record_result ThreadSanitizer "Passed" "no races detected"
 	log_success "RustOwl analysis completed under ThreadSanitizer (no races detected)"
-	if [[ $status -ne 0 ]]; then
-		log_info "  Note: the analysis itself exited $status, which is not a race finding"
-	fi
 
 	echo ""
 }
@@ -953,7 +962,9 @@ run_instruments_tests() {
 			record_result Instruments "Passed" "trace captured"
 			log_success "Instruments trace captured: $trace"
 		else
-			log_warning "xctrace reported success but produced no trace at $trace"
+			record_result Instruments "FAILED" "no trace produced"
+			log_error "xctrace reported success but produced no trace at $trace"
+			return 1
 		fi
 	else
 		record_result Instruments "FAILED" "trace recording failed"
@@ -1017,7 +1028,7 @@ run_cargo_machete_tests() {
 	fi
 
 	local log_file
-	log_file="$(log_path cargo_machete_analysis)"
+	log_file="$(log_path cargo_shear_analysis)"
 	if [[ -f "$log_file" ]] && grep -q "unused dependencies" "$log_file" 2>/dev/null; then
 		log_warning "Found potential unused dependencies - check $log_file for details"
 	else
