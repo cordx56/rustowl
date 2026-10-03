@@ -30,6 +30,10 @@ MODE="run"
 # Sticky opt-out set only by --no-auto-install. Nothing else writes it, so CI
 # detection cannot re-enable what the caller asked to disable.
 NO_AUTO_INSTALL=0
+# Sticky opt-out set only by --no-cargo-shear. auto_configure_tests() enables
+# cargo-shear on Linux and macOS and runs after argument parsing, so clearing
+# RUN_CARGO_SHEAR alone was silently undone.
+NO_CARGO_SHEAR=0
 
 # Test flags (can be overridden via command line options)
 RUN_MIRI=1
@@ -139,6 +143,7 @@ while [[ $# -gt 0 ]]; do
 		shift
 		;;
 	--no-cargo-shear)
+		NO_CARGO_SHEAR=1
 		RUN_CARGO_SHEAR=0
 		shift
 		;;
@@ -495,7 +500,7 @@ install_required_tools() {
 		fi
 	fi
 
-	if [[ $HAS_CARGO_SHEAR -eq 0 && $RUN_CARGO_SHEAR -eq 1 ]]; then
+	if [[ $NO_CARGO_SHEAR -eq 0 && $HAS_CARGO_SHEAR -eq 0 && $RUN_CARGO_SHEAR -eq 1 ]]; then
 		log_info "Installing cargo-shear..."
 		if cargo install --locked cargo-shear; then
 			HAS_CARGO_SHEAR=1
@@ -862,7 +867,7 @@ run_audit_check() {
 }
 
 run_cargo_machete_tests() {
-	[[ $RUN_CARGO_SHEAR -eq 1 ]] || return 0
+	[[ $NO_CARGO_SHEAR -eq 0 && $RUN_CARGO_SHEAR -eq 1 ]] || return 0
 
 	if [[ $HAS_CARGO_SHEAR -eq 0 ]]; then
 		log_warning "Skipping cargo-shear tests (not installed)"
