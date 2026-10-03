@@ -20,6 +20,11 @@ use tokio::{
 
 use rustc_middle::queries;
 
+#[rustversion::since(2026-10-02)]
+use rustc_driver::compiler_entrypoint as run_compiler_entrypoint;
+#[rustversion::before(2026-10-02)]
+use rustc_driver::run_compiler as run_compiler_entrypoint;
+
 pub struct RustcCallback;
 impl rustc_driver::Callbacks for RustcCallback {}
 
@@ -149,7 +154,7 @@ pub fn run_compiler() -> ExitCode {
         args = args.into_iter().skip(1).collect();
     } else {
         return rustc_driver::catch_with_exit_code(|| {
-            rustc_driver::run_compiler(&args, &mut RustcCallback)
+            run_compiler_entrypoint(&args, &mut RustcCallback)
         });
     }
 
@@ -157,12 +162,12 @@ pub fn run_compiler() -> ExitCode {
         // utilize default rustc to avoid unexpected behavior if these arguments are passed
         if arg == "-vV" || arg == "--version" || arg.starts_with("--print") {
             return rustc_driver::catch_with_exit_code(|| {
-                rustc_driver::run_compiler(&args, &mut RustcCallback)
+                run_compiler_entrypoint(&args, &mut RustcCallback)
             });
         }
     }
 
     rustc_driver::catch_with_exit_code(|| {
-        rustc_driver::run_compiler(&args, &mut AnalyzerCallback);
+        run_compiler_entrypoint(&args, &mut AnalyzerCallback);
     })
 }
