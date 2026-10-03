@@ -82,9 +82,9 @@ Comprehensive security and memory safety testing framework.
   `xcrun xctrace` instead. The trace is written as
   `instruments_output_<timestamp>.trace`, which CI uploads as an artifact when
   the run fails.
-- ThreadSanitizer requires a nightly toolchain and runs on Linux only. CI
-  exercises it in a dedicated job; locally it is opt-in via
-  `--thread-sanitizer`. It needs `rust-src`, because `-Zsanitizer` changes the
+- ThreadSanitizer requires a nightly toolchain and is opt-in on any platform
+  via `--thread-sanitizer`. CI exercises it in a dedicated Linux job. It needs
+  `rust-src`, because `-Zsanitizer` changes the
   crate ABI and therefore requires `-Zbuild-std` to rebuild `core` and
   `compiler_builtins` with the same flag — without it rustc fails with
   "mixing `-Zsanitizer` will cause an ABI mismatch".
@@ -293,7 +293,7 @@ percentage helpers. Scripts source it as `lib/common.sh` relative to their own
 directory:
 
 ```sh
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/lib/common.sh"
 ```
 

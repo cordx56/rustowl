@@ -80,22 +80,38 @@ rust_version() {
 	if ! have_cmd rustc; then
 		return 0
 	fi
-	rustc --version 2>/dev/null |
+	# The trailing `|| true` matters: under `pipefail` a grep that matches
+	# nothing would otherwise abort the caller, but an unparsable version has
+	# to read as empty so check_rust_version can report it properly.
+	_raw="$(rustc --version 2>/dev/null || true)"
+	printf '%s\n' "$_raw" |
 		grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' |
-		head -1
+		head -1 || true
 }
 
 # Return 0 when $1 is at least $2. An empty version is never at least anything,
 # so a missing rustc reads as "cannot verify" rather than "too old".
 #
-# sort -V treats each dot-separated component as a number, so 1.100 sorts above
-# 1.87. A naive string compare would not.
+# Each dot-separated component is compared as a number, so 1.100 is above 1.87.
+# A naive string compare would not do that. `sort -V` would, but it is a GNU
+# extension absent from macOS, and this library has to stay POSIX.
 version_at_least() {
 	# No `local` (not in POSIX). Underscores keep it clear of caller variables.
 	_have="$1"
 	_want="$2"
 	[ -n "$_have" ] || return 1
-	printf '%s\n%s\n' "$_want" "$_have" | sort -V -C 2>/dev/null
+	# "[.]" rather than "." because a bare dot is a regex matching any character.
+	printf '%s %s\n' "$_have" "$_want" | awk '{
+		nh = split($1, h, "[.]")
+		nw = split($2, w, "[.]")
+		for (i = 1; i <= 3; i++) {
+			hv = (i <= nh) ? h[i] + 0 : 0
+			wv = (i <= nw) ? w[i] + 0 : 0
+			if (hv > wv) exit 0
+			if (hv < wv) exit 1
+		}
+		exit 0
+	}'
 }
 
 check_rust_version() {
@@ -123,13 +139,10 @@ check_rust_version() {
 format_tenths() {
 	_tenths="${1#-}"
 	_sign="$2"
+	# A negative value forces the minus: prepending to $2 would turn a "+"
+	# sign into the nonsense "-+30.0".
 	case $1 in
-	-*)
-		case $_sign in
-		-*) ;;
-		*) _sign="-${_sign}" ;;
-		esac
-		;;
+	-*) _sign="-" ;;
 	esac
 	printf '%s%d.%d' "$_sign" "$((_tenths / 10))" "$((_tenths % 10))"
 }

@@ -3,7 +3,7 @@
 # Run the Neovim test suite defined in nvim-tests/, using mini.test.
 # Works from any directory: the suite path is resolved relative to the repo.
 
-SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
 
 # shellcheck source=scripts/lib/common.sh
 . "$SCRIPT_DIR/lib/common.sh"

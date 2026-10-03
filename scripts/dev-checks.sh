@@ -130,7 +130,10 @@ check_tests() {
 	# The output of the single run stands in for the old second run.
 	printf '%s\n' "$output"
 
-	if [ "$count" -eq 0 ]; then
+	# Zero tests is only a pass when cargo itself succeeded. A test-only
+	# compile error also yields no "running N tests" lines, and reporting that
+	# as "no unit tests found" would hide a broken build behind a green check.
+	if [ "$count" -eq 0 ] && [ "$status" -eq 0 ]; then
 		log_info "No unit tests found (this is expected for RustOwl)"
 		return 0
 	fi

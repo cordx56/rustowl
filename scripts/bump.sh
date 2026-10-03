@@ -66,12 +66,12 @@ fi
 log_info "Updating to version: $VERSION"
 
 # Pre-releases are not published to the AUR, so they leave those files alone.
-if [[ "$VERSION_WITHOUT_V" =~ (alpha|beta|rc|dev|pre|snapshot) ]]; then
-	IS_PRERELEASE=true
-	log_info "Pre-release version detected ($VERSION_WITHOUT_V). aur/PKGBUILD will not be updated."
-else
+if [[ "$VERSION_WITHOUT_V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 	IS_PRERELEASE=false
 	log_info "Stable version detected ($VERSION_WITHOUT_V)."
+else
+	IS_PRERELEASE=true
+	log_info "Pre-release version detected ($VERSION_WITHOUT_V). aur/PKGBUILD will not be updated."
 fi
 
 if [[ ! -f Cargo.toml ]]; then
@@ -91,7 +91,18 @@ replace_version_line() {
 		return 0
 	fi
 
-	"${SED_CMD[@]}" "0,/$line_regex/{s/$line_regex/$replacement/}" "$file"
+	# sed exits 0 whether or not anything matched, so check first. Reporting
+	# "Updated" for a file with no matching line would tag a release carrying
+	# stale metadata.
+	if ! grep -q "$line_regex" "$file"; then
+		log_error "$file has no line matching the expected version pattern"
+		log_info "Expected a line matching: $line_regex"
+		return 1
+	fi
+
+	# 1,/re/ rather than 0,/re/: the zero start is a GNU extension that BSD sed
+	# rejects, and starting at line 1 is equivalent for a first-match rewrite.
+	"${SED_CMD[@]}" "1,/$line_regex/{s/$line_regex/$replacement/}" "$file"
 	log_info "Updated $file"
 }
 

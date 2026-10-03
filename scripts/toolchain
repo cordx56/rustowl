@@ -8,7 +8,7 @@ DEFAULT_RUST_COMPONENTS="rustc,rust-std,cargo,rustc-dev,llvm-tools $RUST_COMPONE
 # under dash and busybox ash in CI, so the library avoids bash-only syntax.
 # scripts/installer keeps its own copy of print_host_tuple because it is piped
 # into `sh` from a URL and cannot source anything.
-script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+script_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/lib/common.sh
 . "$script_dir/lib/common.sh"
 

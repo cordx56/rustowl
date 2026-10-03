@@ -38,6 +38,10 @@ REGRESSION_THRESHOLD="5%"
 # re-parses user input into an arithmetic expression. Units are tenths of a
 # percent, matching pct_change_tenths.
 REGRESSION_THRESHOLD_TENTHS=50
+
+# Set when the analysis-time comparison detects a slowdown. main turns this into
+# an exit status so the failure is reported after the summary is written.
+ANALYSIS_REGRESSION=false
 TEST_PACKAGE_PATH=""
 
 info() {
@@ -96,7 +100,12 @@ require_value() { # require_value <flag> <value> <example>
 
 # Accept a whole number of percent, with an optional trailing %.
 validate_threshold() { # validate_threshold <value>
-	local value="${1//%/}"
+	local value="$1"
+	# Strip one optional trailing % only. Removing every % would turn a typo
+	# like "5%5" into 55 and quietly widen the threshold to a 55% slowdown.
+	case "$value" in
+	*%) value="${value%?}" ;;
+	esac
 	case "$value" in
 	'' | *[!0-9]*)
 		warn "Error: --threshold must be a whole number of percent, got: $1"
@@ -104,12 +113,15 @@ validate_threshold() { # validate_threshold <value>
 		exit 1
 		;;
 	esac
-	# Strip leading zeros so the value is never read as octal ("08" would be
-	# rejected as an invalid octal literal inside $(( ))).
-	REGRESSION_THRESHOLD_TENTHS=$((10#${value#0} * 10))
+	# Strip leading zeros so the value is never read as octal ("08" would be an
+	# invalid octal literal inside $(( )), and "0" would leave an empty operand
+	# after 10#), which would abort the script and keep the previous value.
+	value="${value#"${value%%[!0]*}"}"
+	value="${value:-0}"
+	REGRESSION_THRESHOLD_TENTHS=$((value * 10))
 	# Normalise the display form so "--threshold 7" and "--threshold 7%" report
 	# identically in the header and in benchmark-summary.txt.
-	REGRESSION_THRESHOLD="${value#0}%"
+	REGRESSION_THRESHOLD="${value}%"
 }
 
 # Parse command line arguments
@@ -416,7 +428,10 @@ run_analysis_benchmark() {
 	if [[ "$COMPARE_MODE" == "true" && -f "baselines/performance/$LOAD_BASELINE/analysis_time.txt" ]]; then
 		local baseline_time
 		baseline_time="$(cat "baselines/performance/$LOAD_BASELINE/analysis_time.txt")"
-		compare_analysis_times "$baseline_time" "$duration"
+		# Recorded, not propagated: returning 1 here under `set -e` would exit
+		# before benchmark-summary.txt is written and before the caller can
+		# report anything. main turns this back into an exit status.
+		compare_analysis_times "$baseline_time" "$duration" || ANALYSIS_REGRESSION=true
 	fi
 }
 
@@ -482,8 +497,12 @@ write_criterion_details() {
                 dir=$(dirname "$1" | sed "s|target/criterion/||")
                 val=$(jq -r ".mean.point_estimate" "$1" 2>/dev/null || echo "N/A")
                 if [ "$val" != "N/A" ] && [ "$val" != "null" ]; then
-                    # Convert nanoseconds to seconds with 3 decimal places
-                    sec=$(printf "%d.%03d" $((val / 1000000000)) $((val % 1000000000 / 1000000)))
+                    # mean.point_estimate is a JSON float ("1234.5678"), and
+                    # $(( )) rejects that. Drop the fraction: at the three
+                    # decimal places actually printed the integer nanoseconds
+                    # carry all the precision that matters.
+                    ns="${val%%.*}"
+                    sec=$(printf "%d.%03d" $((ns / 1000000000)) $((ns % 1000000000 / 1000000)))
                     echo "$dir: ${sec}s"
                 else
                     echo "$dir: N/A"
@@ -659,6 +678,7 @@ main() {
 
 	local exit_code=0
 	analyze_regressions || exit_code=1
+	[[ $ANALYSIS_REGRESSION == true ]] && exit_code=1
 
 	# Ensure we have a summary file for CI
 	create_basic_summary

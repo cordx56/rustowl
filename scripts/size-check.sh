@@ -81,7 +81,8 @@ format_size() {
 
 # Reject thresholds that are not whole percent. The arithmetic below is integer
 # tenths, so a fractional threshold like 2.5 would be a $(( )) syntax error
-# rather than a usable value.
+# rather than a usable value. Leading zeros are stripped for the same reason:
+# "08" is all digits but reads as an invalid octal literal inside $(( )).
 validate_threshold() {
 	case "$1" in
 	'' | *[!0-9]*)
@@ -90,6 +91,9 @@ validate_threshold() {
 		exit 1
 		;;
 	esac
+	SIZE_THRESHOLD_PCT="${1#"${1%%[!0]*}"}"
+	# All digits were zeros, so the strip above emptied it.
+	SIZE_THRESHOLD_PCT="${SIZE_THRESHOLD_PCT:-0}"
 	return 0
 }
 
