@@ -1,14 +1,16 @@
 //! CFG-based liveness analysis.
 //!
 //! Walks the MIR control-flow graph and tracks, for each [`Location`], the
-//! set of states that each local can be in along any path that reaches it.
+//! set of states that each place can be in along any path that reaches it.
 //! The result complements Polonius' `var_live_on_entry` by distinguishing
 //! "provably initialized" from "initialized on some paths only".
 //!
-//! The state lattice for a single local is the powerset of
+//! The state lattice for a single place is the power-set of
 //! [`LocalStateVariant`]; values flow forward and meet at CFG joins via
-//! set union ([`LocalStates::join`]). From the per-location state set we
-//! derive two range collections:
+//! set union ([`States::join`]) up to the least fixed point.
+//! The state of a local is that of the whole local, combined from the
+//! states of the local and its fragments ([`StateBitSet::whole`]).
+//! From the per-location state set we derive two range collections:
 //!
 //! - [`get_definitely_lives`] -- locations where the state is exactly
 //!   `{Initialized}`. These are the ranges shown as the green
@@ -22,325 +24,149 @@
 use super::*;
 use indexmap::IndexMap;
 use rustowl::utils;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
-/// One element of the per-local state lattice.
-///
-/// State transitions performed by [`CfgAnalyzer::visit_statement`] and
-/// [`CfgAnalyzer::visit_terminator`]:
-///
-/// - `Assign` to a local sets it to `Initialized`. If the rvalue is a
-///   `Move`, the source local is set to `Moved` first.
-/// - `StorageDead` sets the local to `Uninitialized`.
-/// - A `Call` terminator sets each `Move` argument to `Moved` and the
-///   destination local to `Initialized`.
-/// - A `Drop` terminator removes `Initialized` and adds `Dropped`. Other
-///   variants (e.g. an earlier `Moved`) survive so that joins keep
-///   reflecting all paths reaching the location.
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-pub enum LocalStateVariant {
-    Uninitialized = 0b0001,
-    Initialized = 0b0010,
-    Moved = 0b0100,
-    Dropped = 0b1000,
-}
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub struct StateBitSet(u8);
-impl StateBitSet {
-    pub fn new() -> Self {
-        Self(0)
-    }
-    #[inline]
-    pub fn clear(&mut self) {
-        self.0 = 0;
-    }
-    #[inline]
-    pub fn remove(&mut self, variant: LocalStateVariant) {
-        self.0 &= !(variant as u8);
-    }
-    #[inline]
-    pub fn insert(&mut self, variant: LocalStateVariant) {
-        self.0 |= variant as u8;
-    }
-    #[inline]
-    pub fn contains(&self, variant: LocalStateVariant) -> bool {
-        0 < self.0 & (variant as u8)
-    }
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.0.count_ones() as usize
-    }
-    #[inline]
-    pub fn extend(&mut self, other: Self) {
-        self.0 |= other.0
-    }
-}
+mod effect;
+mod places;
+mod state;
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct LocalStates(IndexMap<LocalId, StateBitSet>);
-impl LocalStates {
-    pub fn init_from_locals(locals: impl Iterator<Item = LocalId>) -> Self {
-        Self(locals.map(|v| (v, StateBitSet::new())).collect())
-    }
-    /// Meet operation for the lattice: per-local set union with `others`.
-    /// Used at CFG join points so that a local's state at a successor is
-    /// the union of the states reaching it from each predecessor.
-    pub fn join(&mut self, others: &Self) {
-        for (key, state) in &mut self.0 {
-            if let Some(other) = others.0.get(key) {
-                state.extend(*other);
-            }
-        }
-    }
-    pub fn iter(&self) -> impl Iterator<Item = (&LocalId, &StateBitSet)> {
-        self.0.iter()
-    }
-}
+pub use effect::*;
+use places::*;
+use state::*;
 
-pub type CfgAnalysisOutput = IndexMap<Location, LocalStates>;
-
-/// Walks MIR [`Body`]'s CFG and collects [`LocalId`]'s state at each [`Location`].
-///
-/// We may use [`rustc_mir_dataflow::impls::MaybeInitializedPlaces`] or such impls, but some of
-/// them do not work as we expected. So we impl this analyzer.
-#[derive(Debug)]
-pub struct CfgAnalyzer {
-    states: IndexMap<Location, LocalStates>,
-    visited: IndexMap<Location, usize>,
-}
-impl CfgAnalyzer {
-    fn init(states: IndexMap<Location, LocalStates>) -> Self {
-        let visited = states.iter().map(|(location, _)| (*location, 0)).collect();
-        Self { states, visited }
-    }
-    pub fn states_at(&mut self, location: &Location) -> Option<&mut LocalStates> {
-        self.states.get_mut(location)
-    }
-    pub fn visited(&mut self, location: &Location) -> Option<&mut usize> {
-        self.visited.get_mut(location)
-    }
-    pub fn finish(self) -> IndexMap<Location, LocalStates> {
-        self.states
-    }
-
-    pub fn visit_operand(&mut self, operand: &MirOperand, location: Location) {
-        if let MirOperand::Move { place, .. } = operand
-            && let Some(local_states) = self.states.get_mut(&location)
-            && let Some(state) =
-                local_states
-                    .0
-                    .get_mut(&LocalId::from_rustc(rustc_middle::mir::Local::from_u32(
-                        place.local.id,
-                    )))
-        {
-            state.clear();
-            state.insert(LocalStateVariant::Moved);
-        }
-    }
-    pub fn visit_rval(&mut self, rval: &MirRval, location: Location) {
-        match rval {
-            MirRval::Use { operand }
-            | MirRval::Repeat { operand }
-            | MirRval::Cast { operand }
-            | MirRval::UnaryOp { operand } => {
-                self.visit_operand(operand, location);
-            }
-            MirRval::BinaryOp { left, right } => {
-                self.visit_operand(left, location);
-                self.visit_operand(right, location);
-            }
-            MirRval::Aggregate { fields } => {
-                for field in fields {
-                    self.visit_operand(field, location);
-                }
-            }
-            MirRval::Ref { .. } | MirRval::Other => {}
-        }
-    }
-    pub fn visit_statement(&mut self, statement: &MirStatement, location: Location) {
-        match &statement.kind {
-            MirStatementKind::Assign { place, rval, .. } => {
-                self.visit_rval(rval, location);
-                if let Some(local_states) = self.states.get_mut(&location)
-                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
-                        rustc_middle::mir::Local::from_u32(place.local.id),
-                    ))
-                {
-                    state.clear();
-                    state.insert(LocalStateVariant::Initialized);
-                }
-            }
-            MirStatementKind::StorageDead { local } => {
-                if let Some(local_states) = self.states.get_mut(&location)
-                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
-                        rustc_middle::mir::Local::from_u32(local.id),
-                    ))
-                {
-                    state.clear();
-                    state.insert(LocalStateVariant::Uninitialized);
-                }
-            }
-            _ => {}
-        }
-    }
-    pub fn visit_terminator(&mut self, terminator: &MirTerminator, location: Location) {
-        match &terminator.kind {
-            MirTerminatorKind::SwitchInt { discr, .. } => {
-                self.visit_operand(discr, location);
-            }
-            MirTerminatorKind::Drop { place, .. } => {
-                if let Some(local_states) = self.states.get_mut(&location)
-                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
-                        rustc_middle::mir::Local::from_u32(place.local.id),
-                    ))
-                {
-                    state.remove(LocalStateVariant::Initialized);
-                    state.insert(LocalStateVariant::Dropped);
-                }
-            }
-            MirTerminatorKind::Call {
-                func,
-                args,
-                destination,
-                ..
-            } => {
-                self.visit_operand(func, location);
-                for arg in args {
-                    self.visit_operand(arg, location);
-                }
-                if let Some(local_states) = self.states.get_mut(&location)
-                    && let Some(state) = local_states.0.get_mut(&LocalId::from_rustc(
-                        rustc_middle::mir::Local::from_u32(destination.local.id),
-                    ))
-                {
-                    state.clear();
-                    state.insert(LocalStateVariant::Initialized);
-                }
-            }
-            MirTerminatorKind::TailCall { func, args, .. } => {
-                self.visit_operand(func, location);
-                for arg in args {
-                    self.visit_operand(arg, location);
-                }
-            }
-            MirTerminatorKind::Assert { cond, .. } => {
-                self.visit_operand(cond, location);
-            }
-
-            _ => {}
-        }
-    }
-
-    /// Forward dataflow over the CFG, returning the per-local state set at
-    /// each [`Location`].
-    ///
-    /// Starts at the entry block with every local marked `Uninitialized`
-    /// and walks blocks in BFS order, joining the carried state into each
-    /// location and re-enqueueing successors when state changes.
-    ///
-    /// Termination is enforced by two cutoffs rather than a proof of
-    /// monotone convergence: each location may be visited at most 10 times
-    /// (per-location circuit breaker), and the outer queue runs for at
-    /// most `10 * basic_blocks.len()` iterations. In practice the lattice
-    /// is small (4 variants per local) so a fixpoint is reached well
-    /// before either cutoff; the cutoffs only protect against pathological
-    /// inputs (e.g. unreachable cycles introduced by ill-formed MIR).
-    pub fn walk_cfg(
-        basic_blocks: &IndexMap<BasicBlockId, MirBasicBlock>,
-        locals: impl Iterator<Item = LocalId>,
-    ) -> IndexMap<Location, LocalStates> {
-        let mut locals = LocalStates::init_from_locals(locals);
-        let location_local_state: IndexMap<Location, LocalStates> = basic_blocks
+/// Whether `fragment` is a fragment of `place`: a proper sub-place within the
+/// storage of `place`, that is, not behind a dereference.
+fn is_fragment(place: &MirPlace, fragment: &MirPlace) -> bool {
+    place.local == fragment.local
+        && place.projection.len() < fragment.projection.len()
+        && fragment.projection.starts_with(&place.projection)
+        && !fragment.projection[place.projection.len()..]
             .iter()
-            .flat_map(|(block, bb_data)| {
-                let locals = locals.clone();
-                let statement_len = bb_data.statements.len() + 1;
-                (0..statement_len).map(move |statement_index| {
-                    (
-                        AsRustc::from_rustc(rustc_middle::mir::Location {
-                            block: rustc_middle::mir::BasicBlock::from_usize(block.0),
-                            statement_index,
-                        }),
-                        locals.clone(),
-                    )
+            .any(|elem| matches!(elem, MirProjectionElem::Deref))
+}
+
+/// Collect the locations that end the value of a local: a move out of it
+/// or out of a place based on it, a drop of it, and the end of its storage.
+///
+/// These are the effects that [`walk_cfg`] applies, so that a value ends
+/// at the same locations in both analyses.
+pub fn collect_value_ends(
+    basic_blocks: &IndexMap<BasicBlockId, MirBasicBlock>,
+) -> HashSet<(Location, LocalId)> {
+    basic_blocks
+        .iter()
+        .flat_map(|(block, bb_data)| {
+            block_effects(bb_data).into_iter().enumerate().flat_map(
+                move |(statement_index, effects)| {
+                    let location = Location::from((*block, statement_index));
+                    effects
+                        .into_iter()
+                        .filter(|(_, effect)| effect.value_ends())
+                        .map(move |(place, _)| (location, LocalId::from(place.local)))
+                },
+            )
+        })
+        .collect()
+}
+
+pub type BasicBlocks = IndexMap<BasicBlockId, MirBasicBlock>;
+
+#[allow(clippy::type_complexity)]
+fn collect_places_effects(
+    basic_blocks: &BasicBlocks,
+) -> (Places, IndexMap<BasicBlockId, Vec<Vec<(PlaceId, Effect)>>>) {
+    let effects: IndexMap<_, _> = basic_blocks
+        .iter()
+        .map(|(block, bb_data)| (*block, block_effects(bb_data)))
+        .collect();
+    let places = Places::new(effects.values().flatten().flatten().map(|(place, _)| place));
+    // each effect on the places that it applies to
+    let effects = effects
+        .iter()
+        .map(|(block, effects)| {
+            let effects = effects
+                .iter()
+                .map(|effects| {
+                    effects
+                        .iter()
+                        .flat_map(|(place, effect)| {
+                            places
+                                .id(place)
+                                .into_iter()
+                                .flat_map(|id| places.covered(id))
+                                .map(|id| (id, *effect))
+                        })
+                        .collect()
                 })
-            })
-            .collect();
+                .collect();
+            (*block, effects)
+        })
+        .collect();
+    (places, effects)
+}
 
-        let block = match basic_blocks.first() {
-            Some((v, _)) => *v,
-            None => return location_local_state,
-        };
+/// The state of each local as a whole after each [`Location`].
+pub type CfgAnalysisOutput = IndexMap<Location, IndexMap<LocalId, StateBitSet>>;
 
-        // init local states with uninitialized state
-        for (_, state) in &mut locals.0 {
-            state.insert(LocalStateVariant::Uninitialized);
+/// Forward dataflow over the CFG of MIR [`Body`], returning the state of
+/// each local after each [`Location`] at the least fixed point.
+///
+/// Starts at the entry block with every place marked `Uninitialized`. A
+/// block is walked again from its entry states only when a predecessor adds
+/// a state to them. Since the states only grow and each of them has at most
+/// four variants, this terminates without any cutoff. The locations of
+/// unreachable blocks keep empty states.
+///
+/// We may use [`rustc_mir_dataflow::impls::MaybeInitializedPlaces`] or such impls,
+/// but some of them do not work as we expected. So we impl this analyzer.
+pub fn walk_cfg(basic_blocks: &BasicBlocks) -> CfgAnalysisOutput {
+    let (places, effects) = collect_places_effects(basic_blocks);
+
+    let empty = places.states(StateBitSet::new());
+    let mut states: IndexMap<Location, States> = IndexMap::new();
+    for (block, effects) in &effects {
+        for statement_index in 0..effects.len() {
+            states.insert(Location::from((*block, statement_index)), empty.clone());
         }
-        // next blocks to check
-        let mut next_blocks = VecDeque::new();
-        // use the last states at the previous block when start walking the new block.
-        next_blocks.push_back((block, locals));
-        let mut check = Self::init(location_local_state);
-        // Termination: bounded by per-location visit cap (see below) and
-        // the outer iteration cap. See the doc on `walk_cfg` for rationale.
-        'outer: for _ in 0..(10 * basic_blocks.len()) {
-            if let Some((block, mut prev_states)) = next_blocks.pop_front()
-                && let Some(bb_data) = basic_blocks.get(&block)
+    }
+    let mut entries: HashMap<BasicBlockId, States> = effects
+        .keys()
+        .map(|block| (*block, empty.clone()))
+        .collect();
+
+    let mut queued = VecDeque::new();
+    if let Some(entry) = effects.keys().next() {
+        let mut uninitialized = StateBitSet::new();
+        uninitialized.insert(LocalStateVariant::Uninitialized);
+        entries.insert(*entry, places.states(uninitialized));
+        queued.push_back(*entry);
+    }
+    while let Some(block) = queued.pop_front() {
+        let (Some(bb_data), Some(effects), Some(entry)) = (
+            basic_blocks.get(&block),
+            effects.get(&block),
+            entries.get(&block),
+        ) else {
+            continue;
+        };
+        let mut current = entry.clone();
+        for (statement_index, effects) in effects.iter().enumerate() {
+            current.apply(effects);
+            states.insert(Location::from((block, statement_index)), current.clone());
+        }
+        for successor in bb_data.terminator.successors() {
+            if let Some(entry) = entries.get_mut(&successor)
+                && entry.join(&current)
+                && queued.iter().all(|v| *v != successor)
             {
-                for (statement_index, statement) in bb_data.statements.iter().enumerate() {
-                    let location: Location = AsRustc::from_rustc(rustc_middle::mir::Location {
-                        block: rustc_middle::mir::BasicBlock::from_usize(block.0),
-                        statement_index,
-                    });
-
-                    let visited = check.visited(&location).map(|v| *v).unwrap_or(0);
-                    // Skip check if same location is visited many times (circuit breaker)
-                    if 10 <= visited {
-                        continue 'outer;
-                    }
-                    if let Some(current_states) = check.states_at(&location) {
-                        // Skip check if the location is already visited and the states does not
-                        // changed.
-                        if 0 < visited && *current_states == prev_states {
-                            continue 'outer;
-                        }
-
-                        current_states.join(&prev_states);
-                        check.visit_statement(statement, location);
-                    }
-                    if let Some(current_states) = check.states_at(&location) {
-                        prev_states = current_states.clone();
-                    }
-                    if let Some(v) = check.visited(&location) {
-                        *v += 1;
-                    }
-                }
-                let terminator = &bb_data.terminator;
-                let statement_index = bb_data.statements.len();
-                let location: Location = AsRustc::from_rustc(rustc_middle::mir::Location {
-                    block: rustc_middle::mir::BasicBlock::from_usize(block.0),
-                    statement_index,
-                });
-                if let Some(current_states) = check.states_at(&location) {
-                    current_states.join(&prev_states);
-                    check.visit_terminator(terminator, location);
-                }
-                if let Some(current_states) = check.states_at(&location) {
-                    prev_states = current_states.clone();
-                }
-                if let Some(v) = check.visited(&location) {
-                    *v += 1;
-                }
-
-                for successor in terminator.successors() {
-                    next_blocks.push_back((successor, prev_states.clone()));
-                }
-            } else {
-                break;
+                queued.push_back(successor);
             }
         }
-        check.finish()
     }
+    states
+        .iter()
+        .map(|(location, states)| (*location, places.local_states(states)))
+        .collect()
 }
 
 /// Source ranges where each local is definitely initialized.

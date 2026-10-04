@@ -133,3 +133,50 @@ fn guard() {
     let g = m.lock().unwrap();
     println!("{}", *g);
 }
+
+// A borrow of `s` from one iteration is used in the next iteration, where `s`
+// holds a new value (does not compile).
+fn in_loop() {
+    let mut prev: Option<&String> = None;
+    for _ in 0..2 {
+        let mut s = String::new();
+        s.push('a');
+        if let Some(p) = prev {
+            println!("{p}");
+        }
+        prev = Some(&s);
+    }
+}
+
+// `v` is initialized and borrowed on only one branch (compiles).
+fn cond_init(c: bool) {
+    let other = String::from("o");
+    let v;
+    let r;
+    if c {
+        v = String::from("v");
+        r = &v;
+    } else {
+        r = &other;
+    }
+    println!("{r}");
+}
+
+// `a` is moved on only one branch while borrowed (does not compile).
+fn cond_move(c: bool) {
+    let a = String::from("a");
+    let r = &a;
+    if c {
+        drop(a);
+    }
+    println!("{r}");
+}
+
+// `a` is moved while borrowed and then reassigned (does not compile).
+fn reinit() {
+    let mut a = String::from("a");
+    let r = &a;
+    drop(a);
+    a = String::from("b");
+    println!("{r} {a}");
+}

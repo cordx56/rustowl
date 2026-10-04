@@ -1,0 +1,26 @@
+---
+source: crates/rustowl/tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 'p' (1/1) in function 'places::assign_field_after_move' ===[0m
+
+[2m  20 |[0m [2m// (does not compile).[0m
+[2m  21 |[0m [95mfn[0m assign_field_after_move[2m([0m[2m)[0m [2m{[0m
+[2m  22 |[0m     [95mlet[0m [95mmut[0m p = [2m([0m[93mString[0m[2m::[0m[96mnew[0m[2m([0m[2m)[0m[2m,[0m [93mString[0m[2m::[0m[96mnew[0m[2m([0m[2m)[0m[2m)[0m[2m;[0m
+[2m     |[0m         [92m-----[0m   [92m------------------------------[0m
+[2m  23 |[0m     [95mlet[0m q = p[2m;[0m
+[2m     |[0m         [92m-[0m   [93m-[0m
+[2m  24 |[0m     p[2m.[0m[96m0[0m = [93mString[0m[2m::[0m[96mfrom[0m[2m([0m[92m"a"[0m[2m)[0m[2m;[0m
+[2m  25 |[0m     [96mprintln[0m[96m![0m[2m([0m[92m"{} {q:?}"[0m[2m,[0m p[2m.[0m[96m0[0m[2m)[0m[2m;[0m
+[2m     |[0m     [96m-------------------------[0m
+[2m  26 |[0m [2m}[0m
+[2m  27 |[0m 
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable

@@ -119,6 +119,14 @@ impl Location {
         AsRustc::from_rustc(next_location.successor_within_block())
     }
 }
+impl From<(BasicBlockId, usize)> for Location {
+    fn from((block, statement_index): (BasicBlockId, usize)) -> Self {
+        AsRustc::from_rustc(rustc_middle::mir::Location {
+            block: rustc_middle::mir::BasicBlock::from_usize(block.0),
+            statement_index,
+        })
+    }
+}
 
 impl_as_rustc!(
     #[derive(Clone, Copy, Debug)]

@@ -1,0 +1,25 @@
+---
+source: crates/rustowl/tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 'b' (1/1) in function 'places::move_out_of_box' ===[0m
+
+[2m  29 |[0m [2m// since a place behind a dereference is not a fragment (compiles).[0m
+[2m  30 |[0m [95mfn[0m move_out_of_box[2m([0m[2m)[0m [2m{[0m
+[2m  31 |[0m     [95mlet[0m b = [93mBox[0m[2m::[0m[96mnew[0m[2m([0m[93mString[0m[2m::[0m[96mnew[0m[2m([0m[2m)[0m[2m)[0m[2m;[0m
+[2m     |[0m         [92m-[0m   [93m-----------------------[0m
+[2m  32 |[0m     [95mlet[0m s = [95m*[0mb[2m;[0m
+[2m     |[0m         [92m-[0m   [93m--[0m
+[2m  33 |[0m     [96mprintln[0m[96m![0m[2m([0m[92m"{s}"[0m[2m)[0m[2m;[0m
+[2m     |[0m     [92m---------------[0m
+[2m  34 |[0m [2m}[0m
+[2m     |[0m [92m-[0m
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable

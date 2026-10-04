@@ -41,9 +41,14 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
                 return Some(CacheData::default());
             }
         };
-        let read = serde_json::from_str(&s).ok();
+        // a cache written in an older format is discarded, so that it is
+        // rebuilt instead of disabling the cache
+        let read = serde_json::from_str(&s).unwrap_or_else(|e| {
+            log::warn!("discard incompatible incremental cache file: {e}");
+            CacheData::default()
+        });
         log::debug!("cache read: {}", cache_path.display());
-        read
+        Some(read)
     } else {
         None
     }

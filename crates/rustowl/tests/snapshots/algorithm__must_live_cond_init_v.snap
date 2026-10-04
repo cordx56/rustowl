@@ -1,0 +1,31 @@
+---
+source: crates/rustowl/tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 'v' (1/1) in function 'must_live::cond_init' ===[0m
+
+[2m 155 |[0m     [95mlet[0m r[2m;[0m
+[2m 156 |[0m     [95mif[0m c [2m{[0m
+[2m 157 |[0m         v = [93mString[0m[2m::[0m[96mfrom[0m[2m([0m[92m"v"[0m[2m)[0m[2m;[0m
+[2m     |[0m         [92m-[0m                   [92m-[0m
+[2m 158 |[0m         r = [95m&[0mv[2m;[0m
+[2m     |[0m         [92m---[0m [96m--[0m
+[2m 159 |[0m     [2m}[0m [95melse[0m [2m{[0m
+[2m 160 |[0m         r = [95m&[0mother[2m;[0m
+[2m 161 |[0m     [2m}[0m
+[2m     |[0m     [92m~[0m
+[2m 162 |[0m     [96mprintln[0m[96m![0m[2m([0m[92m"{r}"[0m[2m)[0m[2m;[0m
+[2m     |[0m     [92m~~~~~~~~~~~~~~~[0m
+[2m 163 |[0m [2m}[0m
+[2m     |[0m [92m~[0m
+[2m 164 |[0m 
+[2m 165 |[0m [2m// `a` is moved on only one branch while borrowed (does not compile).[0m
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable
