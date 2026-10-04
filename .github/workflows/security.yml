@@ -127,10 +127,7 @@ jobs:
       - name: Run comprehensive security checks
         shell: bash
         run: |
-          # The security script auto-detects CI and installs missing tools.
-          # --no-audit because the cargo-deny job already covers the
-          # vulnerability check, and resolving the full dependency graph is
-          # wasteful to repeat on every OS. ThreadSanitizer has its own job.
+          # --no-audit because the cargo-deny job already covers it.
           if ! ./scripts/security.sh --no-audit; then
             echo "::error::Security tests failed"
             exit 1

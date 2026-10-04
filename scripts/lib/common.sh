@@ -1,12 +1,8 @@
 # shellcheck shell=sh
 # Shared helpers for the RustOwl development scripts.
 #
-# POSIX sh, because scripts/toolchain sources this and runs under dash and
-# busybox-ash in CI: no [[ ]], no arrays, no `echo -e`. No side effects at
-# source time either, which is what makes sourcing it into toolchain safe.
-#
-# scripts/installer deliberately does not source this file: it is piped into
-# `sh` from a URL and has to stay dependency-free.
+# POSIX sh is required: scripts/toolchain sources this under dash and
+# busybox-ash in CI. No side effects at source time either.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

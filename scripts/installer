@@ -1,14 +1,11 @@
 #!/bin/sh -e
 
-# This script is piped into `sh` from a URL:
+# Piped into `sh` from a URL:
 #
 #   curl -L https://raw.githubusercontent.com/cordx56/rustowl/refs/heads/main/scripts/installer | sh
 #
-# So it must stay completely self-contained: no sourcing, no reading sibling
-# files, no assuming a checkout. In particular the print_host_tuple below is a
-# deliberate duplicate of the one in scripts/lib/common.sh — that is the price
-# of being fetchable standalone, so please do not "fix" it by sourcing the
-# library.
+# So it must stay self-contained. print_host_tuple below duplicates the one in
+# scripts/lib/common.sh on purpose; do not "fix" it by sourcing the library.
 
 # config
 RUSTOWL_VERSION="${1:-"latest"}"
