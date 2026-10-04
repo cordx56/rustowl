@@ -195,7 +195,7 @@ impl Crate {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum MirProjectionElem {
     Deref,
@@ -204,10 +204,18 @@ pub enum MirProjectionElem {
     Other,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MirPlace {
     pub local: FnLocal,
     pub projection: Vec<MirProjectionElem>,
+}
+impl MirPlace {
+    pub fn root(local: FnLocal) -> Self {
+        Self {
+            local,
+            projection: Vec::new(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -348,7 +356,7 @@ pub enum MirDecl {
         drop_range: Vec<Range>,
         definitely_live_at: Vec<Range>,
         maybe_init_at: Vec<Range>,
-        must_live_at: Vec<Range>,
+        deficit_at: Vec<Range>,
         /// Range from StorageLive to StorageDead for this variable
         storage_range: Vec<Range>,
     },
@@ -362,7 +370,7 @@ pub enum MirDecl {
         drop_range: Vec<Range>,
         definitely_live_at: Vec<Range>,
         maybe_init_at: Vec<Range>,
-        must_live_at: Vec<Range>,
+        deficit_at: Vec<Range>,
         /// Range from StorageLive to StorageDead for this variable
         storage_range: Vec<Range>,
     },

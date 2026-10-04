@@ -98,11 +98,24 @@ fn region_access_locations(input: &PoloniusInput) -> HashMap<Region, HashSet<Poi
     result
 }
 
-pub fn get_must_live(
+#[inline]
+fn location_of(location_table: &PoloniusLocationTable, point: Point) -> Location {
+    match location_table.get_rich_location(&point) {
+        RichLocation::Start(location) | RichLocation::Mid(location) => location,
+    }
+}
+
+/// obtain a map that local -> locations where a borrow of the local is used
+/// or dropped after the borrowed value has ended (the lifetime deficit)
+///
+/// `value_ends` contains the locations that end the value of a local
+/// (see [`dataflow_analyzer::collect_value_ends`]).
+pub fn get_deficit(
     input: &PoloniusInput,
     output: &PoloniusOutput,
     location_table: &PoloniusLocationTable,
     borrow_map: &BorrowMap,
+    value_ends: &HashSet<(Location, LocalId)>,
     location_ranges: &LocationRanges,
 ) -> HashMap<LocalId, Vec<Range>> {
     // obtain a map that borrow index -> local
@@ -113,73 +126,101 @@ pub fn get_must_live(
         }
     }
 
-    // obtain a map that region -> region contained locations
-    let mut region_locations = HashMap::new();
-    for (location_idx, region_idc) in output.origin_live_on_entry().iter() {
-        for region_idx in region_idc {
-            region_locations
-                .entry(*region_idx)
+    // `origin_live` is a set of (p, region) such that the region is live on entry to p
+    let origin_live: HashSet<(Point, Region)> = output
+        .origin_live_on_entry()
+        .into_iter()
+        .flat_map(|(point, regions)| regions.into_iter().map(move |region| (point, region)))
+        .collect();
+
+    // obtain a map that point -> next points of CFG edges
+    let mut successors = HashMap::new();
+    for (from, to) in input.cfg_edge() {
+        successors.entry(from).or_insert_with(Vec::new).push(to);
+    }
+
+    // `loan_ends` is a set of (p, borrow) such that the borrow is invalidated at p
+    // by an access that ends the value of the borrowed local (move, drop or StorageDead)
+    let loan_ends: HashSet<(Point, Borrow)> = input
+        .loan_invalidated_at()
+        .into_iter()
+        .filter(|(point, borrow)| {
+            borrow_local.get(borrow).is_some_and(|local| {
+                value_ends.contains(&(location_of(location_table, *point), *local))
+            })
+        })
+        .collect();
+
+    // `dead` is a set of (p, region, borrow) such that the region may contain the borrow
+    // at p after the value of the borrowed local has ended
+    let mut dead = HashSet::new();
+    let mut stack_working = Vec::new();
+    // seed `dead` with (p, region, borrow) such that the borrow ends at p
+    // while a live region contains it; a dead region has no later use
+    for (point, region_borrows) in output.origin_contains_loan_at() {
+        for (region, borrows) in region_borrows {
+            if !origin_live.contains(&(point, region)) {
+                continue;
+            }
+            for borrow in borrows {
+                if loan_ends.contains(&(point, borrow)) && dead.insert((point, region, borrow)) {
+                    stack_working.push((point, region, borrow));
+                }
+            }
+        }
+    }
+
+    // `subset` represents `(region1 <: region2) @ p` as `p -> (region1 -> {region2})`
+    // where borrows in region1 flow into region2 at p
+    let subset = output.subset();
+    // propagate `dead` in the same way as `origin_contains_loan_on_entry` of Polonius,
+    // but ignoring `loan_killed_at`; a kill means that the borrowed local gets a new value,
+    // while the borrow still refers to the ended one
+    while let Some((point, region, borrow)) = stack_working.pop() {
+        // `to_regions` is a set of (p, region2) such that `(region <: region2) @ p`
+        let to_regions = subset
+            .get(&point)
+            .and_then(|regions| regions.get(&region))
+            .into_iter()
+            .flatten()
+            .map(|to| (point, *to));
+        // `to_points` is a set of (q, region) such that q is a next point of p
+        // and the region is live on entry to q
+        let to_points = successors
+            .get(&point)
+            .into_iter()
+            .flatten()
+            .filter(|next| origin_live.contains(&(**next, region)))
+            .map(|next| (*next, region));
+        for (next_point, next_region) in to_regions.chain(to_points) {
+            if dead.insert((next_point, next_region, borrow)) {
+                stack_working.push((next_point, next_region, borrow));
+            }
+        }
+    }
+
+    // obtain a map that region -> points where a variable whose type contains
+    // the region is used or dropped
+    let access = region_access_locations(input);
+    // obtain a map that local -> points where a region that contains a
+    // borrow of the local after its end is used or dropped;
+    // at the other points in `dead`, the region only holds the borrow
+    let mut local_deficit_locations = HashMap::new();
+    for (point, region, borrow) in dead {
+        if access
+            .get(&region)
+            .is_some_and(|points| points.contains(&point))
+            && let Some(local) = borrow_local.get(&borrow)
+        {
+            local_deficit_locations
+                .entry(*local)
                 .or_insert_with(HashSet::new)
-                .insert(*location_idx);
+                .insert(point);
         }
     }
 
-    // obtain a map that region -> locations where region must be live
-    // For subset relation sup >= sub at point p:
-    // - if sup is live at p, sup itself must be live at p (for borrows contained in sup)
-    // - if sup is live at p, sub must also be live at p (for borrows contained in sub)
-    // IMPORTANT: subset relations only apply from the point where they are established
-    let mut region_must_locations = HashMap::new();
-    for (location_idx, subset) in output.subset().iter() {
-        for (sup, subs) in subset.iter() {
-            // If sup region is live at this point
-            if region_locations
-                .get(sup)
-                .is_some_and(|locs| locs.contains(location_idx))
-            {
-                // sup is must_live at this point (for borrows contained in sup)
-                region_must_locations
-                    .entry(*sup)
-                    .or_insert_with(HashSet::new)
-                    .insert(*location_idx);
-                // sub regions are also must_live at this point
-                for sub in subs {
-                    region_must_locations
-                        .entry(*sub)
-                        .or_insert_with(HashSet::new)
-                        .insert(*location_idx);
-                }
-            }
-        }
-    }
-    // a region must also be live where a variable whose type contains it is used or dropped;
-    // the borrows in the region may be dereferenced there
-    for (region, locations) in region_access_locations(input) {
-        region_must_locations
-            .entry(region)
-            .or_insert_with(HashSet::new)
-            .extend(locations);
-    }
-
-    // obtain a map that local -> locations
-    let mut local_must_locations = HashMap::new();
-    for (location_idx, region_borrows) in output.origin_contains_loan_at().iter() {
-        for (region, borrows) in region_borrows.iter() {
-            if region_must_locations
-                .get(region)
-                .is_some_and(|locs| locs.contains(location_idx))
-            {
-                for local in borrows.iter().filter_map(|borrow| borrow_local.get(borrow)) {
-                    local_must_locations
-                        .entry(*local)
-                        .or_insert_with(HashSet::new)
-                        .insert(*location_idx);
-                }
-            }
-        }
-    }
-
-    HashMap::from_iter(local_must_locations.iter().map(|(local, locations)| {
+    // convert the points into source ranges for each local
+    HashMap::from_iter(local_deficit_locations.iter().map(|(local, locations)| {
         (
             *local,
             utils::eliminated_ranges(rich_locations_to_ranges(

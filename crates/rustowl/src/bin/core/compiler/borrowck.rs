@@ -36,23 +36,20 @@ impl PoloniusInput {
         ))
     }
 
-    /// remove kills of loans at the points where they are also invalidated
-    /// from the input facts
-    ///
-    /// this should be done to track usage of references after borrowed local dies
-    pub fn remove_kills_on_invalidation(&mut self, location_table: &PoloniusLocationTable) {
-        let table = location_table.as_rustc();
-        // A kill is emitted at the mid point and an invalidation at the start
-        // point of the same statement, so they are compared by location.
-        let invalidated: HashSet<_> = self
-            .as_rustc()
+    pub fn loan_invalidated_at(&self) -> Vec<(Point, Borrow)> {
+        self.as_rustc()
             .loan_invalidated_at
             .iter()
-            .map(|(p, l)| (table.to_location(*p), *l))
-            .collect();
-        self.mut_rustc()
-            .loan_killed_at
-            .retain(|(l, p)| !invalidated.contains(&(table.to_location(*p), *l)));
+            .map(|(p, l)| (AsRustc::from_rustc(*p), AsRustc::from_rustc(*l)))
+            .collect()
+    }
+
+    pub fn cfg_edge(&self) -> Vec<(Point, Point)> {
+        self.as_rustc()
+            .cfg_edge
+            .iter()
+            .map(|(p, q)| (AsRustc::from_rustc(*p), AsRustc::from_rustc(*q)))
+            .collect()
     }
 
     pub fn var_dropped_at(&self) -> Vec<(LocalId, Point)> {

@@ -184,3 +184,57 @@ fn test_must_live_guard_m() {
     let output = get_rustowl_output("must_live::guard", "m");
     insta::assert_snapshot!(output);
 }
+
+#[test]
+fn test_must_live_in_loop_s() {
+    let output = get_rustowl_output("must_live::in_loop", "s");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_cond_init_v() {
+    let output = get_rustowl_output("must_live::cond_init", "v");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_cond_move_a() {
+    let output = get_rustowl_output("must_live::cond_move", "a");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_must_live_reinit_a() {
+    let output = get_rustowl_output("must_live::reinit", "a");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_fixpoint_many_arms_s11() {
+    let output = get_rustowl_output("fixpoint::many_arms", "s11");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_places_cond_partial_move_p() {
+    let output = get_rustowl_output("places::cond_partial_move", "p");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_places_reinit_field_p() {
+    let output = get_rustowl_output("places::reinit_field", "p");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_places_assign_field_after_move_p() {
+    let output = get_rustowl_output("places::assign_field_after_move", "p");
+    insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_places_move_out_of_box_b() {
+    let output = get_rustowl_output("places::move_out_of_box", "b");
+    insta::assert_snapshot!(output);
+}

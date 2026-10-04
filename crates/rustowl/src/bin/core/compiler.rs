@@ -340,3 +340,8 @@ impl LocalId {
         self.as_rustc().as_u32()
     }
 }
+impl From<FnLocal> for LocalId {
+    fn from(v: FnLocal) -> Self {
+        LocalId::from_rustc(rustc_middle::mir::Local::from_u32(v.id))
+    }
+}

@@ -36,7 +36,7 @@ pub struct MirAnalyzer {
     file_hash: String,
     mir_hash: String,
     accurate_live: HashMap<LocalId, Vec<Range>>,
-    must_live: HashMap<LocalId, Vec<Range>>,
+    deficit: HashMap<LocalId, Vec<Range>>,
     shared_live: HashMap<LocalId, Vec<Range>>,
     mutable_live: HashMap<LocalId, Vec<Range>>,
     drop_range: HashMap<LocalId, Vec<Range>>,
@@ -117,11 +117,10 @@ impl MirAnalyzer {
             // this must be done in local thread
             let borrow_data = facts.borrow_map();
 
-            let mut input = facts.polonius_input();
+            let input = facts.polonius_input();
             let location_table = facts.location_table();
 
             let analyzer = Box::pin(async move {
-                input.remove_kills_on_invalidation(&location_table);
                 log::debug!("start re-computing borrow check with dump: true");
                 // compute accurate region, which may eliminate invalid region
                 let output = input.compute();
@@ -133,11 +132,13 @@ impl MirAnalyzer {
                     &location_ranges,
                 );
 
-                let must_live = polonius_analyzer::get_must_live(
+                let value_ends = dataflow_analyzer::collect_value_ends(&basic_blocks);
+                let deficit = polonius_analyzer::get_deficit(
                     &input,
                     &output,
                     &location_table,
                     &borrow_data,
+                    &value_ends,
                     &location_ranges,
                 );
 
@@ -160,10 +161,7 @@ impl MirAnalyzer {
 
                 // CFG based liveness analysis
                 log::debug!("start CFG based liveness check");
-                let cfg_analysis_output = dataflow_analyzer::CfgAnalyzer::walk_cfg(
-                    &basic_blocks,
-                    local_decls.keys().copied(),
-                );
+                let cfg_analysis_output = dataflow_analyzer::walk_cfg(&basic_blocks);
                 log::debug!("CFG based liveness check finished");
                 let mut definitely_live_range =
                     dataflow_analyzer::get_definitely_lives(&cfg_analysis_output, &location_ranges);
@@ -194,7 +192,7 @@ impl MirAnalyzer {
                     file_hash,
                     mir_hash,
                     accurate_live,
-                    must_live,
+                    deficit,
                     shared_live,
                     mutable_live,
                     drop_range,
@@ -213,7 +211,7 @@ impl MirAnalyzer {
     fn collect_decls(&self) -> Vec<MirDecl> {
         let user_vars = &self.user_vars;
         let lives = &self.accurate_live;
-        let must_live_at = &self.must_live;
+        let deficit_at = &self.deficit;
 
         let drop_range = &self.drop_range;
         let storage_range = &self.storage_range;
@@ -221,7 +219,7 @@ impl MirAnalyzer {
             .iter()
             .map(|(local, ty)| {
                 let ty = ty.clone();
-                let must_live_at = must_live_at.get(local).cloned().unwrap_or(Vec::new());
+                let deficit_at = deficit_at.get(local).cloned().unwrap_or(Vec::new());
                 let lives = lives.get(local).cloned().unwrap_or(Vec::new());
                 let shared_borrow = self.shared_live.get(local).cloned().unwrap_or(Vec::new());
                 let mutable_borrow = self.mutable_live.get(local).cloned().unwrap_or(Vec::new());
@@ -251,7 +249,7 @@ impl MirAnalyzer {
                         lives,
                         shared_borrow,
                         mutable_borrow,
-                        must_live_at,
+                        deficit_at,
                         drop,
                         drop_range,
                         storage_range,
@@ -267,7 +265,7 @@ impl MirAnalyzer {
                         mutable_borrow,
                         drop,
                         drop_range,
-                        must_live_at,
+                        deficit_at,
                         storage_range,
                         definitely_live_at,
                         maybe_init_at,

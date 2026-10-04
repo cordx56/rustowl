@@ -1,5 +1,5 @@
 ---
-source: tests/algorithm.rs
+source: crates/rustowl/tests/algorithm.rs
 expression: output
 ---
 
@@ -15,6 +15,8 @@ expression: output
 [2m     |[0m     [92m------------------[0m
 [2m 135 |[0m [2m}[0m
 [2m     |[0m [92m-[0m
+[2m 136 |[0m 
+[2m 137 |[0m [2m// A borrow of `s` from one iteration is used in the next iteration, where `s`[0m
 
 [96mLegend:[0m
   [92m---[0m definitely live (lifetime)

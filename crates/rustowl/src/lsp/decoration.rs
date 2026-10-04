@@ -715,7 +715,7 @@ impl utils::MirVisitor for CalcDecos {
             shared_borrow,
             mutable_borrow,
             drop_range,
-            must_live_at,
+            deficit_at,
             storage_range,
             name,
             drop,
@@ -729,7 +729,7 @@ impl utils::MirVisitor for CalcDecos {
                 shared_borrow,
                 mutable_borrow,
                 drop_range,
-                must_live_at,
+                deficit_at,
                 storage_range,
                 drop,
                 definitely_live_at,
@@ -741,7 +741,7 @@ impl utils::MirVisitor for CalcDecos {
                 shared_borrow,
                 mutable_borrow,
                 drop_range,
-                must_live_at,
+                deficit_at,
                 storage_range,
                 Some(name),
                 drop,
@@ -754,7 +754,7 @@ impl utils::MirVisitor for CalcDecos {
                 shared_borrow,
                 mutable_borrow,
                 drop_range,
-                must_live_at,
+                deficit_at,
                 storage_range,
                 drop,
                 definitely_live_at,
@@ -766,7 +766,7 @@ impl utils::MirVisitor for CalcDecos {
                 shared_borrow,
                 mutable_borrow,
                 drop_range,
-                must_live_at,
+                deficit_at,
                 storage_range,
                 None,
                 drop,
@@ -809,11 +809,10 @@ impl utils::MirVisitor for CalcDecos {
                     overlapped: false,
                 });
             }
-            let outlive = utils::exclude_ranges(must_live_at.clone(), definitely_live_at.clone());
-            for range in outlive {
+            for range in deficit_at {
                 self.decorations.push(Deco::Outlive {
                     local,
-                    range,
+                    range: *range,
                     hover_text: format!("{var_str} is required to live here"),
                     overlapped: false,
                 });

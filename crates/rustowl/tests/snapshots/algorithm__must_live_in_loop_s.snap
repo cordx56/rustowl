@@ -1,0 +1,31 @@
+---
+source: crates/rustowl/tests/algorithm.rs
+expression: output
+---
+
+[96m=== Variable 's' (1/1) in function 'must_live::in_loop' ===[0m
+
+[2m 140 |[0m     [95mlet[0m [95mmut[0m prev[2m:[0m [93mOption[0m[2m<[0m[95m&[0m[93mString[0m[2m>[0m = [93mNone[0m[2m;[0m
+[2m 141 |[0m     [95mfor[0m _ [95min[0m [96m0[0m..[96m2[0m [2m{[0m
+[2m 142 |[0m         [95mlet[0m [95mmut[0m s = [93mString[0m[2m::[0m[96mnew[0m[2m([0m[2m)[0m[2m;[0m
+[2m     |[0m             [92m-----[0m   [93m-------------[0m
+[2m 143 |[0m         s[2m.[0m[96mpush[0m[2m([0m[92m'a'[0m[2m)[0m[2m;[0m
+[2m     |[0m         [38;5;177m-[0m [92m----------[0m
+[2m 144 |[0m         [95mif[0m [95mlet[0m [93mSome[0m[2m([0mp[2m)[0m = prev [2m{[0m
+[2m     |[0m                [92m----[0m [91m~[0m    [91m~~~~[0m
+[2m 145 |[0m             [96mprintln[0m[96m![0m[2m([0m[92m"{p}"[0m[2m)[0m[2m;[0m
+[2m     |[0m             [91m~~~~~~~~~~~~~~~[0m
+[2m 146 |[0m         [2m}[0m
+[2m     |[0m         [92m-[0m
+[2m 147 |[0m         prev = [96mSome[0m[2m([0m[95m&[0ms[2m)[0m[2m;[0m
+[2m     |[0m         [92m-----------[0m [96m--[0m [92m-[0m
+[2m 148 |[0m     [2m}[0m
+[2m 149 |[0m [2m}[0m
+
+[96mLegend:[0m
+  [92m---[0m definitely live (lifetime)
+  [92m~~~[0m maybe live
+  [96m---[0m immutable borrow
+  [38;5;177m---[0m mutable borrow
+  [93m---[0m move / call
+  [91m~~~[0m outlive / shared mutable
