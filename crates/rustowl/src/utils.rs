@@ -1,4 +1,7 @@
 use crate::models::*;
+use std::path::PathBuf;
+use tower_lsp_server::gen_lsp_types::Uri;
+use url::Url;
 
 pub fn is_super_range(r1: Range, r2: Range) -> bool {
     (r1.from() < r2.from() && r2.until() <= r1.until())
@@ -153,6 +156,30 @@ pub fn range_is_multiline(s: &str, range: Range) -> bool {
         .any(|(_, c)| c == '\n')
 }
 
+/// Converts a `file:` URI from the client into a local path.
+///
+/// The `Uri` itself stays `fluent_uri::Uri`, so the protocol boundary keeps
+/// RFC 3986 parsing and validation. Turning a URI into a filesystem path is an
+/// OS concern rather than a protocol one, so that half is delegated to `url`,
+/// which already handles percent-decoding, Windows drive letters and UNC hosts.
+pub fn uri_to_file_path(uri: &Uri) -> Option<PathBuf> {
+    // `Url::to_file_path` does not check the scheme itself, and editors address
+    // local-looking paths under other schemes (`untitled:`, `git:`), which would
+    // otherwise convert happily. A scheme is ASCII, so this matches the
+    // ASCII-case-insensitive comparison `fluent_uri` itself would do.
+    if !uri.scheme().as_str().eq_ignore_ascii_case("file") {
+        return None;
+    }
+    let url = Url::parse(uri.as_str()).ok()?;
+    if url
+        .host_str()
+        .is_some_and(|host| !host.eq_ignore_ascii_case("localhost"))
+    {
+        return None;
+    }
+    url.to_file_path().ok()
+}
+
 pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
     let mut cleaned = String::new();
     if !is_source_clean(s) {
@@ -192,4 +219,67 @@ pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
         }
     }
     0
+}
+
+#[cfg(test)]
+mod uri_tests {
+    use super::*;
+
+    fn parse(uri: &str) -> Uri {
+        uri.parse()
+            .expect("test URI should be a valid RFC 3986 URI")
+    }
+
+    #[test]
+    fn converts_plain_file_uri() {
+        assert_eq!(
+            uri_to_file_path(&parse("file:///home/user/project")),
+            Some(PathBuf::from("/home/user/project"))
+        );
+    }
+
+    #[test]
+    fn percent_decodes_the_path() {
+        assert_eq!(
+            uri_to_file_path(&parse("file:///home/user/my%20project/a%2Bb.rs")),
+            Some(PathBuf::from("/home/user/my project/a+b.rs"))
+        );
+    }
+
+    #[test]
+    fn accepts_localhost_authority() {
+        assert_eq!(
+            uri_to_file_path(&parse("file://localhost/home/user")),
+            Some(PathBuf::from("/home/user"))
+        );
+    }
+
+    #[test]
+    fn rejects_non_file_scheme() {
+        // These have no host and an absolute path, so only an explicit scheme
+        // check keeps them from being read as local directories.
+        assert_eq!(uri_to_file_path(&parse("untitled:///home/user")), None);
+        assert_eq!(uri_to_file_path(&parse("git:///home/user")), None);
+        assert_eq!(uri_to_file_path(&parse("https://example.com/x")), None);
+    }
+
+    #[test]
+    fn rejects_remote_authority() {
+        // `file://host/share` is a share on another machine, not a local path,
+        // so treating it as local would silently analyse the wrong directory.
+        assert_eq!(
+            uri_to_file_path(&parse("file://server/share/project")),
+            None
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_requires_a_drive_letter() {
+        assert_eq!(
+            uri_to_file_path(&parse("file:///C:/Users/test")),
+            Some(PathBuf::from(r"C:\Users\test"))
+        );
+        assert_eq!(uri_to_file_path(&parse("file:///home/user")), None);
+    }
 }

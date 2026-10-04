@@ -114,7 +114,7 @@ impl<'a> FindVariablesByName<'a> {
         let base_name = Self::strip_async_suffix(name);
 
         // For trait implementations, normalize the name to `Type::method` format
-        // e.g., `<lsp::backend::Backend as tower_lsp::LanguageServer>::did_open`
+        // e.g., `<lsp::backend::Backend as tower_lsp_server::LanguageServer>::did_open`
         //    -> `lsp::backend::Backend::did_open`
         if let Some(normalized) = Self::normalize_trait_impl_name(base_name)
             && self.matches_normalized(&normalized)

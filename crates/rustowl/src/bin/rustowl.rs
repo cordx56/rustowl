@@ -6,7 +6,7 @@ use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 use rustowl::*;
 use std::env;
-use tower_lsp::{LspService, Server};
+use tower_lsp_server::{LspService, Server};
 use tracing_subscriber::filter::LevelFilter;
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
