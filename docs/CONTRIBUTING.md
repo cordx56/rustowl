@@ -116,7 +116,11 @@ Please write a test using [mini.test](https://github.com/echasnovski/mini.test) 
 
 ### Emacs Plugin
 
-<!-- TODO Complete this after @MuntasirSZN pr merges. -->
+You need to install [eask](https://github.com/emacs-eask/cli) for code formatting, linting, testing and whatnot.
+
+Now write your code, see [rustowl.el](../rustowl.el) and [emacs-tests](../emacs-tests).
+
+Please write a test using [ERT](https://www.gnu.org/software/emacs/manual/html_mono/ert.html) before submitting a pr, you can run tests using `eask script run test`. (needs `eask`)
 
 ## Before submitting PR
 
@@ -200,13 +204,11 @@ If the automated scripts are not available, ensure:
    ./scripts/run_nvim_tests.sh
    stylua .
    selene .
-   ```
-
-   <!-- TODO Add after @MuntasirSZN pr merges -->
-   <!-- # For Emacs
+   # For Emacs
    eask script run test
-   eask format elisp-autofmt rustowl.el
-   eask lint <linter> -->
+   eask script run format
+   eask lint <linter>
+   ```
 
 ## Troubleshooting
 
