@@ -1,5 +1,12 @@
 #!/bin/sh -e
 
+# Piped into `sh` from a URL:
+#
+#   curl -L https://raw.githubusercontent.com/cordx56/rustowl/refs/heads/main/scripts/installer | sh
+#
+# So it must stay self-contained. print_host_tuple below duplicates the one in
+# scripts/lib/common.sh on purpose; do not "fix" it by sourcing the library.
+
 # config
 RUSTOWL_VERSION="${1:-"latest"}"
 RUSTOWL_REPO_BASE_URL="https://github.com/cordx56/rustowl"

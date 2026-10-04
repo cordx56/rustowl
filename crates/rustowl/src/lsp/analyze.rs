@@ -64,15 +64,37 @@ impl Analyzer {
                 &path
             })
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
 
-        let metadata = if let Ok(child) = cargo_cmd.spawn()
-            && let Ok(output) = child.wait_with_output().await
-        {
-            let data = String::from_utf8_lossy(&output.stdout);
-            cargo_metadata::MetadataCommand::parse(data).ok()
-        } else {
-            None
+        let metadata = match cargo_cmd.spawn() {
+            Err(e) => {
+                log::warn!("could not launch cargo metadata: {e}");
+                None
+            }
+            Ok(child) => match child.wait_with_output().await {
+                Ok(output) => {
+                    // cargo's stderr is the only explanation for an invalid target.
+                    if !output.status.success() {
+                        log::warn!(
+                            "cargo metadata exited with {}: {}",
+                            output.status,
+                            String::from_utf8_lossy(&output.stderr).trim()
+                        );
+                    }
+                    let data = String::from_utf8_lossy(&output.stdout);
+                    match cargo_metadata::MetadataCommand::parse(data) {
+                        Ok(metadata) => Some(metadata),
+                        Err(e) => {
+                            log::warn!("could not parse cargo metadata output: {e}");
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("waiting for cargo metadata failed: {e}");
+                    None
+                }
+            },
         };
 
         if let Some(metadata) = metadata {

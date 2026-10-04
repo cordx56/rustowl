@@ -1,0 +1,61 @@
+# cargo-deny configuration. Enforced in CI by EmbarkStudios/cargo-deny-action.
+#
+# https://embarkstudios.github.io/cargo-deny/checks.html
+
+[graph]
+# Only the dependencies we actually ship, across every feature combination.
+all-features = true
+
+[advisories]
+version = 2
+# A yanked crate is a supply-chain risk: refuse to resolve to one.
+yanked = "deny"
+# The ignore list is deliberately empty. Every exception should be a comment
+# explaining the risk assessment, not a silent suppression.
+ignore = []
+
+[licenses]
+version = 2
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+    "0BSD",
+    "CC0-1.0",
+]
+# Licenses outside `allow` that are accepted with a recorded rationale. MPL-2.0
+# is deliberately not in `allow` above: it is permitted only for the named
+# crates, so a new MPL-2.0 dependency has to be a conscious decision.
+exceptions = [
+    # rustowl is MPL-2.0 itself.
+    { allow = ["MPL-2.0"], crate = "rustowl" },
+    { allow = ["MPL-2.0"], crate = "colored" },
+    # Weak copyleft, but permissively dual-licensed, so MIT/Apache-2.0 is
+    # always available as the chosen option.
+    { allow = ["LGPL-2.1-or-later"], crate = "r-efi" },
+    # CDLA-Permissive-2.0 is a permissive, OSI-approved licence.
+    { allow = ["CDLA-Permissive-2.0"], crate = "webpki-root-certs" },
+    # bzip2-1.0.6 is a valid licence identifier, but spelled the old way, so it
+    # is not resolvable as a modern SPDX expression.
+    { allow = ["bzip2-1.0.6"], crate = "libbz2-rs-sys" },
+]
+
+[bans]
+# Duplicate versions are extremely common in a real dependency graph and
+# compiling each once is rarely worth the churn, so this warns rather than fails.
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+[sources]
+# Only crates.io. A git or unknown-registry dependency is a supply-chain
+# decision that has to be made deliberately.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
