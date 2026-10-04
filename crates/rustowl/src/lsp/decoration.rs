@@ -1,7 +1,7 @@
 use crate::{lsp::progress, models::*, utils};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use tower_lsp::lsp_types;
+use tower_lsp_server::gen_lsp_types;
 
 // TODO: Variable name should be checked?
 //const ASYNC_MIR_VARS: [&str; 2] = ["_task_context", "__awaitee"];
@@ -70,7 +70,7 @@ pub enum Deco<R = Range> {
     },
 }
 impl Deco<Range> {
-    pub fn to_lsp_range(&self, s: &str) -> Deco<lsp_types::Range> {
+    pub fn to_lsp_range(&self, s: &str) -> Deco<gen_lsp_types::Range> {
         match self.clone() {
             Deco::Lifetime {
                 local,
@@ -80,17 +80,17 @@ impl Deco<Range> {
             } => {
                 let start = utils::index_to_line_char(s, range.from());
                 let end = utils::index_to_line_char(s, range.until());
-                let start = lsp_types::Position {
+                let start = gen_lsp_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = gen_lsp_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::Lifetime {
                     local,
-                    range: lsp_types::Range { start, end },
+                    range: gen_lsp_types::Range { start, end },
                     hover_text,
                     overlapped,
                 }
@@ -103,17 +103,17 @@ impl Deco<Range> {
             } => {
                 let start = utils::index_to_line_char(s, range.from());
                 let end = utils::index_to_line_char(s, range.until());
-                let start = lsp_types::Position {
+                let start = gen_lsp_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = gen_lsp_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::ImmBorrow {
                     local,
-                    range: lsp_types::Range { start, end },
+                    range: gen_lsp_types::Range { start, end },
                     hover_text,
                     overlapped,
                 }
@@ -126,17 +126,17 @@ impl Deco<Range> {
             } => {
                 let start = utils::index_to_line_char(s, range.from());
                 let end = utils::index_to_line_char(s, range.until());
-                let start = lsp_types::Position {
+                let start = gen_lsp_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = gen_lsp_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::MutBorrow {
                     local,
-                    range: lsp_types::Range { start, end },
+                    range: gen_lsp_types::Range { start, end },
                     hover_text,
                     overlapped,
                 }
@@ -149,17 +149,17 @@ impl Deco<Range> {
             } => {
                 let start = utils::index_to_line_char(s, range.from());
                 let end = utils::index_to_line_char(s, range.until());
-                let start = lsp_types::Position {
+                let start = gen_lsp_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = gen_lsp_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::Move {
                     local,
-                    range: lsp_types::Range { start, end },
+                    range: gen_lsp_types::Range { start, end },
                     hover_text,
                     overlapped,
                 }
@@ -172,17 +172,17 @@ impl Deco<Range> {
             } => {
                 let start = utils::index_to_line_char(s, range.from());
                 let end = utils::index_to_line_char(s, range.until());
-                let start = lsp_types::Position {
+                let start = gen_lsp_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = gen_lsp_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::Call {
                     local,
-                    range: lsp_types::Range { start, end },
+                    range: gen_lsp_types::Range { start, end },
                     hover_text,
                     overlapped,
                 }
@@ -195,17 +195,17 @@ impl Deco<Range> {
             } => {
                 let start = utils::index_to_line_char(s, range.from());
                 let end = utils::index_to_line_char(s, range.until());
-                let start = lsp_types::Position {
+                let start = gen_lsp_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = gen_lsp_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::SharedMut {
                     local,
-                    range: lsp_types::Range { start, end },
+                    range: gen_lsp_types::Range { start, end },
                     hover_text,
                     overlapped,
                 }
@@ -219,17 +219,17 @@ impl Deco<Range> {
             } => {
                 let start = utils::index_to_line_char(s, range.from());
                 let end = utils::index_to_line_char(s, range.until());
-                let start = lsp_types::Position {
+                let start = gen_lsp_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = gen_lsp_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::Outlive {
                     local,
-                    range: lsp_types::Range { start, end },
+                    range: gen_lsp_types::Range { start, end },
                     hover_text,
                     overlapped,
                 }
@@ -243,17 +243,17 @@ impl Deco<Range> {
             } => {
                 let start = utils::index_to_line_char(s, range.from());
                 let end = utils::index_to_line_char(s, range.until());
-                let start = lsp_types::Position {
+                let start = gen_lsp_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = gen_lsp_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::DefinitelyLive {
                     local,
-                    range: lsp_types::Range { start, end },
+                    range: gen_lsp_types::Range { start, end },
                     hover_text,
                     overlapped,
                 }
@@ -266,17 +266,17 @@ impl Deco<Range> {
             } => {
                 let start = utils::index_to_line_char(s, range.from());
                 let end = utils::index_to_line_char(s, range.until());
-                let start = lsp_types::Position {
+                let start = gen_lsp_types::Position {
                     line: start.0,
                     character: start.1,
                 };
-                let end = lsp_types::Position {
+                let end = gen_lsp_types::Position {
                     line: end.0,
                     character: end.1,
                 };
                 Deco::MaybeInitialized {
                     local,
-                    range: lsp_types::Range { start, end },
+                    range: gen_lsp_types::Range { start, end },
                     hover_text,
                     overlapped,
                 }
@@ -289,20 +289,20 @@ pub struct Decorations {
     pub is_analyzed: bool,
     pub status: progress::AnalysisStatus,
     pub path: Option<PathBuf>,
-    pub decorations: Vec<Deco<lsp_types::Range>>,
+    pub decorations: Vec<Deco<gen_lsp_types::Range>>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct CursorRequest {
-    pub position: lsp_types::Position,
-    pub document: lsp_types::TextDocumentIdentifier,
+    pub position: gen_lsp_types::Position,
+    pub document: gen_lsp_types::TextDocumentIdentifier,
 }
 impl CursorRequest {
     pub fn path(&self) -> Option<PathBuf> {
-        self.document.uri.to_file_path().ok()
+        utils::uri_to_file_path(&self.document.uri)
     }
-    pub fn position(&self) -> lsp_types::Position {
+    pub fn position(&self) -> gen_lsp_types::Position {
         self.position
     }
 }
