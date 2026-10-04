@@ -49,10 +49,12 @@ tokio = { version = "1", features = [
   "time",
 ] }
 tokio-util = "0.7"
-tower-lsp = "0.20"
+tower-lsp-server = { version = "0.24.0-rc.1", features = [
+  "url-fluent-uri"
+] }
 tree-sitter-highlight = "0.27"
 tree-sitter-rust = "0.24"
-uuid = { version = "1", features = ["v4"] }
+url = "2"
 zip = "8.6.0"
 
 [workspace.lints.rust]
