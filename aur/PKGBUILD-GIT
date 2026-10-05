@@ -8,6 +8,7 @@ pkgdesc='Visualize Ownership and Lifetimes in Rust'
 url='https://github.com/cordx56/rustowl'
 license=('MPL-2.0')
 makedepends=('git' 'clang' 'make' 'autoconf' 'cmake' 'curl')
+depends=('zlib')
 arch=('any')
 source=("git+https://github.com/cordx56/rustowl.git")
 sha256sums=('SKIP')

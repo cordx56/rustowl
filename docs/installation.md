@@ -6,6 +6,10 @@
 - [Installation](#installation)
   - [Table Of Contents](#table-of-contents)
   - [Quick Start](#quick-start)
+  - [Runtime dependencies](#runtime-dependencies)
+    - [Windows](#windows)
+    - [Linux](#linux)
+    - [macOS](#macos)
   - [cargo-binstall (recommended)](#cargo-binstall)
   - [Windows (winget)](#windows-winget)
   - [Arch Linux (AUR)](#arch-linux-aur)
@@ -22,6 +26,59 @@
 ```
 curl -L https://raw.githubusercontent.com/cordx56/rustowl/refs/heads/main/scripts/installer | sh
 ```
+
+## Runtime dependencies
+
+RustOwl ships two executables:
+
+- `rustowl` is the LSP server that editor extensions talk to.
+- `rustowlc` is the Rust compiler that performs the analysis.
+
+Those prebuilt compiler binaries are dynamically linked against a few system
+libraries that are not bundled, so they must be present on the machine that runs
+RustOwl. This is a runtime requirement only — building RustOwl from source does
+not need them.
+
+### Windows
+
+The prebuilt compiler binaries are built with the MSVC toolchain, so they require
+the Microsoft Visual C++ 2015-2022 Redistributable (x64). It is probably already installed
+on your machine. If not, you can install it with winget:
+
+```sh
+winget install Microsoft.VCRedist.2015+.x64
+```
+
+You can also download the installer directly from
+<https://aka.ms/vs/17/release/vc_redist.x64.exe>.
+
+Without it, launching RustOwl fails immediately with:
+
+```
+The code execution cannot proceed because VCRedist140_1.dll was not found.
+```
+
+### Linux
+
+The prebuilt `libLLVM` shipped by the Rust project has a system dependency on the
+zlib shared library (`libz.so.1`). Install it with your package manager:
+
+| Distribution | Command |
+| --- | --- |
+| Debian, Ubuntu | `sudo apt-get install -y zlib1g` |
+| Fedora, RHEL | `sudo dnf install -y zlib` |
+| Arch Linux | `sudo pacman -S zlib` (already in `base`) |
+| Alpine | `sudo apk add zlib` |
+
+Without it, RustOwl fails immediately with:
+
+```
+rustowlc: error while loading shared libraries: libz.so.1: cannot open shared object file: No such file or directory
+```
+
+### macOS
+
+Nothing is needed.
 
 ## cargo-binstall
 
