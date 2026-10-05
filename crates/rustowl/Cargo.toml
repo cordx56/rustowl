@@ -34,22 +34,23 @@ cargo_metadata.workspace = true
 clap = { workspace = true, features = ["cargo"] }
 clap_complete.workspace = true
 clap_complete_nushell.workspace = true
+clap-verbosity-flag.workspace = true
 flate2.workspace = true
 indexmap.workspace = true
 indicatif.workspace = true
-log.workspace = true
 process_alive.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
 rustversion.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-simple_logger.workspace = true
 tar.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tower-lsp.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 tree-sitter-highlight.workspace = true
 tree-sitter-rust.workspace = true
 uuid.workspace = true
@@ -63,8 +64,8 @@ clap.workspace = true
 clap_complete.workspace = true
 clap_complete_nushell.workspace = true
 clap_mangen.workspace = true
+clap-verbosity-flag.workspace = true
 regex.workspace = true
-rustc_version.workspace = true
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 tikv-jemalloc-sys.workspace = true
