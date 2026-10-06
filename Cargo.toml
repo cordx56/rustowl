@@ -64,6 +64,11 @@ unit_bindings = "warn"
 unsafe_op_in_unsafe_fn = "warn"
 unused_unsafe = "warn"
 
+[profile.dev.build-override]
+opt-level = 0
+debug = false
+codegen-units = 256
+
 [profile.release]
 opt-level = 3
 strip = "debuginfo"
@@ -73,6 +78,10 @@ codegen-units = 1
 [profile.release.package."*"]
 opt-level = 3
 strip = "symbols"
+
+[profile.release.build-override]
+opt-level = 0
+codegen-units = 256
 
 [profile.security]
 inherits = "release"
