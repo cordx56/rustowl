@@ -61,12 +61,6 @@ impl MirAnalyzer {
 
             let body = facts.body();
 
-            // collect local declared vars
-            // this must be done in local thread
-            let local_decls = body.get_local_decls();
-            // collect `RegionVid` for references' lifetime analysis
-            let region_vids = body.get_local_region_vids();
-
             let file_path = source_info.path().to_path_buf();
 
             // region variables should not be hashed (it results an error)
@@ -96,6 +90,12 @@ impl MirAnalyzer {
                 continue;
             }
             drop(cache);
+
+            // these are only needed to build the analyzer, so they stay behind the
+            // cache check: get_local_decls pretty-prints a type per local
+            let local_decls = body.get_local_decls();
+            // collect `RegionVid` for references' lifetime analysis
+            let region_vids = body.get_local_region_vids();
 
             // collect user defined vars
             // this must be done in local thread
