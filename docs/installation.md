@@ -39,6 +39,8 @@ libraries that are not bundled, so they must be present on the machine that runs
 RustOwl. This is a runtime requirement only — building RustOwl from source does
 not need them.
 
+They might be already available, given their amount of usage in the wild.
+
 ### Windows
 
 The prebuilt compiler binaries are built with the MSVC toolchain, so they require
@@ -61,7 +63,7 @@ The code execution cannot proceed because VCRedist140_1.dll was not found.
 ### Linux
 
 The prebuilt `libLLVM` shipped by the Rust project has a system dependency on the
-zlib shared library (`libz.so.1`). Install it with your package manager:
+zlib shared library (`libz.so.1`). It is probably already installed on your machin. If not, install it with your package manager:
 
 | Distribution | Command |
 | --- | --- |
