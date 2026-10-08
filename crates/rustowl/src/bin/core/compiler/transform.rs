@@ -57,12 +57,13 @@ impl<'tcx> TyCtxt<'tcx> {
             .basic_blocks
             .iter_enumerated()
             .map(|(block, bb_data)| {
-                let statements: Vec<_> = bb_data.statements.iter().collect();
-                let statements = statements
+                let statements = bb_data
+                    .statements
                     .iter()
                     .enumerate()
                     .map(|(statement_index, statement)| {
-                        Statement::from_rustc((*statement).clone()).transform(
+                        Statement::transform(
+                            statement,
                             fn_id,
                             BasicBlockId(block.as_usize()),
                             statement_index,
@@ -70,7 +71,8 @@ impl<'tcx> TyCtxt<'tcx> {
                         )
                     })
                     .collect();
-                let terminator = Terminator::from_rustc(bb_data.terminator().clone()).transform(
+                let terminator = Terminator::transform(
+                    bb_data.terminator(),
                     fn_id,
                     BasicBlockId(block.as_usize()),
                     bb_data.statements.len(),
@@ -328,8 +330,7 @@ impl_as_rustc!(
     rustc_middle::mir::Place<'tcx>,
 );
 impl Place<'_> {
-    pub fn transform(&self, fn_id: DefId) -> MirPlace {
-        let place = &self.as_rustc();
+    pub fn transform(place: &rustc_middle::mir::Place<'_>, fn_id: DefId) -> MirPlace {
         use rustc_middle::mir::ProjectionElem;
         let local = FnLocal::new(place.local.as_u32(), fn_id.as_u32());
         let projection = place
@@ -356,14 +357,14 @@ impl_as_rustc!(
     rustc_middle::mir::Operand<'tcx>,
 );
 impl Operand<'_> {
-    pub fn transform(&self, fn_id: DefId) -> MirOperand {
+    pub fn transform(operand: &rustc_middle::mir::Operand<'_>, fn_id: DefId) -> MirOperand {
         use rustc_middle::mir::Operand;
-        match &self.as_rustc() {
+        match operand {
             Operand::Copy(place) => MirOperand::Copy {
-                place: Place::from_rustc(*place).transform(fn_id),
+                place: Place::transform(place, fn_id),
             },
             Operand::Move(place) => MirOperand::Move {
-                place: Place::from_rustc(*place).transform(fn_id),
+                place: Place::transform(place, fn_id),
             },
             _ => MirOperand::Other,
         }
@@ -376,39 +377,39 @@ impl_as_rustc!(
     rustc_middle::mir::Rvalue<'tcx>,
 );
 impl Rvalue<'_> {
-    pub fn transform(&self, fn_id: DefId) -> MirRval {
+    pub fn transform(rval: &rustc_middle::mir::Rvalue<'_>, fn_id: DefId) -> MirRval {
         use rustc_middle::mir::Rvalue;
-        match &self.as_rustc() {
+        match rval {
             Rvalue::Use(operand, ..) => {
-                let operand = Operand::from_rustc(operand.clone()).transform(fn_id);
+                let operand = Operand::transform(operand, fn_id);
                 MirRval::Use { operand }
             }
             Rvalue::Repeat(operand, _) => {
-                let operand = Operand::from_rustc(operand.clone()).transform(fn_id);
+                let operand = Operand::transform(operand, fn_id);
                 MirRval::Repeat { operand }
             }
             Rvalue::Ref(_region, kind, place) => {
-                let place = Place::from_rustc(*place).transform(fn_id);
+                let place = Place::transform(place, fn_id);
                 let mutable = kind.mutability().is_mut();
                 MirRval::Ref { place, mutable }
             }
             Rvalue::Cast(_kind, operand, _ty) => {
-                let operand = Operand::from_rustc(operand.clone()).transform(fn_id);
+                let operand = Operand::transform(operand, fn_id);
                 MirRval::Cast { operand }
             }
             Rvalue::BinaryOp(_op, boxed) => {
-                let left = Operand::from_rustc((**boxed).0.clone()).transform(fn_id);
-                let right = Operand::from_rustc((**boxed).1.clone()).transform(fn_id);
+                let left = Operand::transform(&(**boxed).0, fn_id);
+                let right = Operand::transform(&(**boxed).1, fn_id);
                 MirRval::BinaryOp { left, right }
             }
             Rvalue::UnaryOp(_op, operand) => {
-                let operand = Operand::from_rustc(operand.clone()).transform(fn_id);
+                let operand = Operand::transform(operand, fn_id);
                 MirRval::UnaryOp { operand }
             }
             Rvalue::Aggregate(_kind, operands) => {
                 let fields = operands
                     .iter()
-                    .map(|v| Operand::from_rustc(v.clone()).transform(fn_id))
+                    .map(|v| Operand::transform(v, fn_id))
                     .collect();
                 MirRval::Aggregate { fields }
             }
@@ -424,7 +425,7 @@ impl_as_rustc!(
 );
 impl Statement<'_> {
     pub fn transform(
-        &self,
+        statement: &rustc_middle::mir::Statement<'_>,
         fn_id: DefId,
         block: BasicBlockId,
         statement_index: usize,
@@ -438,10 +439,10 @@ impl Statement<'_> {
         let range = location_ranges
             .get(&Location::from_rustc(location))
             .copied();
-        match &self.as_rustc().kind {
+        match &statement.kind {
             StatementKind::Assign(boxed) => {
-                let place = Place::from_rustc((**boxed).0).transform(fn_id);
-                let rval = Rvalue::from_rustc((**boxed).1.clone()).transform(fn_id);
+                let place = Place::transform(&(**boxed).0, fn_id);
+                let rval = Rvalue::transform(&(**boxed).1, fn_id);
                 let kind = MirStatementKind::Assign { place, rval };
                 MirStatement { kind, range }
             }
@@ -476,7 +477,7 @@ impl_as_rustc!(
 );
 impl Terminator<'_> {
     pub fn transform(
-        &self,
+        terminator: &rustc_middle::mir::Terminator<'_>,
         fn_id: DefId,
         block: BasicBlockId,
         statement_index: usize,
@@ -491,7 +492,7 @@ impl Terminator<'_> {
         let range = location_ranges
             .get(&Location::from_rustc(location))
             .copied();
-        match &self.as_rustc().kind {
+        match &terminator.kind {
             TerminatorKind::Goto { target } => MirTerminator {
                 kind: MirTerminatorKind::Goto {
                     target: BasicBlockId(target.as_usize()),
@@ -499,7 +500,7 @@ impl Terminator<'_> {
                 range,
             },
             TerminatorKind::SwitchInt { discr, targets } => {
-                let discr = Operand::from_rustc(discr.clone()).transform(fn_id);
+                let discr = Operand::transform(discr, fn_id);
                 let targets = targets
                     .all_targets()
                     .iter()
@@ -520,7 +521,7 @@ impl Terminator<'_> {
             },
             TerminatorKind::Drop { place, target, .. } => {
                 let kind = MirTerminatorKind::Drop {
-                    place: Place::from_rustc(*place).transform(fn_id),
+                    place: Place::transform(place, fn_id),
                     target: BasicBlockId(target.as_usize()),
                 };
                 MirTerminator { kind, range }
@@ -533,12 +534,12 @@ impl Terminator<'_> {
                 fn_span,
                 ..
             } => {
-                let func = Operand::from_rustc(func.clone()).transform(fn_id);
+                let func = Operand::transform(func, fn_id);
                 let args = args
                     .iter()
-                    .map(|v| Operand::from_rustc(v.node.clone()).transform(fn_id))
+                    .map(|v| Operand::transform(&v.node, fn_id))
                     .collect();
-                let destination = Place::from_rustc(*destination).transform(fn_id);
+                let destination = Place::transform(destination, fn_id);
                 let fn_range = range_from_span(
                     source_info.source(),
                     Span::from_rustc(*fn_span),
@@ -558,10 +559,10 @@ impl Terminator<'_> {
                 args,
                 fn_span,
             } => {
-                let func = Operand::from_rustc(func.clone()).transform(fn_id);
+                let func = Operand::transform(func, fn_id);
                 let args = args
                     .iter()
-                    .map(|v| Operand::from_rustc(v.node.clone()).transform(fn_id))
+                    .map(|v| Operand::transform(&v.node, fn_id))
                     .collect();
                 let fn_range = range_from_span(
                     source_info.source(),
@@ -576,7 +577,7 @@ impl Terminator<'_> {
                 MirTerminator { kind, range }
             }
             TerminatorKind::Assert { cond, target, .. } => {
-                let cond = Operand::from_rustc(cond.clone()).transform(fn_id);
+                let cond = Operand::transform(cond, fn_id);
                 MirTerminator {
                     kind: MirTerminatorKind::Assert {
                         cond,
@@ -586,8 +587,7 @@ impl Terminator<'_> {
                 }
             }
             _ => {
-                let successors = self
-                    .as_rustc()
+                let successors = terminator
                     .successors()
                     .map(|v| BasicBlockId(v.as_usize()))
                     .collect();
