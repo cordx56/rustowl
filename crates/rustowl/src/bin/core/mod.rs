@@ -133,17 +133,30 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
 }
 
 pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
-    if let Some(cache) = cache::CACHE.lock().unwrap().as_mut() {
-        cache.insert_cache(
-            analyzed.file_hash.clone(),
-            analyzed.mir_hash.clone(),
-            analyzed.analyzed.clone(),
-        );
-    }
+    let AnalyzeResult {
+        file_path,
+        file_hash,
+        mir_hash,
+        analyzed: function,
+    } = analyzed;
+    // cached by move, then taken back out for the emitted document, so the
+    // whole Function is never deep-cloned
+    let function = {
+        let mut cache = cache::CACHE.lock().unwrap();
+        match cache.as_mut() {
+            Some(cache) => {
+                cache.insert_cache(file_hash.clone(), mir_hash.clone(), function);
+                cache
+                    .take_cache(&file_hash, &mir_hash)
+                    .unwrap_or_else(|| unreachable!("just inserted"))
+            }
+            None => function,
+        }
+    };
     let krate = Crate(HashMap::from([(
-        analyzed.file_path.to_string_lossy().to_string(),
+        file_path.to_string_lossy().to_string(),
         File {
-            items: vec![analyzed.analyzed],
+            items: vec![function],
         },
     )]));
     // get currently-compiling crate name

@@ -30,7 +30,7 @@ pub struct MirAnalyzer {
     local_decls: IndexMap<LocalId, MirType>,
     user_vars: IndexMap<LocalId, (Range, String)>,
     input: PoloniusInput,
-    basic_blocks: Vec<MirBasicBlock>,
+    basic_blocks: IndexMap<BasicBlockId, MirBasicBlock>,
     fn_id: DefId,
     name: String,
     file_hash: String,
@@ -94,7 +94,7 @@ impl MirAnalyzer {
 
         let facts = tcx.get_borrowck_facts(fn_id);
         for (fn_id, mut facts) in facts {
-            let source_info = if let Some(v) = tcx.source_info_from_span(facts.body().span()) {
+            let source_info = if let Some(v) = source_info_from_span(tcx, facts.body().span()) {
                 v
             } else {
                 continue;
@@ -118,13 +118,13 @@ impl MirAnalyzer {
                 *cache = cache::get_cache(&tcx.crate_name());
             }
             if let Some(cache) = cache.as_mut() {
-                if let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash) {
+                if let Some(analyzed) = cache.take_cache(&file_hash, &mir_hash) {
                     log::debug!("MIR cache hit: {fn_id:?}");
                     result.push(MirAnalyzerInitResult::Cached(AnalyzeResult {
                         file_path: source_info.path().to_path_buf(),
                         file_hash: file_hash.clone(),
                         mir_hash: mir_hash.clone(),
-                        analyzed: analyzed.clone(),
+                        analyzed,
                     }));
                     if let Some(built_hash) = built_hash.map(str::to_owned) {
                         cache.index_built(
@@ -223,11 +223,12 @@ impl MirAnalyzer {
 
                 // overwrite live ranges by reference_local_live if the local is
                 // reference (lifetime of reference is differ from variable's lifetime)
+                let mut reference_local_live = reference_local_live;
                 for (local, ranges) in &mut maybe_init_range {
-                    if let Some(ref_ranges) = reference_local_live.get(local) {
+                    if let Some(ref_ranges) = reference_local_live.shift_remove(local) {
                         *ranges = ref_ranges.clone();
                         if let Some(ranges) = definitely_live_range.get_mut(local) {
-                            *ranges = ref_ranges.clone();
+                            *ranges = ref_ranges;
                         }
                     }
                 }
@@ -237,7 +238,7 @@ impl MirAnalyzer {
                     local_decls,
                     input,
                     user_vars,
-                    basic_blocks: basic_blocks.values().cloned().collect(),
+                    basic_blocks,
                     fn_id,
                     name,
                     file_hash,
@@ -259,39 +260,35 @@ impl MirAnalyzer {
 
     /// collect declared variables in MIR body
     /// final step of analysis
-    fn collect_decls(&self) -> Vec<MirDecl> {
-        let user_vars = &self.user_vars;
-        let lives = &self.accurate_live;
-        let deficit_at = &self.deficit;
-
-        let drop_range = &self.drop_range;
-        let storage_range = &self.storage_range;
-        self.local_decls
-            .iter()
+    fn collect_decls(&mut self) -> Vec<MirDecl> {
+        // taken out of self so each local's ranges are moved, not cloned
+        let mut deficit_at = std::mem::take(&mut self.deficit);
+        let mut lives = std::mem::take(&mut self.accurate_live);
+        let mut shared_live = std::mem::take(&mut self.shared_live);
+        let mut mutable_live = std::mem::take(&mut self.mutable_live);
+        let mut drop_range = std::mem::take(&mut self.drop_range);
+        let mut storage_range = std::mem::take(&mut self.storage_range);
+        let mut definitely_live_range = std::mem::take(&mut self.definitely_live_range);
+        let mut maybe_init_range = std::mem::take(&mut self.maybe_init_range);
+        let mut user_vars = std::mem::take(&mut self.user_vars);
+        let fn_id = self.fn_id;
+        std::mem::take(&mut self.local_decls)
+            .into_iter()
             .map(|(local, ty)| {
-                let ty = ty.clone();
-                let deficit_at = deficit_at.get(local).cloned().unwrap_or(Vec::new());
-                let lives = lives.get(local).cloned().unwrap_or(Vec::new());
-                let shared_borrow = self.shared_live.get(local).cloned().unwrap_or(Vec::new());
-                let mutable_borrow = self.mutable_live.get(local).cloned().unwrap_or(Vec::new());
-                let drop = self.is_drop(*local);
-                let drop_range = drop_range.get(local).cloned().unwrap_or(Vec::new());
-                let storage_range = storage_range.get(local).cloned().unwrap_or(Vec::new());
-                let fn_local = FnLocal::new(local.as_u32(), self.fn_id.as_u32());
+                let deficit_at = deficit_at.remove(&local).unwrap_or_default();
+                let lives = lives.remove(&local).unwrap_or_default();
+                let shared_borrow = shared_live.remove(&local).unwrap_or_default();
+                let mutable_borrow = mutable_live.remove(&local).unwrap_or_default();
+                let drop = self.is_drop(local);
+                let drop_range = drop_range.remove(&local).unwrap_or_default();
+                let storage_range = storage_range.remove(&local).unwrap_or_default();
+                let fn_local = FnLocal::new(local.as_u32(), fn_id.as_u32());
 
                 // liveness range based on CFG analysis
-                let definitely_live_at = self
-                    .definitely_live_range
-                    .get(local)
-                    .cloned()
-                    .unwrap_or_default();
-                let maybe_init_at = self
-                    .maybe_init_range
-                    .get(local)
-                    .cloned()
-                    .unwrap_or_default();
+                let definitely_live_at = definitely_live_range.remove(&local).unwrap_or_default();
+                let maybe_init_at = maybe_init_range.remove(&local).unwrap_or_default();
 
-                if let Some((span, name)) = user_vars.get(local).cloned() {
+                if let Some((span, name)) = user_vars.shift_remove(&local) {
                     MirDecl::User {
                         local: fn_local,
                         name,
@@ -336,9 +333,9 @@ impl MirAnalyzer {
     }
 
     /// analyze MIR to get JSON-serializable, TypeScript friendly representation
-    pub fn analyze(self) -> AnalyzeResult {
+    pub fn analyze(mut self) -> AnalyzeResult {
         let decls = self.collect_decls();
-        let basic_blocks = self.basic_blocks;
+        let basic_blocks: Vec<MirBasicBlock> = self.basic_blocks.into_values().collect();
 
         AnalyzeResult {
             file_path: self.file_path,
