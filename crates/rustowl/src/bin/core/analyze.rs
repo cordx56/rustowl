@@ -46,8 +46,15 @@ pub struct MirAnalyzer {
 }
 impl MirAnalyzer {
     /// initialize analyzer
-    pub fn init(tcx: TyCtxt<'_>, fn_id: DefId) -> Vec<MirAnalyzerInitResult> {
+    /// `built_hash` must be computed by the caller *before* borrowck runs: it
+    /// hashes `tcx.mir_built`, which borrowck steals.
+    pub fn init(
+        tcx: TyCtxt<'_>,
+        fn_id: DefId,
+        built_hash: Option<String>,
+    ) -> Vec<MirAnalyzerInitResult> {
         let mut result = Vec::new();
+        let built_hash = built_hash.as_deref();
 
         {
             let mut cache = cache::CACHE.lock().unwrap();
@@ -55,13 +62,12 @@ impl MirAnalyzer {
                 *cache = cache::get_cache(&tcx.crate_name());
             }
             let resolved = cache.as_ref().and_then(|cache| {
-                // Only hash MIR when there is a non-empty index to consult; a
-                // cold cache pays nothing for this lookup.
+                // Only consult the index when one exists; a cold cache pays
+                // nothing for the lookup.
                 if cache.by_built.is_empty() {
                     return None;
                 }
-                let built_hash = tcx.mir_built_hash(fn_id)?;
-                cache.bodies_for(&built_hash).and_then(|bodies| {
+                cache.bodies_for(built_hash?).and_then(|bodies| {
                     bodies
                         .iter()
                         .map(|body| {
@@ -85,8 +91,6 @@ impl MirAnalyzer {
                 return result;
             }
         }
-
-        let built_hash = tcx.mir_built_hash(fn_id);
 
         let facts = tcx.get_borrowck_facts(fn_id);
         for (fn_id, mut facts) in facts {
@@ -122,7 +126,7 @@ impl MirAnalyzer {
                         mir_hash: mir_hash.clone(),
                         analyzed: analyzed.clone(),
                     }));
-                    if let Some(built_hash) = built_hash.as_deref() {
+                    if let Some(built_hash) = built_hash.map(str::to_owned) {
                         cache.index_built(
                             built_hash,
                             cache::CachedBody {

@@ -59,8 +59,16 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     log::debug!("start borrowck of {def_id:?}");
 
+    // hashed before borrowck runs, because borrowck steals tcx.mir_built
+    let owl_tcx: compiler::TyCtxt<'_> = AsRustc::from_rustc(tcx);
+    let built_hash = owl_tcx.mir_built_hash(AsRustc::from_rustc(def_id));
+
     let default_borrowck_result = DEFAULT_MIR_BORROWCK(tcx, def_id);
-    let analyzers = MirAnalyzer::init(AsRustc::from_rustc(tcx), AsRustc::from_rustc(def_id));
+    let analyzers = MirAnalyzer::init(
+        AsRustc::from_rustc(tcx),
+        AsRustc::from_rustc(def_id),
+        built_hash,
+    );
     {
         let mut tasks = TASKS.lock().unwrap();
         for analyzer in analyzers {

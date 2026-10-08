@@ -41,8 +41,8 @@ impl CacheData {
             .or_default()
             .insert(mir_hash, analyzed);
     }
-    pub fn index_built(&mut self, built_hash: &str, body: CachedBody) {
-        let entry = self.by_built.entry(built_hash.to_string()).or_default();
+    pub fn index_built(&mut self, built_hash: String, body: CachedBody) {
+        let entry = self.by_built.entry(built_hash).or_default();
         if !entry.iter().any(|b| b.def_id == body.def_id) {
             entry.push(body);
         }
