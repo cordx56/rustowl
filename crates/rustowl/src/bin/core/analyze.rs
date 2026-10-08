@@ -46,8 +46,47 @@ pub struct MirAnalyzer {
 }
 impl MirAnalyzer {
     /// initialize analyzer
-    pub fn init(tcx: TyCtxt<'_>, fn_id: DefId) -> HashMap<DefId, MirAnalyzerInitResult> {
-        let mut result = HashMap::new();
+    pub fn init(tcx: TyCtxt<'_>, fn_id: DefId) -> Vec<MirAnalyzerInitResult> {
+        let mut result = Vec::new();
+
+        {
+            let mut cache = cache::CACHE.lock().unwrap();
+            if cache.is_none() {
+                *cache = cache::get_cache(&tcx.crate_name());
+            }
+            let resolved = cache.as_ref().and_then(|cache| {
+                // Only hash MIR when there is a non-empty index to consult; a
+                // cold cache pays nothing for this lookup.
+                if cache.by_built.is_empty() {
+                    return None;
+                }
+                let built_hash = tcx.mir_built_hash(fn_id)?;
+                cache.bodies_for(&built_hash).and_then(|bodies| {
+                    bodies
+                        .iter()
+                        .map(|body| {
+                            cache
+                                .get_cache(&body.file_hash, &body.mir_hash)
+                                .map(|analyzed| {
+                                    MirAnalyzerInitResult::Cached(AnalyzeResult {
+                                        file_path: body.file_path.clone(),
+                                        file_hash: body.file_hash.clone(),
+                                        mir_hash: body.mir_hash.clone(),
+                                        analyzed,
+                                    })
+                                })
+                        })
+                        .collect::<Option<Vec<_>>>()
+                })
+            });
+            if let Some(hits) = resolved {
+                log::debug!("all bodies of {fn_id:?} served from the mir_built index");
+                result.extend(hits);
+                return result;
+            }
+        }
+
+        let built_hash = tcx.mir_built_hash(fn_id);
 
         let facts = tcx.get_borrowck_facts(fn_id);
         for (fn_id, mut facts) in facts {
@@ -74,20 +113,28 @@ impl MirAnalyzer {
             if cache.is_none() {
                 *cache = cache::get_cache(&tcx.crate_name());
             }
-            if let Some(cache) = cache.as_mut()
-                && let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash)
-            {
-                log::debug!("MIR cache hit: {fn_id:?}");
-                result.insert(
-                    fn_id,
-                    MirAnalyzerInitResult::Cached(AnalyzeResult {
+            if let Some(cache) = cache.as_mut() {
+                if let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash) {
+                    log::debug!("MIR cache hit: {fn_id:?}");
+                    result.push(MirAnalyzerInitResult::Cached(AnalyzeResult {
                         file_path: source_info.path().to_path_buf(),
-                        file_hash,
-                        mir_hash,
+                        file_hash: file_hash.clone(),
+                        mir_hash: mir_hash.clone(),
                         analyzed: analyzed.clone(),
-                    }),
-                );
-                continue;
+                    }));
+                    if let Some(built_hash) = built_hash.as_deref() {
+                        cache.index_built(
+                            built_hash,
+                            cache::CachedBody {
+                                def_id: fn_id.as_u32(),
+                                file_hash,
+                                mir_hash,
+                                file_path,
+                            },
+                        );
+                    }
+                    continue;
+                }
             }
             drop(cache);
 
@@ -201,7 +248,7 @@ impl MirAnalyzer {
                     maybe_init_range,
                 }
             });
-            result.insert(fn_id, MirAnalyzerInitResult::Analyzer(analyzer));
+            result.push(MirAnalyzerInitResult::Analyzer(analyzer));
         }
         result
     }

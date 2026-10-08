@@ -63,7 +63,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
     let analyzers = MirAnalyzer::init(AsRustc::from_rustc(tcx), AsRustc::from_rustc(def_id));
     {
         let mut tasks = TASKS.lock().unwrap();
-        for (_, analyzer) in analyzers {
+        for analyzer in analyzers {
             match analyzer {
                 MirAnalyzerInitResult::Cached(cached) => {
                     handle_analyzed_result(tcx, cached);
