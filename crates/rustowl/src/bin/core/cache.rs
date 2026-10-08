@@ -19,6 +19,12 @@ impl CacheData {
     pub fn get_cache(&self, file_hash: &str, mir_hash: &str) -> Option<Function> {
         self.0.get(file_hash).and_then(|v| v.get(mir_hash)).cloned()
     }
+    /// Remove and return the entry, so the caller moves it instead of cloning.
+    pub fn take_cache(&mut self, file_hash: &str, mir_hash: &str) -> Option<Function> {
+        self.by_file
+            .get_mut(file_hash)
+            .and_then(|v| v.remove(mir_hash))
+    }
     pub fn insert_cache(&mut self, file_hash: String, mir_hash: String, analyzed: Function) {
         self.0
             .entry(file_hash)
