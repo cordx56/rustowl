@@ -39,7 +39,6 @@ indexmap.workspace = true
 indicatif.workspace = true
 log.workspace = true
 process_alive.workspace = true
-rayon.workspace = true
 reqwest.workspace = true
 rustversion.workspace = true
 serde.workspace = true
