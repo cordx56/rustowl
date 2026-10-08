@@ -1,4 +1,3 @@
-use rayon::prelude::*;
 use rustowl::{models::*, utils};
 use std::collections::{HashMap, HashSet};
 
@@ -51,20 +50,20 @@ pub fn get_borrow_live(
     }
     (
         shared_borrows
-            .into_par_iter()
+            .iter()
             .map(|(local, locations)| {
                 (
-                    local,
-                    utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, &locations)),
+                    *local,
+                    utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, locations)),
                 )
             })
             .collect(),
         mutable_borrows
-            .into_par_iter()
+            .iter()
             .map(|(local, locations)| {
                 (
-                    local,
-                    utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, &locations)),
+                    *local,
+                    utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, locations)),
                 )
             })
             .collect(),
@@ -256,14 +255,13 @@ pub fn reference_local_live_range(
     location_table: &PoloniusLocationTable,
     location_ranges: &LocationRanges,
 ) -> IndexMap<LocalId, Vec<Range>> {
+    let origin_live_on_entry = output.origin_live_on_entry();
     region_vids
         .map(|(local, vid)| {
-            let locations: Vec<_> = output
-                .origin_live_on_entry()
+            let polonius_vid = rustc_borrowck::consumers::PoloniusRegionVid::from(vid.into_rustc());
+            let locations: Vec<_> = origin_live_on_entry
                 .iter()
                 .filter_map(|(p, r)| {
-                    let polonius_vid =
-                        rustc_borrowck::consumers::PoloniusRegionVid::from(vid.into_rustc());
                     if r.iter()
                         .map(|v| v.into_rustc())
                         .find(|v| *v == polonius_vid)
@@ -299,11 +297,11 @@ pub fn get_range(
         }
     }
     local_locs
-        .into_par_iter()
+        .iter()
         .map(|(local, locations)| {
             (
-                local,
-                utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, &locations)),
+                *local,
+                utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, locations)),
             )
         })
         .collect()
