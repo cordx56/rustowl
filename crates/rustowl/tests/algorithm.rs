@@ -1,6 +1,7 @@
 use rustowl::models::{Crate, Function, MirDecl, Workspace};
 use rustowl::toolchain;
-use std::collections::{BTreeMap, HashMap};
+use serde::Serialize;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Once;
@@ -247,8 +248,30 @@ fn test_places_move_out_of_box_b() {
 /// features: the `rustowl_perf_test_dummy` lib plus the `dummy-app` bin.
 const GOLDEN_FUNCTION_COUNT: usize = 74;
 
-/// Canonical form of a merged [`Workspace`]: crate -> file -> functions.
-type GoldenWorkspace = BTreeMap<String, BTreeMap<String, Vec<Function>>>;
+/// What the golden records for one function.
+#[derive(Serialize)]
+struct GoldenFunction {
+    fn_id: u32,
+    name: String,
+    decls: Vec<MirDecl>,
+}
+
+/// Everything rustowlc printed, keyed crate -> file, before any collapsing.
+type RawWorkspace = BTreeMap<String, BTreeMap<String, Vec<Function>>>;
+
+/// Canonical form of a [`RawWorkspace`]: crate -> file -> functions.
+type GoldenWorkspace = BTreeMap<String, BTreeMap<String, Vec<GoldenFunction>>>;
+
+/// Append every function of one document to its (crate, file) bucket.
+fn accumulate(into: &mut RawWorkspace, workspace: Workspace) {
+    let Workspace(crates) = workspace;
+    for (crate_name, Crate(files)) in crates {
+        let per_file = into.entry(crate_name).or_default();
+        for (file, payload) in files {
+            per_file.entry(file).or_default().extend(payload.items);
+        }
+    }
+}
 
 /// Strip the fixture root, so the snapshot carries no absolute path.
 fn relative_file_name(file: &str, fixture_root: &Path) -> String {
@@ -306,8 +329,26 @@ fn normalize_decl(decl: &mut MirDecl) {
     }
 }
 
-fn normalize_items(mut items: Vec<Function>) -> Vec<Function> {
-    items.sort_by(|a, b| a.name.cmp(&b.name).then(a.fn_id.cmp(&b.fn_id)));
+/// Canonical form of one delivered function: decls by local id, and the ranges
+/// inside each decl by source order.
+fn normalize_function(function: &mut Function) {
+    function.decls.sort_by_key(decl_local_id);
+    for decl in &mut function.decls {
+        normalize_decl(decl);
+    }
+}
+
+/// Serialize a function for the duplicate-content check.
+fn canonical_json(function: &Function) -> Result<String, String> {
+    serde_json::to_string(function).map_err(|error| error.to_string())
+}
+
+/// Collapse repeated deliveries of one function, refusing to do so silently.
+fn normalize_items(mut items: Vec<Function>) -> Vec<GoldenFunction> {
+    items.sort_by_key(|item| item.fn_id);
+    for item in &mut items {
+        normalize_function(item);
+    }
 
     let mut deduped: Vec<Function> = Vec::with_capacity(items.len());
     for item in items {
@@ -315,7 +356,7 @@ fn normalize_items(mut items: Vec<Function>) -> Vec<Function> {
             && previous.fn_id == item.fn_id
         {
             assert!(
-                serde_json::to_string(previous).ok() == serde_json::to_string(&item).ok(),
+                canonical_json(previous) == canonical_json(&item),
                 "fn_id {} ({}) was reported twice with different contents; collapsing \
                  them would hide the difference",
                 item.fn_id,
@@ -326,29 +367,31 @@ fn normalize_items(mut items: Vec<Function>) -> Vec<Function> {
         }
     }
 
-    for function in &mut deduped {
-        function.decls.sort_by_key(decl_local_id);
-        for decl in &mut function.decls {
-            normalize_decl(decl);
-        }
-    }
     deduped
+        .into_iter()
+        .map(|function| GoldenFunction {
+            fn_id: function.fn_id,
+            name: function.name,
+            decls: function.decls,
+        })
+        .collect()
 }
 
-fn normalize_workspace(merged: Workspace, fixture_root: &Path) -> GoldenWorkspace {
-    let Workspace(crates) = merged;
-    let mut workspace = GoldenWorkspace::new();
-    for (crate_name, Crate(files)) in crates {
-        let mut per_file = BTreeMap::new();
-        for (file, payload) in files {
-            per_file.insert(
-                relative_file_name(&file, fixture_root),
-                normalize_items(payload.items),
-            );
-        }
-        workspace.insert(crate_name, per_file);
-    }
-    workspace
+fn normalize_workspace(raw: RawWorkspace, fixture_root: &Path) -> GoldenWorkspace {
+    raw.into_iter()
+        .map(|(crate_name, files)| {
+            let per_file = files
+                .into_iter()
+                .map(|(file, items)| {
+                    (
+                        relative_file_name(&file, fixture_root),
+                        normalize_items(items),
+                    )
+                })
+                .collect();
+            (crate_name, per_file)
+        })
+        .collect()
 }
 
 async fn workspace_packages(cargo: &str, fixture: &Path) -> Vec<String> {
@@ -364,22 +407,49 @@ async fn workspace_packages(cargo: &str, fixture: &Path) -> Vec<String> {
         .collect()
 }
 
+/// Fail loudly instead of letting the sysroot lookup kill the whole test binary.
+fn require_toolchain_sysroot() {
+    let runtime = &*toolchain::FALLBACK_RUNTIME_DIR;
+    let sysroot = toolchain::sysroot_from_runtime(runtime);
+    assert!(
+        runtime.is_dir() && sysroot.is_dir(),
+        "no rustowl toolchain sysroot at {sysroot:?}. `test_golden_workspace` compiles \
+         the perf fixture against it, and running the test without one makes \
+         toolchain::get_runtime_dir() download a toolchain and, on failure, \
+         std::process::exit(1), killing every test in this file with a bare exit \
+         code. Populate it first, e.g. via ./scripts/toolchain."
+    );
+}
+
 /// A cargo command wired the way `rustowl check` wires it: `rustowlc` as the
-/// compiler, and the wrapper's sysroot folded into the rustflags.
+/// compiler, the wrapper's sysroot in the rustflags, and nothing ambient.
+///
+/// RUSTC is overridden because `setup_cargo_command` resolves `rustowlc` next to the
+/// test harness in `target/<profile>/deps/`, where no such binary exists.
 async fn rustowl_cargo_command(rustowlc: &str, target_dir: &Path) -> tokio::process::Command {
     let mut command = toolchain::setup_cargo_command().await;
+    let sysroot = toolchain::get_sysroot().await;
     command
         .env("RUSTC", rustowlc)
         .env("RUSTC_WORKSPACE_WRAPPER", rustowlc)
         .env("CARGO_TARGET_DIR", target_dir)
         .env("RUSTOWL_CACHE_DIR", target_dir.join("cache"))
+        .env(
+            "CARGO_ENCODED_RUSTFLAGS",
+            format!("--sysroot={}", sysroot.display()),
+        )
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_BUILD_RUSTFLAGS")
+        .env_remove("CARGO_BUILD_TARGET")
         .env_remove("RUSTOWL_OPEN_FILES")
         .env_remove("RUSTC_WRAPPER");
     command
 }
 
-/// Analyse the perf fixture and return every `Workspace` document merged into one.
-async fn analyze_perf_fixture(fixture: &Path) -> Workspace {
+/// Analyse the perf fixture, returning every `Workspace` document rustowlc printed,
+/// accumulated raw. Not via `Workspace::merge`: merging dedups by `fn_id` before
+/// `normalize_items` can assert on a repeated delivery.
+async fn analyze_perf_fixture(fixture: &Path) -> RawWorkspace {
     let rustowlc = env!("CARGO_BIN_EXE_rustowlc");
     let cargo = toolchain::get_executable_path("cargo").await;
     let target_dir = fixture.join("target").join("owl-golden");
@@ -425,23 +495,33 @@ async fn analyze_perf_fixture(fixture: &Path) -> Workspace {
         String::from_utf8_lossy(&output.stderr)
     );
 
+    // Cargo's `--message-format=json` shares stdout; `File` requires a top-level
+    // `items` field, which no cargo message carries.
     let mut documents = 0;
-    let mut merged = Workspace(HashMap::new());
+    let mut raw = RawWorkspace::new();
     for line in stdout.lines() {
         if let Ok(workspace) = serde_json::from_str::<Workspace>(line) {
             documents += 1;
-            merged.merge(workspace);
+            accumulate(&mut raw, workspace);
         }
     }
     assert!(
         documents > 0,
         "rustowlc printed no Workspace documents\nstdout:\n{stdout}"
     );
-    merged
+    raw
 }
 
+/// The golden baseline: everything `rustowl check` computes for the perf fixture,
+/// in canonical form.
+///
+/// Valid only for the pinned toolchain: `rust-toolchain.toml`'s nightly builds
+/// `rustowlc`, while `scripts/toolchain`'s sysroot checks the fixture. Recorded names
+/// are compiler-generated, so a rustc bump changes them — regenerate and review.
 #[tokio::test]
 async fn test_golden_workspace() {
+    require_toolchain_sysroot();
+
     let fixture: PathBuf = [env!("CARGO_MANIFEST_DIR"), "perf-tests", "dummy-package"]
         .iter()
         .collect();
