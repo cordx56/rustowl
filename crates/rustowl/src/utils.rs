@@ -129,10 +129,9 @@ pub fn is_source_clean(s: &str) -> bool {
 }
 pub fn clean_source(s: &str) -> String {
     if is_source_clean(s) {
-        // it seems that the compiler is ignoring CR
-        s.replace('\r', "")
-    } else {
         s.to_string()
+    } else {
+        s.replace('\r', "")
     }
 }
 
@@ -192,4 +191,70 @@ pub fn line_char_to_index(s: &str, mut line: u32, char: u32) -> u32 {
         }
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn r(a: u32, b: u32) -> Range {
+        Range::new(Loc(a), Loc(b)).expect("test range must be non-empty")
+    }
+
+    #[test]
+    fn range_new_rejects_empty_and_inverted() {
+        assert!(Range::new(Loc(5), Loc(5)).is_none());
+        assert!(Range::new(Loc(9), Loc(2)).is_none());
+        assert!(Range::new(Loc(0), Loc(1)).is_some());
+    }
+
+    #[test]
+    fn merge_ranges_merges_overlap_containment_and_adjacency() {
+        assert_eq!(merge_ranges(r(0, 5), r(3, 8)), Some(r(0, 8)));
+        assert_eq!(merge_ranges(r(0, 10), r(2, 4)), Some(r(0, 10)));
+        assert_eq!(merge_ranges(r(0, 3), r(3, 6)), Some(r(0, 6)));
+    }
+
+    #[test]
+    fn merge_ranges_rejects_disjoint() {
+        assert_eq!(merge_ranges(r(0, 3), r(5, 8)), None);
+        assert_eq!(merge_ranges(r(0, 3), r(4, 8)), None);
+    }
+
+    #[test]
+    fn eliminated_ranges_passes_through_trivial_input() {
+        assert!(eliminated_ranges(vec![]).is_empty());
+        assert_eq!(eliminated_ranges(vec![r(4, 9)]), vec![r(4, 9)]);
+    }
+
+    #[test]
+    fn eliminated_ranges_keeps_disjoint_ranges() {
+        assert_eq!(
+            eliminated_ranges(vec![r(0, 3), r(6, 9)]),
+            vec![r(0, 3), r(6, 9)]
+        );
+    }
+
+    #[test]
+    fn eliminated_ranges_flattens_overlaps() {
+        assert_eq!(eliminated_ranges(vec![r(0, 5), r(3, 8)]), vec![r(0, 8)]);
+        assert_eq!(eliminated_ranges(vec![r(0, 10), r(2, 4)]), vec![r(0, 10)]);
+        assert_eq!(eliminated_ranges(vec![r(0, 3), r(3, 6)]), vec![r(0, 6)]);
+    }
+
+    #[test]
+    fn eliminated_ranges_cascades_transitively() {
+        assert_eq!(
+            eliminated_ranges(vec![r(0, 3), r(2, 5), r(4, 7)]),
+            vec![r(0, 7)]
+        );
+    }
+
+    #[test]
+    fn clean_source_strips_cr() {
+        assert!(is_source_clean("a\nb"));
+        assert!(!is_source_clean("a\r\nb"));
+        assert_eq!(clean_source("a\r\nb"), "a\nb");
+        assert_eq!(clean_source("a\nb"), "a\nb");
+    }
 }
