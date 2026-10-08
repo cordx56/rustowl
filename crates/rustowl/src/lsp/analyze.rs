@@ -124,7 +124,7 @@ impl Analyzer {
         }
     }
 
-    pub async fn analyze(&self, all_targets: bool, all_features: bool) -> AnalyzeEventIter {
+    pub async fn analyze(&self, all_targets: bool, all_features: bool) -> Option<AnalyzeEventIter> {
         if let Some(metadata) = &self.metadata {
             self.analyze_package(metadata, all_targets, all_features)
                 .await
@@ -138,7 +138,7 @@ impl Analyzer {
         metadata: &cargo_metadata::Metadata,
         all_targets: bool,
         all_features: bool,
-    ) -> AnalyzeEventIter {
+    ) -> Option<AnalyzeEventIter> {
         let package_names: Vec<_> = metadata
             .workspace_packages()
             .iter()
@@ -154,7 +154,12 @@ impl Analyzer {
                 .current_dir(&self.path)
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null());
-            command.spawn().unwrap().wait().await.ok();
+            match command.spawn() {
+                Ok(mut child) => {
+                    child.wait().await.ok();
+                }
+                Err(e) => log::warn!("could not launch cargo clean: {e}"),
+            }
         }
 
         let mut command = toolchain::setup_cargo_command().await;
@@ -187,7 +192,13 @@ impl Analyzer {
         let package_count = metadata.packages.len();
 
         tracing::debug!("start analyzing package {package_names:?}");
-        let mut child = command.spawn().unwrap();
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(e) => {
+                tracing::warn!("could not launch cargo check: {e}");
+                return None;
+            }
+        };
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
         let (sender, receiver) = mpsc::channel(1024);
@@ -220,14 +231,14 @@ impl Analyzer {
             notify_c.notify_one();
         });
 
-        AnalyzeEventIter {
+        Some(AnalyzeEventIter {
             receiver,
             notify,
             child,
-        }
+        })
     }
 
-    async fn analyze_single_file(&self, path: &Path) -> AnalyzeEventIter {
+    async fn analyze_single_file(&self, path: &Path) -> Option<AnalyzeEventIter> {
         let sysroot = toolchain::get_sysroot().await;
         let rustowlc_path = toolchain::get_executable_path("rustowlc").await;
 
@@ -252,7 +263,16 @@ impl Analyzer {
         }
 
         tracing::debug!("start analyzing {}", path.display());
-        let mut child = command.spawn().unwrap();
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(e) => {
+                tracing::warn!(
+                    "could not launch cargo check for {}: {e}",
+                    path.display()
+                );
+                return None;
+            }
+        };
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
         let (sender, receiver) = mpsc::channel(1024);
@@ -270,11 +290,11 @@ impl Analyzer {
             notify_c.notify_one();
         });
 
-        AnalyzeEventIter {
+        Some(AnalyzeEventIter {
             receiver,
             notify,
             child,
-        }
+        })
     }
 }
 
