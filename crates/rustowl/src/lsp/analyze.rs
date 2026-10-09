@@ -123,9 +123,14 @@ impl Analyzer {
         }
     }
 
-    pub async fn analyze(&self, all_targets: bool, all_features: bool) -> Option<AnalyzeEventIter> {
+    pub async fn analyze(
+        &self,
+        all_targets: bool,
+        all_features: bool,
+        open_files: &[PathBuf],
+    ) -> Option<AnalyzeEventIter> {
         if let Some(metadata) = &self.metadata {
-            self.analyze_package(metadata, all_targets, all_features)
+            self.analyze_package(metadata, all_targets, all_features, open_files)
                 .await
         } else {
             self.analyze_single_file(&self.path).await
@@ -137,6 +142,7 @@ impl Analyzer {
         metadata: &cargo_metadata::Metadata,
         all_targets: bool,
         all_features: bool,
+        open_files: &[PathBuf],
     ) -> Option<AnalyzeEventIter> {
         let package_names: Vec<_> = metadata
             .workspace_packages()
@@ -182,6 +188,16 @@ impl Analyzer {
 
         if is_cache() {
             set_cache_path(&mut command, target_dir);
+        }
+
+        if !open_files.is_empty() {
+            // the compiler skips bodies whose file is not in this list
+            let joined = open_files
+                .iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join(":");
+            command.env("RUSTOWL_OPEN_FILES", joined);
         }
 
         if log::max_level()

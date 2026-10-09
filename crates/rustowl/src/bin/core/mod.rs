@@ -9,10 +9,11 @@ use rustc_interface::interface;
 use rustc_middle::{ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
+use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
+use std::sync::{Arc, LazyLock, Mutex, atomic::AtomicBool};
 use tokio::{
     runtime::{Builder, Runtime},
     task::JoinSet,
@@ -53,6 +54,65 @@ static DEFAULT_MIR_BORROWCK: LazyLock<
     providers.mir_borrowck
 });
 
+/// The set of file paths the editor has open, or `None` when unset.
+///
+/// `:`-separated, matching what the LSP sends. Unset or malformed means eager
+/// mode, so a plain `rustowl check` still analyses everything.
+fn open_files() -> Option<HashSet<PathBuf>> {
+    let value = std::env::var("RUSTOWL_OPEN_FILES").ok()?;
+    let set: HashSet<PathBuf> = value
+        .split(':')
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .collect();
+    Some(set)
+}
+
+/// Whether `def_id`'s source file is one the editor asked for.
+///
+/// The list is resolved once per crate and cached against the crate name, so
+/// this is a path comparison rather than a per-root recomputation.
+fn is_file_open(tcx: TyCtxt<'_>, def_id: LocalDefId) -> bool {
+    static CACHE: LazyLock<Mutex<HashMap<String, Arc<Option<HashSet<PathBuf>>>>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
+    let set = {
+        let mut cache = CACHE.lock().unwrap();
+        cache
+            .entry(crate_name)
+            .or_insert_with(|| Arc::new(open_files()))
+            .clone()
+    };
+    let Some(set) = set.as_ref() else {
+        return true;
+    };
+    let source_map = tcx.sess.source_map();
+    let span = tcx.def_span(def_id.to_def_id());
+    let file_name = source_map.span_to_filename(span);
+    let Some(local_path) = file_name.into_local_path() else {
+        return true;
+    };
+    let path = source_map
+        .path_mapping()
+        .to_real_filename(source_map.working_dir(), local_path);
+    match path.local_path() {
+        // local_path is relative to the working directory, while the editor
+        // sends absolute paths, so compare against the absolute form
+        Some(local) => {
+            let absolute = if local.is_absolute() {
+                local.to_path_buf()
+            } else {
+                match source_map.working_dir().local_path() {
+                    Some(dir) => dir.join(local),
+                    None => return true,
+                }
+            };
+            set.contains(&absolute)
+        }
+        None => true,
+    }
+}
+
 fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
     local.queries.mir_borrowck = mir_borrowck;
 }
@@ -64,6 +124,14 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
     let built_hash = owl_tcx.mir_built_hash(AsRustc::from_rustc(def_id));
 
     let default_borrowck_result = DEFAULT_MIR_BORROWCK(tcx, def_id);
+
+    // The editor told us which files it has open; analysing the rest would
+    // spend a second borrow check per body for decorations nobody can see.
+    // Absent or malformed input means eager mode.
+    if !is_file_open(tcx, def_id) {
+        return default_borrowck_result;
+    }
+
     let analyzers = MirAnalyzer::init(
         AsRustc::from_rustc(tcx),
         AsRustc::from_rustc(def_id),

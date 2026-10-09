@@ -120,7 +120,8 @@ async fn handle_show_command(opts: cli::Show) {
         }
     };
 
-    let Some(mut iter) = analyzer.analyze(opts.all_targets, opts.all_features).await else {
+    // no open-file list, so everything is analysed
+    let Some(mut iter) = analyzer.analyze(opts.all_targets, opts.all_features, &[]).await else {
         log::error!("could not launch cargo; nothing analyzed");
         return;
     };
