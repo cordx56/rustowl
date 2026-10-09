@@ -1,5 +1,4 @@
 use super::*;
-use rustowl::utils;
 
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
@@ -174,11 +173,9 @@ impl LocationRanges {
                 };
                 // source_callsite is wide, for macro invocation
                 let span_callsite = body.as_rustc().source_info(location).span.source_callsite();
-                let range = if let Some(v) = range_from_span(
-                    &source_info.source,
-                    AsRustc::from_rustc(span_callsite),
-                    source_info.offset,
-                ) {
+                let range = if let Some(v) =
+                    range_from_span(source_info, AsRustc::from_rustc(span_callsite))
+                {
                     v
                 } else {
                     continue;
@@ -211,9 +208,7 @@ impl LocationRanges {
 
                 // If a range spans multiple lines, we ignore the range which may be annoying,
                 // except for a user variable related one.
-                if !touches_user_local
-                    && utils::range_is_multiline(source_info.cleaned_source(), range)
-                {
+                if !touches_user_local && source_info.index().is_multiline(&range) {
                     continue;
                 }
 
@@ -540,11 +535,7 @@ impl Terminator<'_> {
                     .map(|v| Operand::transform(&v.node, fn_id))
                     .collect();
                 let destination = Place::transform(destination, fn_id);
-                let fn_range = range_from_span(
-                    source_info.source(),
-                    Span::from_rustc(*fn_span),
-                    source_info.offset,
-                );
+                let fn_range = range_from_span(source_info, Span::from_rustc(*fn_span));
                 let kind = MirTerminatorKind::Call {
                     func,
                     args,
@@ -564,11 +555,7 @@ impl Terminator<'_> {
                     .iter()
                     .map(|v| Operand::transform(&v.node, fn_id))
                     .collect();
-                let fn_range = range_from_span(
-                    source_info.source(),
-                    Span::from_rustc(*fn_span),
-                    source_info.offset,
-                );
+                let fn_range = range_from_span(source_info, Span::from_rustc(*fn_span));
                 let kind = MirTerminatorKind::TailCall {
                     func,
                     args,
