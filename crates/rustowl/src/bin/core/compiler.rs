@@ -3,6 +3,7 @@ use rustowl::{models::*, utils};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 
 macro_rules! impl_as_rustc {
     (
@@ -41,9 +42,40 @@ pub use borrowck::*;
 pub use hash::Hasher;
 pub use transform::*;
 
-fn range_from_span(source: &str, span: Span, offset: u32) -> Option<Range> {
-    let from = Loc::new(source, span.lo(), offset);
-    let until = Loc::new(source, span.hi(), offset);
+/// Sources are read from disk once per file, not once per body.
+pub fn source_info_from_span(tcx: TyCtxt<'_>, span: Span) -> Option<Arc<SourceInfo>> {
+    static MEMO: LazyLock<Mutex<HashMap<PathBuf, Arc<SourceInfo>>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    let mut memo = MEMO.lock().unwrap();
+    let span = *span.as_rustc();
+    let source_map = tcx.as_rustc().sess.source_map();
+    let file_name = source_map.span_to_filename(span);
+    let source_file = source_map.get_source_file(&file_name)?;
+    let offset = source_file.start_pos.0;
+    let path = source_map
+        .path_mapping()
+        .to_real_filename(source_map.working_dir(), file_name.into_local_path()?);
+    let (_work_dir, path) = path.embeddable_name(rustc_span::RemapPathScopeComponents::DIAGNOSTICS);
+    let path = path.to_path_buf();
+    if let Some(info) = memo.get(&path) {
+        return Some(info.clone());
+    }
+    let source = std::fs::read_to_string(&path).unwrap();
+    let cleaned_source = utils::clean_source(&source);
+    let info = Arc::new(SourceInfo {
+        offset,
+        path,
+        source,
+        cleaned_source,
+        index: OnceLock::new(),
+    });
+    memo.insert(info.path.clone(), info.clone());
+    Some(info)
+}
+
+fn range_from_span(source_info: &SourceInfo, span: Span) -> Option<Range> {
+    let from = Loc::new(&source_info.source, span.lo(), source_info.offset);
+    let until = Loc::new(&source_info.source, span.hi(), source_info.offset);
     Range::new(from, until)
 }
 
@@ -52,6 +84,18 @@ pub struct SourceInfo {
     path: PathBuf,
     source: String,
     cleaned_source: String,
+    index: OnceLock<SourceIndex>,
+}
+impl SourceInfo {
+    pub fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    /// Line index over `cleaned_source`, built once and reused.
+    pub fn index(&self) -> &SourceIndex {
+        self.index
+            .get_or_init(|| SourceIndex::new(&self.cleaned_source))
+    }
 }
 impl SourceInfo {
     pub fn path(&self) -> &Path {
@@ -89,28 +133,6 @@ impl<'tcx> TyCtxt<'tcx> {
             .into_iter()
             .map(|(k, v)| (AsRustc::from_rustc(k), AsRustc::from_rustc(v)))
             .collect()
-    }
-
-    pub fn source_info_from_span(&self, span: Span) -> Option<SourceInfo> {
-        let source_map = self.as_rustc().sess.source_map();
-        let file_name = source_map.span_to_filename(*span.as_rustc());
-        let source_file = source_map.get_source_file(&file_name)?;
-        let offset = source_file.start_pos.0;
-
-        let file_name = source_map
-            .path_mapping()
-            .to_real_filename(source_map.working_dir(), file_name.into_local_path()?);
-        let (_work_dir, path) =
-            file_name.embeddable_name(rustc_span::RemapPathScopeComponents::DIAGNOSTICS);
-        let path = path.to_path_buf();
-        let source = std::fs::read_to_string(&path).unwrap();
-        let cleaned_source = utils::clean_source(&source);
-        Some(SourceInfo {
-            offset,
-            path,
-            source,
-            cleaned_source,
-        })
     }
 
     pub fn crate_name(&self) -> String {
@@ -167,7 +189,7 @@ impl<'tcx> Body<'tcx> {
             .filter_map(|debug| match &debug.value {
                 rustc_middle::mir::VarDebugInfoContents::Place(place) => {
                     let span = AsRustc::from_rustc(debug.source_info.span);
-                    range_from_span(&source_info.source, span, source_info.offset).map(|range| {
+                    range_from_span(source_info, span).map(|range| {
                         (
                             AsRustc::from_rustc(place.local),
                             (range, debug.name.as_str().to_owned()),
@@ -203,9 +225,7 @@ impl<'tcx> Body<'tcx> {
                 let span = AsRustc::from_rustc(stmt.source_info.span);
                 match &stmt.kind {
                     StatementKind::StorageLive(local) => {
-                        if let Some(range) =
-                            range_from_span(&source_info.source, span, source_info.offset)
-                        {
+                        if let Some(range) = range_from_span(source_info, span) {
                             storage_live
                                 .entry(AsRustc::from_rustc(*local))
                                 .or_default()
@@ -213,9 +233,7 @@ impl<'tcx> Body<'tcx> {
                         }
                     }
                     StatementKind::StorageDead(local) => {
-                        if let Some(range) =
-                            range_from_span(&source_info.source, span, source_info.offset)
-                        {
+                        if let Some(range) = range_from_span(source_info, span) {
                             storage_dead
                                 .entry(AsRustc::from_rustc(*local))
                                 .or_default()
