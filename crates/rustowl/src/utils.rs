@@ -136,20 +136,7 @@ pub fn clean_source(s: &str) -> String {
 }
 
 pub fn range_is_multiline(s: &str, range: Range) -> bool {
-    let mut cleaned = String::new();
-    if !is_source_clean(s) {
-        cleaned = clean_source(s);
-    }
-    let source_clean = if cleaned.is_empty() { s } else { &cleaned };
-
-    let from = range.from().0 as usize;
-    let until = range.until().0 as usize;
-    source_clean
-        .chars()
-        .enumerate()
-        .skip(from)
-        .take(until - from)
-        .any(|(_, c)| c == '\n')
+    SourceIndex::new(s).is_multiline(&range)
 }
 
 pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
