@@ -74,8 +74,10 @@ pub fn source_info_from_span(tcx: TyCtxt<'_>, span: Span) -> Option<Arc<SourceIn
 }
 
 fn range_from_span(source_info: &SourceInfo, span: Span) -> Option<Range> {
-    let from = Loc::new(&source_info.source, span.lo(), source_info.offset);
-    let until = Loc::new(&source_info.source, span.hi(), source_info.offset);
+    let index = source_info.index();
+    let offset = source_info.offset();
+    let from = index.loc_at(span.lo().saturating_sub(offset) as usize);
+    let until = index.loc_at(span.hi().saturating_sub(offset) as usize);
     Range::new(from, until)
 }
 

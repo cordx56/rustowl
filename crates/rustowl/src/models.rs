@@ -46,8 +46,9 @@ pub struct SourceIndex {
     cleaned: String,
     /// char index of the first character of each line
     line_starts: Vec<usize>,
-    /// byte offset -> number of chars before it, for O(1) span conversion
-    char_offsets: Vec<u32>,
+    /// byte offset in the **raw** source -> number of non-CR chars before it,
+    /// which is what `Loc` holds
+    raw_offsets: Vec<u32>,
 }
 impl SourceIndex {
     pub fn new(raw: &str) -> Self {
@@ -62,28 +63,37 @@ impl SourceIndex {
                 line_starts.push(index + 1);
             }
         }
-        // kept for callers that index the cleaned text (is_multiline, line_text);
-        // span conversion uses Loc::new, which counts over the raw source
-        let mut char_offsets = Vec::with_capacity(cleaned.len() + 1);
+        // Loc counts non-CR chars in the raw source, so the table for span
+        // conversion is built over `raw`, not over `cleaned`
+        let mut raw_offsets = vec![0u32; raw.len() + 1];
         let mut count = 0;
-        for (byte, _) in cleaned.char_indices() {
-            char_offsets.resize(byte, count);
-            count += 1;
+        for (byte, c) in raw.char_indices() {
+            let len = c.len_utf8();
+            for slot in &mut raw_offsets[byte..byte + len] {
+                *slot = count;
+            }
+            if c != '\r' {
+                count += 1;
+            }
         }
-        char_offsets.resize(cleaned.len() + 1, count);
+        *raw_offsets.last_mut().unwrap() = count;
         Self {
             cleaned,
             line_starts,
-            char_offsets,
+            raw_offsets,
         }
     }
 
-    /// Number of chars before `byte` in the cleaned source.
-    pub fn chars_before(&self, byte: usize) -> u32 {
-        self.char_offsets
-            .get(byte)
-            .copied()
-            .unwrap_or_else(|| self.char_offsets[self.char_offsets.len() - 1])
+    /// The `Loc` for a byte offset into the raw source.
+    ///
+    /// Matches [`Loc::new`] with a zero offset, including its walk back to a
+    /// character boundary: every byte inside a character maps to that
+    /// character's start, which is what the walk-back lands on.
+    pub fn loc_at(&self, byte: usize) -> Loc {
+        match self.raw_offsets.get(byte) {
+            Some(count) => Loc(*count),
+            None => Loc(*self.raw_offsets.last().unwrap()),
+        }
     }
 
     pub fn cleaned(&self) -> &str {
@@ -564,6 +574,29 @@ mod tests {
         let index = SourceIndex::new("ab\ncd\n");
         assert_eq!(index.line_text(0), "ab");
         assert_eq!(index.line_text(1), "cd");
+    }
+
+    #[test]
+    fn source_index_loc_at_matches_loc_new() {
+        // loc_at must agree with Loc::new at every byte offset, for CRLF and
+        // multi-byte text alike; this is the equivalence the span path needs
+        for raw in [
+            "a\r\nb\r\ncc",
+            "a\nb\nc",
+            "漢\r\n😀x\r\nend",
+            "no newline at all",
+            "",
+            "\r\n\r\n",
+        ] {
+            let index = SourceIndex::new(raw);
+            for byte in 0..=raw.len() {
+                assert_eq!(
+                    index.loc_at(byte),
+                    Loc::new(raw, byte as u32, 0),
+                    "raw {raw:?} byte {byte}"
+                );
+            }
+        }
     }
 
     #[test]
