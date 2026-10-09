@@ -34,6 +34,107 @@ impl Loc {
     }
 }
 
+/// CR-cleaned source plus a line-start table, built once per file.
+///
+/// A line index over CR-stripped source, built once per file.
+///
+/// Note the offset contract: `Loc` is a count of characters in the **raw**
+/// source with CRs skipped, not an index into `cleaned()`. Span offsets are
+/// byte positions in the raw source. The two differ by one per preceding CR,
+/// so converting a span needs a table built over the raw text, not this one.
+pub struct SourceIndex {
+    cleaned: String,
+    /// char index of the first character of each line
+    line_starts: Vec<usize>,
+    /// byte offset -> number of chars before it, for O(1) span conversion
+    char_offsets: Vec<u32>,
+}
+impl SourceIndex {
+    pub fn new(raw: &str) -> Self {
+        let cleaned = if raw.contains('\r') {
+            raw.replace('\r', "")
+        } else {
+            raw.to_string()
+        };
+        let mut line_starts = vec![0];
+        for (index, c) in cleaned.chars().enumerate() {
+            if c == '\n' {
+                line_starts.push(index + 1);
+            }
+        }
+        // kept for callers that index the cleaned text (is_multiline, line_text);
+        // span conversion uses Loc::new, which counts over the raw source
+        let mut char_offsets = Vec::with_capacity(cleaned.len() + 1);
+        let mut count = 0;
+        for (byte, _) in cleaned.char_indices() {
+            char_offsets.resize(byte, count);
+            count += 1;
+        }
+        char_offsets.resize(cleaned.len() + 1, count);
+        Self {
+            cleaned,
+            line_starts,
+            char_offsets,
+        }
+    }
+
+    /// Number of chars before `byte` in the cleaned source.
+    pub fn chars_before(&self, byte: usize) -> u32 {
+        self.char_offsets
+            .get(byte)
+            .copied()
+            .unwrap_or_else(|| self.char_offsets[self.char_offsets.len() - 1])
+    }
+
+    pub fn cleaned(&self) -> &str {
+        &self.cleaned
+    }
+
+    /// `(line, char)` for a character offset into the cleaned source.
+    pub fn locate(&self, char_pos: u32) -> (usize, usize) {
+        let pos = char_pos as usize;
+        let line = match self.line_starts.binary_search(&pos) {
+            Ok(line) => line,
+            Err(next) => next - 1,
+        };
+        (line, pos - self.line_starts[line])
+    }
+
+    pub fn line_text(&self, line: usize) -> &str {
+        let Some(&from) = self.line_starts.get(line) else {
+            return "";
+        };
+        let until = self
+            .line_starts
+            .get(line + 1)
+            .map(|end| end - 1)
+            .unwrap_or(self.cleaned.chars().count());
+        let from = self
+            .cleaned
+            .char_indices()
+            .nth(from)
+            .map(|(i, _)| i)
+            .unwrap_or(self.cleaned.len());
+        let until = self
+            .cleaned
+            .char_indices()
+            .nth(until)
+            .map(|(i, _)| i)
+            .unwrap_or(self.cleaned.len());
+        if from >= until {
+            return "";
+        }
+        self.cleaned[from..until].trim_end_matches('\n')
+    }
+
+    /// Whether the character range spans a line break.
+    pub fn is_multiline(&self, range: &Range) -> bool {
+        let (from, _) = self.locate(range.from().0);
+        let (until, _) = self.locate(range.until().0);
+        from != until
+    }
+}
+
 impl std::ops::Add<i32> for Loc {
     type Output = Loc;
     fn add(self, rhs: i32) -> Self::Output {
@@ -380,7 +481,7 @@ pub struct Function {
 
 #[cfg(test)]
 mod tests {
-    use super::Loc;
+    use super::{Loc, Range, SourceIndex};
 
     #[test]
     fn loc_new_subtracts_offset() {
@@ -412,5 +513,63 @@ mod tests {
     fn loc_new_ignores_cr_ahead_of_the_position() {
         assert_eq!(Loc::new("a\r\nb", 3, 0), Loc(2));
         assert_eq!(Loc::new("a\nb", 2, 0), Loc(2));
+    }
+
+    #[test]
+    fn source_index_locates_within_a_crlf_file() {
+        // the CR is stripped, so the third line starts at char 4
+        let index = SourceIndex::new("a\r\nb\r\ncc");
+        assert_eq!(index.locate(0), (0, 0));
+        assert_eq!(index.locate(1), (0, 1));
+        assert_eq!(index.locate(2), (1, 0));
+        assert_eq!(index.locate(4), (2, 0));
+        assert_eq!(index.locate(5), (2, 1));
+        // the column is unaffected by the stripped CRs: byte 8 of the
+        // cleaned source is char 6 counting CRs, but the table
+        // already dropped them
+        assert_eq!(index.locate(5), (2, 1));
+        assert_eq!(index.cleaned(), "a\nb\ncc");
+    }
+
+    #[test]
+    fn source_index_handles_mixed_line_endings() {
+        let index = SourceIndex::new("a\r\nb\nc");
+        assert_eq!(index.locate(0), (0, 0));
+        assert_eq!(index.locate(2), (1, 0));
+        assert_eq!(index.locate(4), (2, 0));
+    }
+
+    #[test]
+    fn source_index_counts_chars_not_bytes() {
+        // 漢 is 3 bytes, 😀 is 4; each is one char. Char 1 is the
+        // newline itself, so line 1 starts at char 2.
+        let index = SourceIndex::new("漢\n😀x");
+        assert_eq!(index.locate(0), (0, 0));
+        assert_eq!(index.locate(1), (0, 1));
+        assert_eq!(index.locate(2), (1, 0));
+        assert_eq!(index.locate(3), (1, 1));
+    }
+
+    #[test]
+    fn source_index_bounds() {
+        let index = SourceIndex::new("ab\ncd");
+        assert_eq!(index.locate(0), (0, 0));
+        // past the end stays on the last line rather than panicking
+        assert_eq!(index.locate(5), (1, 2));
+        assert_eq!(index.locate(99), (1, 96));
+    }
+
+    #[test]
+    fn source_index_line_text() {
+        let index = SourceIndex::new("ab\ncd\n");
+        assert_eq!(index.line_text(0), "ab");
+        assert_eq!(index.line_text(1), "cd");
+    }
+
+    #[test]
+    fn source_index_is_multiline() {
+        let index = SourceIndex::new("ab\ncd\nef");
+        assert!(index.is_multiline(&Range::new(Loc(1), Loc(4)).unwrap()));
+        assert!(!index.is_multiline(&Range::new(Loc(0), Loc(2)).unwrap()));
     }
 }
