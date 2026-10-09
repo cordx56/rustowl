@@ -41,23 +41,25 @@ pub fn merge_ranges(r1: Range, r2: Range) -> Option<Range> {
 }
 
 /// eliminate common ranges and flatten ranges
+///
+/// Sorting by start position and sweeping once reaches the same partition the
+/// pairwise merge did: any two ranges that overlap or abut land in the same
+/// output group, so repeated merging collapses to a single linear pass.
 pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
-    let mut i = 0;
-    'outer: while i < ranges.len() {
-        let mut j = 0;
-        while j < ranges.len() {
-            if i != j
-                && let Some(merged) = merge_ranges(ranges[i], ranges[j])
-            {
-                ranges[i] = merged;
-                ranges.remove(j);
-                continue 'outer;
+    ranges.sort_by_key(|r| (r.from().0, r.until().0));
+    let mut result: Vec<Range> = Vec::with_capacity(ranges.len());
+    for range in ranges {
+        match result.last_mut() {
+            // abutting ranges merge too, as merge_ranges did
+            Some(last) if last.from() <= range.from() && range.from() <= last.until() => {
+                if let Some(merged) = merge_ranges(*last, range) {
+                    *last = merged;
+                }
             }
-            j += 1;
+            _ => result.push(range),
         }
-        i += 1;
     }
-    ranges
+    result
 }
 
 /// Compute intersection of two range lists.
