@@ -7,7 +7,6 @@ baselines/
 
 # Nix stuff can be ignored, see https://github.com/cordx56/rustowl/issues/59
 result*
-.envrc
 .luarc.json
 
 # Ignore completions and man dir, they are generated at build time
@@ -19,3 +18,5 @@ benchmark-summary.*
 .eask/
 rustowl-up-autoloads.el
 rustowl.elc
+
+/.direnv
