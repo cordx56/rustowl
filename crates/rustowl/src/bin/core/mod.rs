@@ -157,20 +157,13 @@ pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
         mir_hash,
         analyzed: function,
     } = analyzed;
-    // cached by move, then taken back out for the emitted document, so the
-    // whole Function is never deep-cloned
-    let function = {
-        let mut cache = cache::CACHE.lock().unwrap();
-        match cache.as_mut() {
-            Some(cache) => {
-                cache.insert_cache(file_hash.clone(), mir_hash.clone(), function);
-                cache
-                    .take_cache(&file_hash, &mir_hash)
-                    .unwrap_or_else(|| unreachable!("just inserted"))
-            }
-            None => function,
-        }
-    };
+    // The entry has to stay in the cache. It is what a later compile reads to
+    // skip borrowck for an unchanged root, so a copy here buys a whole skipped
+    // borrow check -- worth far more than the copy costs. Taking it back out
+    // instead leaves the cache empty, and every root is then re-analysed.
+    if let Some(cache) = cache::CACHE.lock().unwrap().as_mut() {
+        cache.insert_cache(file_hash, mir_hash, function.clone());
+    }
     let krate = Crate(HashMap::from([(
         file_path.to_string_lossy().to_string(),
         File {
