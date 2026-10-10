@@ -27,11 +27,7 @@ pub mod core;
 use tikv_jemalloc_sys as _;
 
 fn main() -> std::process::ExitCode {
-    simple_logger::SimpleLogger::new()
-        .env()
-        .with_colors(true)
-        .init()
-        .unwrap();
+    rustowl::initialize_logging(tracing_subscriber::filter::LevelFilter::INFO);
 
     // rayon panics without this only on Windows
     #[cfg(target_os = "windows")]

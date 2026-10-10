@@ -321,6 +321,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap-verbosity-flag"
+version = "3.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d92b1fab272fe943881b77cc6e920d6543e5b1bfadbd5ed81c7c5a755742394"
+dependencies = [
+ "clap",
+ "tracing-core",
+]
+
+[[package]]
 name = "clap_builder"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -399,15 +409,6 @@ name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
-
-[[package]]
-name = "colored"
-version = "3.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
-dependencies = [
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "combine"
@@ -1250,6 +1251,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lazy_static"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
+
+[[package]]
 name = "libbz2-rs-sys"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1317,6 +1324,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "matchers"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
+dependencies = [
+ "regex-automata",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1356,6 +1372,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
+name = "nu-ansi-term"
+version = "0.50.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1368,15 +1393,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "num_threads"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -1872,6 +1888,7 @@ dependencies = [
  "anstyle",
  "cargo_metadata",
  "clap",
+ "clap-verbosity-flag",
  "clap_complete",
  "clap_complete_nushell",
  "clap_mangen",
@@ -1880,22 +1897,21 @@ dependencies = [
  "indexmap",
  "indicatif",
  "insta",
- "log",
  "process_alive",
  "rayon",
  "regex",
  "reqwest",
- "rustc_version",
  "rustversion",
  "serde",
  "serde_json",
- "simple_logger",
  "tar",
  "tempfile",
  "tikv-jemalloc-sys",
  "tokio",
  "tokio-util",
  "tower-lsp",
+ "tracing",
+ "tracing-subscriber",
  "tree-sitter-highlight",
  "tree-sitter-rust",
  "uuid",
@@ -2043,6 +2059,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sharded-slab"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
+dependencies = [
+ "lazy_static",
+]
+
+[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2085,18 +2110,6 @@ name = "similar"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
-
-[[package]]
-name = "simple_logger"
-version = "5.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7038d0e96661bf9ce647e1a6f6ef6d6f3663f66d9bf741abf14ba4876071c17"
-dependencies = [
- "colored",
- "log",
- "time",
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "slab"
@@ -2252,6 +2265,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread_local"
+version = "1.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "tikv-jemalloc-sys"
 version = "0.7.1+5.3.1-0-g81034ce1f1373e37dc865038e1bc8eeecf559ce8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2269,13 +2291,10 @@ checksum = "cdb87b95ec50ddfa440816d227a17b2ccbdda963a316a727fda0fc4334f7d134"
 dependencies = [
  "deranged",
  "js-sys",
- "libc",
  "num-conv",
- "num_threads",
  "powerfmt",
  "serde_core",
  "time-core",
- "time-macros",
 ]
 
 [[package]]
@@ -2283,16 +2302,6 @@ name = "time-core"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1c906769ad99c88eaa54e728060edef082f8e358ff32030cb7c7d315e81109"
-
-[[package]]
-name = "time-macros"
-version = "0.2.32"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e689342a48d2ea927c87ea50cabf8594854bf940e9310208848d680d668ed85"
-dependencies = [
- "num-conv",
- "time-core",
-]
 
 [[package]]
 name = "tinystr"
@@ -2493,6 +2502,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+ "valuable",
+]
+
+[[package]]
+name = "tracing-log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
+dependencies = [
+ "log",
+ "once_cell",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-subscriber"
+version = "0.3.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
+dependencies = [
+ "matchers",
+ "nu-ansi-term",
+ "once_cell",
+ "regex-automata",
+ "sharded-slab",
+ "smallvec",
+ "thread_local",
+ "tracing",
+ "tracing-core",
+ "tracing-log",
 ]
 
 [[package]]
@@ -2613,6 +2652,12 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "valuable"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "walkdir"

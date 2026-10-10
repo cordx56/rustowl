@@ -6,8 +6,8 @@ use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 use rustowl::*;
 use std::env;
-use std::io;
 use tower_lsp::{LspService, Server};
+use tracing_subscriber::filter::LevelFilter;
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
@@ -16,15 +16,6 @@ use crate::cli::{Cli, Commands, ToolchainCommands};
 // MIT License
 #[cfg(all(any(target_os = "linux", target_os = "macos"), not(miri)))]
 use tikv_jemalloc_sys as _;
-
-fn set_log_level(default: log::LevelFilter) {
-    log::set_max_level(
-        env::var("RUST_LOG")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(default),
-    );
-}
 
 /// Handles the execution of RustOwl CLI commands.
 ///
@@ -53,10 +44,10 @@ async fn handle_command(command: Commands) {
             )
             .await
             {
-                log::info!("Successfully analyzed");
+                tracing::info!("Successfully analyzed");
                 std::process::exit(0);
             }
-            log::error!("Analyze failed");
+            tracing::error!("Analyze failed");
             std::process::exit(1);
         }
         Commands::Clean => {
@@ -87,9 +78,13 @@ async fn handle_command(command: Commands) {
             }
         }
         Commands::Completions(command_options) => {
-            set_log_level(log::LevelFilter::Off);
             let shell = command_options.shell;
-            generate(shell, &mut Cli::command(), "rustowl", &mut io::stdout());
+            generate(
+                shell,
+                &mut Cli::command(),
+                "rustowl",
+                &mut std::io::stdout(),
+            );
         }
         Commands::Show(command_options) => {
             handle_show_command(command_options).await;
@@ -109,13 +104,13 @@ async fn handle_show_command(opts: cli::Show) {
         .clone()
         .unwrap_or_else(|| env::current_dir().unwrap_or(".".into()));
 
-    log::info!("Analyzing project at {path:?}");
+    tracing::info!("Analyzing project at {path:?}");
 
     // Create an analyzer and run analysis
     let analyzer = match Analyzer::new(&path).await {
         Ok(a) => a,
         Err(e) => {
-            log::error!("Failed to create analyzer: {e:?}");
+            tracing::error!("Failed to create analyzer: {e:?}");
             std::process::exit(1);
         }
     };
@@ -136,7 +131,7 @@ async fn handle_show_command(opts: cli::Show) {
                 }
             }
             rustowl::lsp::analyze::AnalyzerEvent::CrateChecked { package, .. } => {
-                log::debug!("Analyzed: {package}");
+                tracing::debug!("Analyzed: {package}");
             }
         }
     }
@@ -144,7 +139,7 @@ async fn handle_show_command(opts: cli::Show) {
     let crate_data = match crate_data {
         Some(data) => data,
         None => {
-            log::error!("Analysis produced no results");
+            tracing::error!("Analysis produced no results");
             std::process::exit(1);
         }
     };
@@ -156,41 +151,48 @@ async fn handle_show_command(opts: cli::Show) {
         &opts.function_path,
         &opts.variable,
     ) {
-        log::error!("{e}");
+        tracing::error!("{e}");
         std::process::exit(1);
     }
 }
 
-/// Initializes the logging system with colors and default log level
-fn initialize_logging() {
-    simple_logger::SimpleLogger::new()
-        .with_colors(true)
-        .init()
-        .unwrap();
-    set_log_level(log::LevelFilter::Info);
-}
+/// Displays detailed version information.
+fn display_version() {
+    println!("RustOwl {}", clap::crate_version!());
 
-/// Handles the case when no command is provided (version display or LSP server mode)
-async fn handle_no_command(args: Cli) {
-    if args.version {
-        display_version(args.quiet == 0);
-        return;
+    let tag = env!("GIT_TAG");
+    println!("git_tag:{}", if tag.is_empty() { "not found" } else { tag });
+
+    let commit = env!("GIT_COMMIT_HASH");
+    println!(
+        "commit_hash:{}",
+        if commit.is_empty() {
+            "not found"
+        } else {
+            commit
+        }
+    );
+
+    let build_time = env!("BUILD_TIME");
+    println!(
+        "build_time:{}",
+        if build_time.is_empty() {
+            "not found"
+        } else {
+            build_time
+        }
+    );
+
+    let rustc_version = env!("RUSTC_VERSION");
+    if rustc_version.is_empty() {
+        println!("build_env:not found");
+    } else {
+        println!("build_env:{},{}", rustc_version, env!("RUSTOWL_TOOLCHAIN"));
     }
-
-    start_lsp_server().await;
-}
-
-/// Displays the version information
-fn display_version(show_prefix: bool) {
-    if show_prefix {
-        print!("RustOwl ");
-    }
-    println!("v{}", clap::crate_version!());
 }
 
 /// Starts the LSP server
 async fn start_lsp_server() {
-    set_log_level("warn".parse().unwrap());
     eprintln!("RustOwl v{}", clap::crate_version!());
     eprintln!("This is an LSP server. You can use --help flag to show help.");
 
@@ -207,12 +209,27 @@ async fn start_lsp_server() {
 
 #[tokio::main]
 async fn main() {
-    initialize_logging();
+    let short_version = env::args().any(|arg| arg == "-V");
 
     let parsed_args = Cli::parse();
 
+    let level = match &parsed_args.command {
+        Some(Commands::Completions(_)) if !parsed_args.verbosity.is_present() => LevelFilter::OFF,
+        _ => log_level_for(&parsed_args.verbosity, parsed_args.command.is_none()),
+    };
+    initialize_logging(level);
+
+    if parsed_args.version {
+        if short_version {
+            println!("RustOwl {}", clap::crate_version!());
+        } else {
+            display_version();
+        }
+        return;
+    }
+
     match parsed_args.command {
         Some(command) => handle_command(command).await,
-        None => handle_no_command(parsed_args).await,
+        None => start_lsp_server().await,
     }
 }

@@ -57,7 +57,7 @@ impl MirAnalyzer {
                 continue;
             };
             let name = tcx.def_name(fn_id);
-            log::debug!("facts of {fn_id:?} ({name}) prepared; start analyze...");
+            tracing::debug!("facts of {fn_id:?} ({name}) prepared; start analyze...");
 
             let body = facts.body();
 
@@ -83,7 +83,7 @@ impl MirAnalyzer {
             if let Some(cache) = cache.as_mut()
                 && let Some(analyzed) = cache.get_cache(&file_hash, &mir_hash)
             {
-                log::debug!("MIR cache hit: {fn_id:?}");
+                tracing::debug!("MIR cache hit: {fn_id:?}");
                 result.insert(
                     fn_id,
                     MirAnalyzerInitResult::Cached(AnalyzeResult {
@@ -121,10 +121,10 @@ impl MirAnalyzer {
             let location_table = facts.location_table();
 
             let analyzer = Box::pin(async move {
-                log::debug!("start re-computing borrow check with dump: true");
+                tracing::debug!("start re-computing borrow check with dump: true");
                 // compute accurate region, which may eliminate invalid region
                 let output = input.compute();
-                log::debug!("second borrow check finished");
+                tracing::debug!("second borrow check finished");
 
                 let accurate_live = polonius_analyzer::get_accurate_live(
                     &output,
@@ -160,9 +160,9 @@ impl MirAnalyzer {
                 );
 
                 // CFG based liveness analysis
-                log::debug!("start CFG based liveness check");
+                tracing::debug!("start CFG based liveness check");
                 let cfg_analysis_output = dataflow_analyzer::walk_cfg(&basic_blocks);
-                log::debug!("CFG based liveness check finished");
+                tracing::debug!("CFG based liveness check finished");
                 let mut definitely_live_range =
                     dataflow_analyzer::get_definitely_lives(&cfg_analysis_output, &location_ranges);
                 let mut maybe_init_range = dataflow_analyzer::get_maybe_initialized(
