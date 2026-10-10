@@ -13,10 +13,10 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::{Arc, LazyLock, Mutex, atomic::AtomicBool};
+use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
 use tokio::{
     runtime::{Builder, Runtime},
-    task::JoinSet,
+    task::JoinHandle,
 };
 
 use rustc_middle::queries;
@@ -30,8 +30,8 @@ pub struct RustcCallback;
 impl rustc_driver::Callbacks for RustcCallback {}
 
 static ATOMIC_TRUE: AtomicBool = AtomicBool::new(true);
-static TASKS: LazyLock<Mutex<JoinSet<AnalyzeResult>>> =
-    LazyLock::new(|| Mutex::new(JoinSet::new()));
+static TASKS: LazyLock<Mutex<Vec<JoinHandle<AnalyzeResult>>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
 // make tokio runtime
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
     let worker_threads = std::thread::available_parallelism()
@@ -73,15 +73,12 @@ fn open_files() -> Option<HashSet<PathBuf>> {
 /// The list is resolved once per crate and cached against the crate name, so
 /// this is a path comparison rather than a per-root recomputation.
 fn is_file_open(tcx: TyCtxt<'_>, def_id: LocalDefId) -> bool {
-    static CACHE: LazyLock<Mutex<HashMap<String, Arc<Option<HashSet<PathBuf>>>>>> =
+    static CACHE: LazyLock<Mutex<HashMap<String, Option<HashSet<PathBuf>>>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));
     let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
     let set = {
         let mut cache = CACHE.lock().unwrap();
-        cache
-            .entry(crate_name)
-            .or_insert_with(|| Arc::new(open_files()))
-            .clone()
+        cache.entry(crate_name).or_insert_with(open_files).clone()
     };
     let Some(set) = set.as_ref() else {
         return true;
@@ -145,15 +142,34 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
                     handle_analyzed_result(tcx, cached);
                 }
                 MirAnalyzerInitResult::Analyzer(analyzer) => {
-                    tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
+                    tasks.push(
+                        RUNTIME
+                            .handle()
+                            .spawn(async move { analyzer.await.analyze() }),
+                    );
                 }
             }
         }
 
         log::debug!("there are {} tasks", tasks.len());
-        while let Some(Ok(result)) = tasks.try_join_next() {
-            log::debug!("one task joined");
-            handle_analyzed_result(tcx, result);
+        let mut ready = Vec::new();
+        let mut i = 0;
+        while i < tasks.len() {
+            if tasks[i].is_finished() {
+                ready.push(tasks.swap_remove(i));
+            } else {
+                i += 1;
+            }
+        }
+        drop(tasks);
+        for handle in ready {
+            match RUNTIME.block_on(handle) {
+                Ok(result) => {
+                    log::debug!("one task joined");
+                    handle_analyzed_result(tcx, result);
+                }
+                Err(e) => log::warn!("analysis task failed: {e}"),
+            }
         }
     }
 
@@ -177,20 +193,24 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
     ) -> rustc_driver::Compilation {
         let result = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
 
-        // join all tasks after all analysis finished
-        //
-        // allow clippy::await_holding_lock because `tokio::sync::Mutex` cannot use
-        // for TASKS because block_on cannot be used in `mir_borrowck`.
-        #[allow(clippy::await_holding_lock)]
-        RUNTIME.block_on(async move {
-            while let Some(Ok(result)) = { TASKS.lock().unwrap().join_next().await } {
-                log::debug!("one task joined");
-                handle_analyzed_result(tcx, result);
+        // Join all tasks after all analysis finished.
+        loop {
+            // guard dropped at the end of this statement
+            let next = TASKS.lock().unwrap().pop();
+            let Some(handle) = next else {
+                break;
+            };
+            match RUNTIME.block_on(handle) {
+                Ok(result) => {
+                    log::debug!("one task joined");
+                    handle_analyzed_result(tcx, result);
+                }
+                Err(e) => log::warn!("analysis task failed: {e}"),
             }
-            if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
-                cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
-            }
-        });
+        }
+        if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
+            cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
+        }
 
         if result.is_ok() {
             rustc_driver::Compilation::Continue

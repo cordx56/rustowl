@@ -117,28 +117,28 @@ impl MirAnalyzer {
             if cache.is_none() {
                 *cache = cache::get_cache(&tcx.crate_name());
             }
-            if let Some(cache) = cache.as_mut() {
-                if let Some(analyzed) = cache.take_cache(&file_hash, &mir_hash) {
-                    log::debug!("MIR cache hit: {fn_id:?}");
-                    result.push(MirAnalyzerInitResult::Cached(AnalyzeResult {
-                        file_path: source_info.path().to_path_buf(),
-                        file_hash: file_hash.clone(),
-                        mir_hash: mir_hash.clone(),
-                        analyzed,
-                    }));
-                    if let Some(built_hash) = built_hash.map(str::to_owned) {
-                        cache.index_built(
-                            built_hash,
-                            cache::CachedBody {
-                                def_id: fn_id.as_u32(),
-                                file_hash,
-                                mir_hash,
-                                file_path,
-                            },
-                        );
-                    }
-                    continue;
+            if let Some(cache) = cache.as_mut()
+                && let Some(analyzed) = cache.take_cache(&file_hash, &mir_hash)
+            {
+                log::debug!("MIR cache hit: {fn_id:?}");
+                result.push(MirAnalyzerInitResult::Cached(AnalyzeResult {
+                    file_path: source_info.path().to_path_buf(),
+                    file_hash: file_hash.clone(),
+                    mir_hash: mir_hash.clone(),
+                    analyzed,
+                }));
+                if let Some(built_hash) = built_hash.map(str::to_owned) {
+                    cache.index_built(
+                        built_hash,
+                        cache::CachedBody {
+                            def_id: fn_id.as_u32(),
+                            file_hash,
+                            mir_hash,
+                            file_path,
+                        },
+                    );
                 }
+                continue;
             }
             drop(cache);
 

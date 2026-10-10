@@ -17,7 +17,6 @@ pub struct AnalyzeResponse {}
 
 /// RustOwl LSP server backend
 pub struct Backend {
-    #[allow(unused)]
     client: Client,
     analyzers: Arc<RwLock<Vec<Analyzer>>>,
     status: Arc<RwLock<progress::AnalysisStatus>>,
@@ -101,8 +100,7 @@ impl Backend {
             };
 
             let process_tokens = self.process_tokens.clone();
-            let open_files: Vec<PathBuf> =
-                self.open_files.read().await.iter().cloned().collect();
+            let open_files: Vec<PathBuf> = self.open_files.read().await.iter().cloned().collect();
             self.processes.write().await.spawn(async move {
                 let mut progress_token = None;
                 if *work_done_progress.read().await {
@@ -111,9 +109,9 @@ impl Backend {
                 };
 
                 let Some(mut iter) = analyzer
-                .analyze(all_targets, all_features, &open_files)
-                .await
-            else {
+                    .analyze(all_targets, all_features, &open_files)
+                    .await
+                else {
                     log::error!(
                         "could not launch rustowl for {}",
                         analyzer.target_path().display()
