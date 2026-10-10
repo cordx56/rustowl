@@ -71,10 +71,10 @@ pub fn collect_value_ends(
 
 pub type BasicBlocks = IndexMap<BasicBlockId, MirBasicBlock>;
 
-#[allow(clippy::type_complexity)]
-fn collect_places_effects(
-    basic_blocks: &BasicBlocks,
-) -> (Places, IndexMap<BasicBlockId, Vec<Vec<(PlaceId, Effect)>>>) {
+/// Per statement, the effect of each statement in the block, per block.
+type BlockEffects = IndexMap<BasicBlockId, Vec<Vec<(PlaceId, Effect)>>>;
+
+fn collect_places_effects(basic_blocks: &BasicBlocks) -> (Places, BlockEffects) {
     let effects: IndexMap<_, _> = basic_blocks
         .iter()
         .map(|(block, bb_data)| (*block, block_effects(bb_data)))
