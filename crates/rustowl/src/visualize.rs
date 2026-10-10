@@ -674,7 +674,52 @@ mod tests {
         assert_eq!(out.len(), 1);
     }
 
-    /// Abutting but non-overlapping ranges are not merged away.
+    fn call_deco(local: u32, from: u32, until: u32) -> Deco {
+        Deco::Call {
+            local: FnLocal::new(local, 1),
+            range: range(from, until),
+            hover_text: "function call".to_string(),
+            overlapped: false,
+        }
+    }
+
+    /// When the new span encloses an existing call, nothing changes: the
+    /// inner call is already covered, so no outer call is added.
+    #[test]
+    fn cursor_enclosing_existing_call_is_a_no_op() {
+        let mut calc = CalcDecos::with_decorations(vec![call_deco(1, 5, 10)]);
+        // 0..100 encloses the existing 5..10
+        calc.calc_call(&MirPlace { local: FnLocal::new(2, 1), projection: vec![] }, range(0, 100));
+        let out: Vec<_> = calc
+            .take_decorations()
+            .iter()
+            .map(|d| CalcDecos::range_of(d))
+            .collect();
+        assert_eq!(
+            out,
+            vec![range(5, 10)],
+            "an existing call inside the new span must suppress it"
+        );
+    }
+
+    /// A new span contained by an existing call replaces it, so the inner
+    /// decoration does not linger under the outer one.
+    #[test]
+    fn cursor_new_call_replaces_the_one_it_contains() {
+        let mut calc = CalcDecos::with_decorations(vec![call_deco(1, 5, 10)]);
+        calc.calc_call(&MirPlace { local: FnLocal::new(2, 1), projection: vec![] }, range(6, 9));
+        let out: Vec<_> = calc
+            .take_decorations()
+            .iter()
+            .map(|d| CalcDecos::range_of(d))
+            .collect();
+        assert_eq!(
+            out,
+            vec![range(6, 9)],
+            "the enclosing call must be replaced by the new one"
+        );
+    }
+
     #[test]
     fn cursor_empty_declaration_set_is_harmless() {
         let out = survivors(vec![]);
