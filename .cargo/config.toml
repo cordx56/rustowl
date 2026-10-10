@@ -1,18 +1,10 @@
 [env]
 AWS_LC_SYS_PREBUILT_NASM = "1"
 
-# tikv-jemalloc-sys bundles jemalloc and runs its autotools `configure`. That
-# script probes `strerror_r` by compiling with `-Werror`, and it appends `-O0`
-# AFTER its own `-O3`, so the final compile is unoptimised. NixOS-hardened gcc
-# defines _FORTIFY_SOURCE in its spec (it never appears on the command line),
-# and glibc's features.h emits `#warning _FORTIFY_SOURCE requires compiling with
-# optimization (-O)`. Under -Werror that warning becomes a hard error, both
-# strerror_r probes fail, and configure aborts with:
-#
-#     configure: error: cannot determine return type of strerror_r
-#
-# -Wno-error=cpp downgrades just that one warning and is placed after -Werror by
-# virtue of the cc crate appending CFLAGS to its own defaults. `-U_FORTIFY_SOURCE`
-# does NOT work here: the Nix gcc spec re-asserts the macro after the command line.
+# jemalloc's autotools configure compiles `strerror_r` probes with -Werror. The
+# NixOS gcc spec injects _FORTIFY_SOURCE without saying so on the command line,
+# and glibc then warns that it needs -O — but jemalloc appends -O0 after its own
+# -O3, so that warning is fatal and configure cannot determine strerror_r's
+# return type. -U_FORTIFY_SOURCE does not work: the spec re-asserts the macro.
 CFLAGS = "-Wno-error=cpp"
 HOST_CFLAGS = "-Wno-error=cpp"
