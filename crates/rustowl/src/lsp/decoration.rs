@@ -721,20 +721,12 @@ impl CalcDecos {
                 return;
             }
         }
-        let mut i = 0;
-        while i < self.decorations.len() {
-            let range = match &self.decorations[i] {
-                Deco::Call { range, .. } => Some(range),
-                _ => None,
-            };
-            if let Some(range) = range
-                && utils::is_super_range(*range, fn_span)
-            {
-                self.decorations.remove(i);
-                continue;
-            }
-            i += 1;
-        }
+        // one pass: removing from the middle of the vector once per enclosing
+        // call made this quadratic in the number of decorations
+        self.decorations.retain(|deco| match deco {
+            Deco::Call { range, .. } => !utils::is_super_range(*range, fn_span),
+            _ => true,
+        });
         self.decorations.push(Deco::Call {
             local: destination.local,
             range: fn_span,
