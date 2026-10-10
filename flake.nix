@@ -47,6 +47,12 @@
             done
             unset _owl_lib
 
+            # jemalloc's autotools configure compiles `strerror_r` probes with
+            # -Werror. The NixOS gcc spec injects _FORTIFY_SOURCE without saying
+            # so on the command line, and glibc then warns that it needs -O --
+            # but jemalloc appends -O0 after its own -O3, so that warning is
+            # fatal and configure cannot determine strerror_r's return type.
+            # -U_FORTIFY_SOURCE does not work: the spec re-asserts the macro.
             export CFLAGS="-Wno-error=cpp''${CFLAGS:+ $CFLAGS}"
             export HOST_CFLAGS="-Wno-error=cpp''${HOST_CFLAGS:+ $HOST_CFLAGS}"
           '';
