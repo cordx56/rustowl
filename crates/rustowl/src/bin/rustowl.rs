@@ -61,7 +61,7 @@ async fn handle_command(command: Commands) {
                 match arg {
                     ToolchainCommands::Install {
                         path,
-                        skip__toolchain,
+                        skip_rustowl_toolchain,
                     } => {
                         let path = path.unwrap_or(toolchain::FALLBACK_RUNTIME_DIR.clone());
                         if toolchain::setup_toolchain(&path, skip_rustowl_toolchain)
