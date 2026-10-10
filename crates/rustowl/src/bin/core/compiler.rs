@@ -125,6 +125,21 @@ impl_as_rustc!(
 );
 
 impl<'tcx> TyCtxt<'tcx> {
+    /// Hash of `tcx.mir_built`, which needs no borrow check. Used as a cheap
+    /// cache key that can be consulted before `get_borrowck_facts`.
+    ///
+    /// Returns `None` when the body has already been stolen, which happens for
+    /// bodies rustc evaluates during typechecking. Borrowing a stolen body
+    /// panics, and callers can just fall back to the uncached path.
+    pub fn mir_built_hash(&self, def_id: DefId) -> Option<String> {
+        let tcx = self.as_rustc();
+        let body = tcx.mir_built(*def_id.as_rustc());
+        if body.is_stolen() {
+            return None;
+        }
+        Some(self.get_hash(&*body.borrow()))
+    }
+
     pub fn get_borrowck_facts(&self, def_id: DefId) -> HashMap<DefId, BorrowckFacts<'tcx>> {
         let facts = rustc_borrowck::consumers::get_bodies_with_borrowck_facts(
             *self.as_rustc(),
