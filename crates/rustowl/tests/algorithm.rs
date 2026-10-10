@@ -509,6 +509,47 @@ async fn analyze_perf_fixture(fixture: &Path) -> RawWorkspace {
         documents > 0,
         "rustowlc printed no Workspace documents\nstdout:\n{stdout}"
     );
+
+    let mut machine_code = Vec::new();
+    let mut metadata = 0;
+    let mut pending = vec![target_dir.clone()];
+    while let Some(dir) = pending.pop() {
+        let Ok(mut read) = tokio::fs::read_dir(&dir).await else {
+            continue;
+        };
+        let mut entries = Vec::new();
+        while let Ok(Some(entry)) = read.next_entry().await {
+            entries.push(entry);
+        }
+        entries.sort_by_key(|e| e.file_name());
+        for entry in entries {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if let Some(ext) = path.extension().and_then(|v| v.to_str()) {
+                match ext {
+                    "o" | "s" | "bc" | "ll" => machine_code.push(path.clone()),
+                    "rmeta" => metadata += 1,
+                    _ => {}
+                }
+            }
+        }
+    }
+    assert!(
+        machine_code.is_empty(),
+        "rustowlc emitted machine code, which it must never do:\n{}",
+        machine_code
+            .iter()
+            .map(|v| v.display().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    assert!(
+        metadata > 0,
+        "rustowl emitted no metadata; downstream crates cannot resolve \
+         their dependencies without it"
+    );
+
     raw
 }
 
