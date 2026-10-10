@@ -90,6 +90,9 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         config.using_internal_features = &ATOMIC_TRUE;
         config.opts.unstable_opts.mir_opt_level = Some(0);
         config.opts.unstable_opts.polonius = config::Polonius::Next;
+        config.opts.output_types =
+            config::OutputTypes::new(&[(config::OutputType::Metadata, None)]);
+        config.opts.unstable_opts.no_codegen = true;
         config.opts.incremental = None;
         config.override_queries = Some(override_queries);
         config.make_codegen_backend = None;
