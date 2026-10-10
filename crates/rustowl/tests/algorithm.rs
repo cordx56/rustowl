@@ -246,9 +246,9 @@ fn test_places_move_out_of_box_b() {
 
 /// Functions `cargo check --workspace` analyses in the perf fixture with default
 /// features: the `rustowl_perf_test_dummy` lib plus the `dummy-app` bin.
-const GOLDEN_FUNCTION_COUNT: usize = 74;
+const REFERENCE_FUNCTION_COUNT: usize = 74;
 
-/// What the golden records for one function.
+/// What the reference output records for one function.
 #[derive(Serialize)]
 struct GoldenFunction {
     fn_id: u32,
@@ -413,7 +413,7 @@ fn require_toolchain_sysroot() {
     let sysroot = toolchain::sysroot_from_runtime(runtime);
     assert!(
         runtime.is_dir() && sysroot.is_dir(),
-        "no rustowl toolchain sysroot at {sysroot:?}. `test_golden_workspace` compiles \
+        "no rustowl toolchain sysroot at {sysroot:?}. `test_workspace_reference` compiles \
          the perf fixture against it, and running the test without one makes \
          toolchain::get_runtime_dir() download a toolchain and, on failure, \
          std::process::exit(1), killing every test in this file with a bare exit \
@@ -452,7 +452,7 @@ async fn rustowl_cargo_command(rustowlc: &str, target_dir: &Path) -> tokio::proc
 async fn analyze_perf_fixture(fixture: &Path) -> RawWorkspace {
     let rustowlc = env!("CARGO_BIN_EXE_rustowlc");
     let cargo = toolchain::get_executable_path("cargo").await;
-    let target_dir = fixture.join("target").join("owl-golden");
+    let target_dir = fixture.join("target").join("owl-reference");
 
     tokio::fs::remove_dir_all(target_dir.join("cache"))
         .await
@@ -512,14 +512,15 @@ async fn analyze_perf_fixture(fixture: &Path) -> RawWorkspace {
     raw
 }
 
-/// The golden baseline: everything `rustowl check` computes for the perf fixture,
-/// in canonical form.
+/// The reference output: everything `rustowl check` computes for the perf
+/// fixture, in canonical form. Every later change is a no-behaviour-change
+/// refactor verified by diffing against this.
 ///
 /// Valid only for the pinned toolchain: `rust-toolchain.toml`'s nightly builds
 /// `rustowlc`, while `scripts/toolchain`'s sysroot checks the fixture. Recorded names
 /// are compiler-generated, so a rustc bump changes them — regenerate and review.
 #[tokio::test]
-async fn test_golden_workspace() {
+async fn test_workspace_reference() {
     require_toolchain_sysroot();
 
     let fixture: PathBuf = [env!("CARGO_MANIFEST_DIR"), "perf-tests", "dummy-package"]
@@ -527,24 +528,24 @@ async fn test_golden_workspace() {
         .collect();
     let fixture = fixture.canonicalize().expect("the perf fixture must exist");
 
-    let golden = normalize_workspace(analyze_perf_fixture(&fixture).await, &fixture);
+    let reference = normalize_workspace(analyze_perf_fixture(&fixture).await, &fixture);
 
-    let counted = golden
+    let counted = reference
         .values()
         .flat_map(|files| files.iter())
         .map(|(file, items)| format!("{file}={}", items.len()))
         .collect::<Vec<_>>()
         .join(", ");
-    let analysed: usize = golden
+    let analysed: usize = reference
         .values()
         .flat_map(|files| files.values())
         .map(Vec::len)
         .sum();
     assert_eq!(
-        analysed, GOLDEN_FUNCTION_COUNT,
-        "expected {GOLDEN_FUNCTION_COUNT} analysed functions in the perf fixture, \
+        analysed, REFERENCE_FUNCTION_COUNT,
+        "expected {REFERENCE_FUNCTION_COUNT} analysed functions in the perf fixture, \
          got {analysed}: {counted}"
     );
 
-    insta::assert_json_snapshot!(golden);
+    insta::assert_json_snapshot!(reference);
 }
