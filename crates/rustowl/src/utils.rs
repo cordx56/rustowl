@@ -106,12 +106,11 @@ pub fn exclude_ranges(mut from: Vec<Range>, excludes: Vec<Range>) -> Vec<Range> 
     eliminated_ranges(from)
 }
 
-#[allow(unused)]
 pub trait MirVisitor {
-    fn visit_func(&mut self, func: &Function) {}
-    fn visit_decl(&mut self, decl: &MirDecl) {}
-    fn visit_stmt(&mut self, stmt: &MirStatement) {}
-    fn visit_term(&mut self, term: &MirTerminator) {}
+    fn visit_func(&mut self, _: &Function) {}
+    fn visit_decl(&mut self, _: &MirDecl) {}
+    fn visit_stmt(&mut self, _: &MirStatement) {}
+    fn visit_term(&mut self, _: &MirTerminator) {}
 }
 pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
     visitor.visit_func(func);

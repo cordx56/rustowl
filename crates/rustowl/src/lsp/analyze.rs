@@ -26,9 +26,7 @@ pub struct CargoCheckMessageTarget {
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(tag = "reason", rename_all = "kebab-case")]
 pub enum CargoCheckMessage {
-    #[allow(unused)]
     CompilerArtifact { target: CargoCheckMessageTarget },
-    #[allow(unused)]
     BuildFinished {},
 }
 
@@ -237,7 +235,7 @@ impl Analyzer {
         Some(AnalyzeEventIter {
             receiver,
             notify,
-            child,
+            _child: child,
         })
     }
 
@@ -297,7 +295,7 @@ impl Analyzer {
         Some(AnalyzeEventIter {
             receiver,
             notify,
-            child,
+            _child: child,
         })
     }
 }
@@ -305,8 +303,7 @@ impl Analyzer {
 pub struct AnalyzeEventIter {
     receiver: mpsc::Receiver<AnalyzerEvent>,
     notify: Arc<Notify>,
-    #[allow(unused)]
-    child: process::Child,
+    _child: process::Child,
 }
 impl AnalyzeEventIter {
     pub async fn next_event(&mut self) -> Option<AnalyzerEvent> {
