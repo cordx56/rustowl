@@ -61,7 +61,7 @@ async fn handle_command(command: Commands) {
                 match arg {
                     ToolchainCommands::Install {
                         path,
-                        skip_rustowl_toolchain,
+                        skip__toolchain,
                     } => {
                         let path = path.unwrap_or(toolchain::FALLBACK_RUNTIME_DIR.clone());
                         if toolchain::setup_toolchain(&path, skip_rustowl_toolchain)
@@ -158,7 +158,7 @@ async fn handle_show_command(opts: cli::Show) {
 
 /// Displays detailed version information.
 fn display_version() {
-    println!("rustowl {}", clap::crate_version!());
+    println!("RustOwl {}", clap::crate_version!());
 
     let tag = env!("GIT_TAG");
     println!("git_tag:{}", if tag.is_empty() { "not found" } else { tag });
@@ -221,7 +221,7 @@ async fn main() {
 
     if parsed_args.version {
         if short_version {
-            println!("rustowl {}", clap::crate_version!());
+            println!("RustOwl {}", clap::crate_version!());
         } else {
             display_version();
         }
