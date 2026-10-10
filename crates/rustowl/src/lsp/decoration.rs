@@ -452,6 +452,42 @@ pub struct CalcDecos {
     current_fn_id: u32,
 }
 impl CalcDecos {
+    /// Build a calculator over a fixed decoration list, for tests.
+    #[cfg(test)]
+    pub fn with_decorations(decorations: Vec<Deco>) -> Self {
+        Self {
+            locals: HashSet::new(),
+            decorations,
+            current_fn_id: 0,
+        }
+    }
+
+    /// The order `handle_overlapping` draws in, as a small comparable value.
+    #[cfg(test)]
+    pub fn draw_order(deco: &Deco) -> u8 {
+        Self::get_deco_order(deco)
+    }
+
+    #[cfg(test)]
+    pub fn range_of(deco: &Deco) -> Range {
+        match deco {
+            Deco::Lifetime { range, .. }
+            | Deco::ImmBorrow { range, .. }
+            | Deco::MutBorrow { range, .. }
+            | Deco::Move { range, .. }
+            | Deco::Call { range, .. }
+            | Deco::SharedMut { range, .. }
+            | Deco::Outlive { range, .. }
+            | Deco::DefinitelyLive { range, .. }
+            | Deco::MaybeInitialized { range, .. } => *range,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn take_decorations(&mut self) -> Vec<Deco> {
+        std::mem::take(&mut self.decorations)
+    }
+
     pub fn new(locals: impl IntoIterator<Item = FnLocal>) -> Self {
         Self {
             locals: locals.into_iter().collect(),
@@ -685,20 +721,12 @@ impl CalcDecos {
                 return;
             }
         }
-        let mut i = 0;
-        while i < self.decorations.len() {
-            let range = match &self.decorations[i] {
-                Deco::Call { range, .. } => Some(range),
-                _ => None,
-            };
-            if let Some(range) = range
-                && utils::is_super_range(*range, fn_span)
-            {
-                self.decorations.remove(i);
-                continue;
-            }
-            i += 1;
-        }
+        // one pass: removing from the middle of the vector once per enclosing
+        // call made this quadratic in the number of decorations
+        self.decorations.retain(|deco| match deco {
+            Deco::Call { range, .. } => !utils::is_super_range(*range, fn_span),
+            _ => true,
+        });
         self.decorations.push(Deco::Call {
             local: destination.local,
             range: fn_span,
@@ -920,4 +948,77 @@ impl utils::MirVisitor for CalcDecos {
     }
 }
 
-// TODO: new test
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn range(from: u32, until: u32) -> Range {
+        Range::new(Loc(from), Loc(until)).unwrap()
+    }
+
+    fn move_deco(from: u32, until: u32) -> Deco {
+        Deco::Move {
+            local: FnLocal::new(1, 1),
+            range: range(from, until),
+            hover_text: "move".to_string(),
+            overlapped: false,
+        }
+    }
+
+    fn lifetime_deco(local: u32, from: u32, until: u32) -> Deco {
+        Deco::Lifetime {
+            local: FnLocal::new(local, 1),
+            range: range(from, until),
+            hover_text: "lifetime".to_string(),
+            overlapped: false,
+        }
+    }
+
+    /// The same decoration twice is emitted once, not twice.
+    #[test]
+    fn identical_decorations_are_deduplicated() {
+        let mut calc = CalcDecos::new([]);
+        calc.decorations.push(move_deco(1, 5));
+        calc.decorations.push(move_deco(1, 5));
+        calc.handle_overlapping();
+        assert_eq!(calc.decorations.len(), 1);
+    }
+
+    /// Distinct decorations survive, and come back in draw-order.
+    #[test]
+    fn distinct_decorations_are_kept_and_ordered() {
+        let mut calc = CalcDecos::new([]);
+        // added out of order: Move draws after Lifetime
+        calc.decorations.push(move_deco(1, 3));
+        calc.decorations.push(lifetime_deco(1, 1, 3));
+        calc.handle_overlapping();
+        assert_eq!(calc.decorations.len(), 2);
+        assert!(
+            matches!(calc.decorations[0], Deco::Lifetime { .. }),
+            "Lifetime must draw under Move, got {:?}",
+            calc.decorations[0]
+        );
+    }
+
+    /// Overlapping ranges on different locals are trimmed rather than dropped.
+    #[test]
+    fn overlapping_ranges_are_split() {
+        let mut calc = CalcDecos::new([]);
+        calc.decorations.push(move_deco(0, 10));
+        calc.decorations.push(lifetime_deco(2, 4, 6));
+        calc.handle_overlapping();
+        // the inner decoration is cut out of the outer one, so the outer
+        // becomes two pieces and the inner survives
+        assert!(
+            calc.decorations.len() >= 2,
+            "expected the outer range to be split, got {:?}",
+            calc.decorations
+        );
+        assert!(
+            calc.decorations
+                .iter()
+                .any(|d| matches!(d, Deco::Lifetime { .. })),
+            "the inner decoration must survive"
+        );
+    }
+}

@@ -71,10 +71,10 @@ pub fn collect_value_ends(
 
 pub type BasicBlocks = IndexMap<BasicBlockId, MirBasicBlock>;
 
-#[allow(clippy::type_complexity)]
-fn collect_places_effects(
-    basic_blocks: &BasicBlocks,
-) -> (Places, IndexMap<BasicBlockId, Vec<Vec<(PlaceId, Effect)>>>) {
+/// Per statement, the effect of each statement in the block, per block.
+type BlockEffects = IndexMap<BasicBlockId, Vec<Vec<(PlaceId, Effect)>>>;
+
+fn collect_places_effects(basic_blocks: &BasicBlocks) -> (Places, BlockEffects) {
     let effects: IndexMap<_, _> = basic_blocks
         .iter()
         .map(|(block, bb_data)| (*block, block_effects(bb_data)))
@@ -123,10 +123,13 @@ pub fn walk_cfg(basic_blocks: &BasicBlocks) -> CfgAnalysisOutput {
     let (places, effects) = collect_places_effects(basic_blocks);
 
     let empty = places.states(StateBitSet::new());
-    let mut states: IndexMap<Location, States> = IndexMap::new();
+    let mut states: IndexMap<Location, std::rc::Rc<States>> = IndexMap::new();
     for (block, effects) in &effects {
         for statement_index in 0..effects.len() {
-            states.insert(Location::from((*block, statement_index)), empty.clone());
+            states.insert(
+                Location::from((*block, statement_index)),
+                std::rc::Rc::new(empty.clone()),
+            );
         }
     }
     let mut entries: HashMap<BasicBlockId, States> = effects
@@ -150,9 +153,17 @@ pub fn walk_cfg(basic_blocks: &BasicBlocks) -> CfgAnalysisOutput {
             continue;
         };
         let mut current = entry.clone();
+        // Statements with no effects leave the state untouched, so those all
+        // share one allocation instead of a fresh copy each.
+        let mut shared = std::rc::Rc::new(current.clone());
         for (statement_index, effects) in effects.iter().enumerate() {
+            if effects.is_empty() {
+                states.insert(Location::from((block, statement_index)), shared.clone());
+                continue;
+            }
             current.apply(effects);
-            states.insert(Location::from((block, statement_index)), current.clone());
+            shared = std::rc::Rc::new(current.clone());
+            states.insert(Location::from((block, statement_index)), shared.clone());
         }
         for successor in bb_data.terminator.successors() {
             if let Some(entry) = entries.get_mut(&successor)

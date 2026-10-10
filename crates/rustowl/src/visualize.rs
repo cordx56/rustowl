@@ -580,7 +580,8 @@ fn print_legend() {
 #[cfg(test)]
 mod tests {
     use super::find_file;
-    use crate::models::{Crate, File};
+    use crate::lsp::decoration::{CalcDecos, Deco};
+    use crate::models::*;
     use std::collections::HashMap;
     use std::path::Path;
 
@@ -605,5 +606,135 @@ mod tests {
 
         let file = find_file(&crate_data, Path::new(r"\\?\C:\repo\algo-tests\src\vec.rs"));
         assert!(file.is_some());
+    }
+
+    fn range(from: u32, until: u32) -> Range {
+        Range::new(Loc(from), Loc(until)).unwrap()
+    }
+
+    fn lifetime(local: u32, from: u32, until: u32) -> Deco {
+        Deco::Lifetime {
+            local: FnLocal::new(local, 1),
+            range: range(from, until),
+            hover_text: "lifetime".to_string(),
+            overlapped: false,
+        }
+    }
+
+    fn imm_borrow(local: u32, from: u32, until: u32) -> Deco {
+        Deco::ImmBorrow {
+            local: FnLocal::new(local, 1),
+            range: range(from, until),
+            hover_text: "borrow".to_string(),
+            overlapped: false,
+        }
+    }
+
+    /// Which decorations survive `handle_overlapping`, and in what order.
+    fn survivors(decos: Vec<Deco>) -> Vec<(u8, Range)> {
+        let mut calc = CalcDecos::with_decorations(decos);
+        calc.handle_overlapping();
+        calc.take_decorations()
+            .iter()
+            .map(|d| (CalcDecos::draw_order(d), CalcDecos::range_of(d)))
+            .collect()
+    }
+
+    /// Disjoint ranges are untouched, but come back in draw order.
+    #[test]
+    fn cursor_disjoint_ranges_keep_draw_order() {
+        assert_eq!(
+            survivors(vec![imm_borrow(1, 10, 20), lifetime(1, 30, 40)]),
+            vec![(0, range(30, 40)), (3, range(10, 20))],
+            "disjoint ranges survive unchanged, in draw order"
+        );
+    }
+
+    /// A range wholly inside another is cut out of the outer one.
+    #[test]
+    fn cursor_inner_range_is_excluded_from_outer() {
+        assert_eq!(
+            survivors(vec![lifetime(1, 0, 100), imm_borrow(2, 40, 50)]),
+            vec![
+                // the outer range is cut into three fragments, the first
+                // being the span the inner decoration occupies...
+                (0, range(40, 50)),
+                (0, range(0, 39)),
+                (0, range(51, 100)),
+                // ...and the inner decoration is drawn on top of it
+                (3, range(40, 50)),
+            ],
+        );
+    }
+
+    /// Exact duplicates collapse to one.
+    #[test]
+    fn cursor_identical_ranges_deduplicate() {
+        let out = survivors(vec![lifetime(1, 5, 9), lifetime(1, 5, 9)]);
+        assert_eq!(out.len(), 1);
+    }
+
+    fn call_deco(local: u32, from: u32, until: u32) -> Deco {
+        Deco::Call {
+            local: FnLocal::new(local, 1),
+            range: range(from, until),
+            hover_text: "function call".to_string(),
+            overlapped: false,
+        }
+    }
+
+    /// When the new span encloses an existing call, nothing changes: the
+    /// inner call is already covered, so no outer call is added.
+    #[test]
+    fn cursor_enclosing_existing_call_is_a_no_op() {
+        let mut calc = CalcDecos::with_decorations(vec![call_deco(1, 5, 10)]);
+        // 0..100 encloses the existing 5..10
+        calc.calc_call(
+            &MirPlace {
+                local: FnLocal::new(2, 1),
+                projection: vec![],
+            },
+            range(0, 100),
+        );
+        let out: Vec<_> = calc
+            .take_decorations()
+            .iter()
+            .map(|d| CalcDecos::range_of(d))
+            .collect();
+        assert_eq!(
+            out,
+            vec![range(5, 10)],
+            "an existing call inside the new span must suppress it"
+        );
+    }
+
+    /// A new span contained by an existing call replaces it, so the inner
+    /// decoration does not linger under the outer one.
+    #[test]
+    fn cursor_new_call_replaces_the_one_it_contains() {
+        let mut calc = CalcDecos::with_decorations(vec![call_deco(1, 5, 10)]);
+        calc.calc_call(
+            &MirPlace {
+                local: FnLocal::new(2, 1),
+                projection: vec![],
+            },
+            range(6, 9),
+        );
+        let out: Vec<_> = calc
+            .take_decorations()
+            .iter()
+            .map(|d| CalcDecos::range_of(d))
+            .collect();
+        assert_eq!(
+            out,
+            vec![range(6, 9)],
+            "the enclosing call must be replaced by the new one"
+        );
+    }
+
+    #[test]
+    fn cursor_empty_declaration_set_is_harmless() {
+        let out = survivors(vec![]);
+        assert!(out.is_empty());
     }
 }

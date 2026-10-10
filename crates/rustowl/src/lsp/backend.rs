@@ -17,7 +17,6 @@ pub struct AnalyzeResponse {}
 
 /// RustOwl LSP server backend
 pub struct Backend {
-    #[allow(unused)]
     client: Client,
     analyzers: Arc<RwLock<Vec<Analyzer>>>,
     status: Arc<RwLock<progress::AnalysisStatus>>,
@@ -105,7 +104,13 @@ impl Backend {
                         Some(progress::ProgressToken::begin(client, None::<&str>).await)
                 };
 
-                let mut iter = analyzer.analyze(all_targets, all_features).await;
+                let Some(mut iter) = analyzer.analyze(all_targets, all_features).await else {
+                    log::error!(
+                        "could not launch rustowl for {}",
+                        analyzer.target_path().display()
+                    );
+                    return;
+                };
                 let mut analyzed_package_count = 0;
                 while let Some(event) = tokio::select! {
                     _ = cancellation_token.cancelled() => None,

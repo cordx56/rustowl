@@ -15,7 +15,7 @@ use std::process::ExitCode;
 use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
 use tokio::{
     runtime::{Builder, Runtime},
-    task::JoinSet,
+    task::JoinHandle,
 };
 
 use rustc_middle::queries;
@@ -29,8 +29,8 @@ pub struct RustcCallback;
 impl rustc_driver::Callbacks for RustcCallback {}
 
 static ATOMIC_TRUE: AtomicBool = AtomicBool::new(true);
-static TASKS: LazyLock<Mutex<JoinSet<AnalyzeResult>>> =
-    LazyLock::new(|| Mutex::new(JoinSet::new()));
+static TASKS: LazyLock<Mutex<Vec<JoinHandle<AnalyzeResult>>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
 // make tokio runtime
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
     let worker_threads = std::thread::available_parallelism()
@@ -69,15 +69,34 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
                     handle_analyzed_result(tcx, cached);
                 }
                 MirAnalyzerInitResult::Analyzer(analyzer) => {
-                    tasks.spawn_on(async move { analyzer.await.analyze() }, RUNTIME.handle());
+                    tasks.push(
+                        RUNTIME
+                            .handle()
+                            .spawn(async move { analyzer.await.analyze() }),
+                    );
                 }
             }
         }
 
         log::debug!("there are {} tasks", tasks.len());
-        while let Some(Ok(result)) = tasks.try_join_next() {
-            log::debug!("one task joined");
-            handle_analyzed_result(tcx, result);
+        let mut ready = Vec::new();
+        let mut i = 0;
+        while i < tasks.len() {
+            if tasks[i].is_finished() {
+                ready.push(tasks.swap_remove(i));
+            } else {
+                i += 1;
+            }
+        }
+        drop(tasks);
+        for handle in ready {
+            match RUNTIME.block_on(handle) {
+                Ok(result) => {
+                    log::debug!("one task joined");
+                    handle_analyzed_result(tcx, result);
+                }
+                Err(e) => log::warn!("analysis task failed: {e}"),
+            }
         }
     }
 
@@ -104,20 +123,24 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
     ) -> rustc_driver::Compilation {
         let result = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
 
-        // join all tasks after all analysis finished
-        //
-        // allow clippy::await_holding_lock because `tokio::sync::Mutex` cannot use
-        // for TASKS because block_on cannot be used in `mir_borrowck`.
-        #[allow(clippy::await_holding_lock)]
-        RUNTIME.block_on(async move {
-            while let Some(Ok(result)) = { TASKS.lock().unwrap().join_next().await } {
-                log::debug!("one task joined");
-                handle_analyzed_result(tcx, result);
+        // Join all tasks after all analysis finished.
+        loop {
+            // guard dropped at the end of this statement
+            let next = TASKS.lock().unwrap().pop();
+            let Some(handle) = next else {
+                break;
+            };
+            match RUNTIME.block_on(handle) {
+                Ok(result) => {
+                    log::debug!("one task joined");
+                    handle_analyzed_result(tcx, result);
+                }
+                Err(e) => log::warn!("analysis task failed: {e}"),
             }
-            if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
-                cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
-            }
-        });
+        }
+        if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
+            cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
+        }
 
         if result.is_ok() {
             rustc_driver::Compilation::Continue
@@ -128,17 +151,23 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
 }
 
 pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
+    let AnalyzeResult {
+        file_path,
+        file_hash,
+        mir_hash,
+        analyzed: function,
+    } = analyzed;
+    // The entry has to stay in the cache. It is what a later compile reads to
+    // skip borrowck for an unchanged root, so a copy here buys a whole skipped
+    // borrow check -- worth far more than the copy costs. Taking it back out
+    // instead leaves the cache empty, and every root is then re-analysed.
     if let Some(cache) = cache::CACHE.lock().unwrap().as_mut() {
-        cache.insert_cache(
-            analyzed.file_hash.clone(),
-            analyzed.mir_hash.clone(),
-            analyzed.analyzed.clone(),
-        );
+        cache.insert_cache(file_hash, mir_hash, function.clone());
     }
     let krate = Crate(HashMap::from([(
-        analyzed.file_path.to_string_lossy().to_string(),
+        file_path.to_string_lossy().to_string(),
         File {
-            items: vec![analyzed.analyzed],
+            items: vec![function],
         },
     )]));
     // get currently-compiling crate name

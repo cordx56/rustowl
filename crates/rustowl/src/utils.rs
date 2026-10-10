@@ -17,16 +17,37 @@ pub fn common_range(r1: Range, r2: Range) -> Option<Range> {
     Range::new(from, until)
 }
 
+/// Intersections of every pair, flattened.
 pub fn common_ranges(ranges: &[Range]) -> Vec<Range> {
-    let mut common_ranges = Vec::new();
-    for i in 0..ranges.len() {
-        for j in i + 1..ranges.len() {
-            if let Some(common) = common_range(ranges[i], ranges[j]) {
-                common_ranges.push(common);
+    if ranges.len() < 2 {
+        return Vec::new();
+    }
+    // (position, +1 at a range start, -1 at its end)
+    let mut events: Vec<(u32, i8)> = Vec::with_capacity(ranges.len() * 2);
+    for range in ranges {
+        events.push((range.from().0, 1));
+        events.push((range.until().0, -1));
+    }
+    events.sort_by_key(|(pos, delta)| (*pos, *delta));
+
+    let mut result: Vec<Range> = Vec::new();
+    let mut covering = 0i8;
+    let mut start = 0u32;
+    let mut open = false;
+    for (pos, delta) in events {
+        let before = covering;
+        covering += delta;
+        if before >= 2 && covering < 2 {
+            if let Some(range) = Range::new(Loc(start), Loc(pos)) {
+                result.push(range);
             }
+            open = false;
+        } else if covering >= 2 && !open {
+            start = pos;
+            open = true;
         }
     }
-    eliminated_ranges(common_ranges)
+    eliminated_ranges(result)
 }
 
 /// merge two ranges, result is superset of two ranges
@@ -41,23 +62,25 @@ pub fn merge_ranges(r1: Range, r2: Range) -> Option<Range> {
 }
 
 /// eliminate common ranges and flatten ranges
+///
+/// Sorting by start position and sweeping once reaches the same partition the
+/// pairwise merge did: any two ranges that overlap or abut land in the same
+/// output group, so repeated merging collapses to a single linear pass.
 pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
-    let mut i = 0;
-    'outer: while i < ranges.len() {
-        let mut j = 0;
-        while j < ranges.len() {
-            if i != j
-                && let Some(merged) = merge_ranges(ranges[i], ranges[j])
-            {
-                ranges[i] = merged;
-                ranges.remove(j);
-                continue 'outer;
+    ranges.sort_by_key(|r| (r.from().0, r.until().0));
+    let mut result: Vec<Range> = Vec::with_capacity(ranges.len());
+    for range in ranges {
+        match result.last_mut() {
+            // abutting ranges merge too, as merge_ranges did
+            Some(last) if last.from() <= range.from() && range.from() <= last.until() => {
+                if let Some(merged) = merge_ranges(*last, range) {
+                    *last = merged;
+                }
             }
-            j += 1;
+            _ => result.push(range),
         }
-        i += 1;
     }
-    ranges
+    result
 }
 
 /// Compute intersection of two range lists.
@@ -104,12 +127,11 @@ pub fn exclude_ranges(mut from: Vec<Range>, excludes: Vec<Range>) -> Vec<Range> 
     eliminated_ranges(from)
 }
 
-#[allow(unused)]
 pub trait MirVisitor {
-    fn visit_func(&mut self, func: &Function) {}
-    fn visit_decl(&mut self, decl: &MirDecl) {}
-    fn visit_stmt(&mut self, stmt: &MirStatement) {}
-    fn visit_term(&mut self, term: &MirTerminator) {}
+    fn visit_func(&mut self, _: &Function) {}
+    fn visit_decl(&mut self, _: &MirDecl) {}
+    fn visit_stmt(&mut self, _: &MirStatement) {}
+    fn visit_term(&mut self, _: &MirTerminator) {}
 }
 pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
     visitor.visit_func(func);
@@ -136,20 +158,7 @@ pub fn clean_source(s: &str) -> String {
 }
 
 pub fn range_is_multiline(s: &str, range: Range) -> bool {
-    let mut cleaned = String::new();
-    if !is_source_clean(s) {
-        cleaned = clean_source(s);
-    }
-    let source_clean = if cleaned.is_empty() { s } else { &cleaned };
-
-    let from = range.from().0 as usize;
-    let until = range.until().0 as usize;
-    source_clean
-        .chars()
-        .enumerate()
-        .skip(from)
-        .take(until - from)
-        .any(|(_, c)| c == '\n')
+    SourceIndex::new(s).is_multiline(&range)
 }
 
 pub fn index_to_line_char(s: &str, idx: Loc) -> (u32, u32) {
