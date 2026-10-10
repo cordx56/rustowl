@@ -689,11 +689,17 @@ mod tests {
     fn cursor_enclosing_existing_call_is_a_no_op() {
         let mut calc = CalcDecos::with_decorations(vec![call_deco(1, 5, 10)]);
         // 0..100 encloses the existing 5..10
-        calc.calc_call(&MirPlace { local: FnLocal::new(2, 1), projection: vec![] }, range(0, 100));
+        calc.calc_call(
+            &MirPlace {
+                local: FnLocal::new(2, 1),
+                projection: vec![],
+            },
+            range(0, 100),
+        );
         let out: Vec<_> = calc
             .take_decorations()
             .iter()
-            .map(|d| CalcDecos::range_of(d))
+            .map(CalcDecos::range_of)
             .collect();
         assert_eq!(
             out,
@@ -707,11 +713,17 @@ mod tests {
     #[test]
     fn cursor_new_call_replaces_the_one_it_contains() {
         let mut calc = CalcDecos::with_decorations(vec![call_deco(1, 5, 10)]);
-        calc.calc_call(&MirPlace { local: FnLocal::new(2, 1), projection: vec![] }, range(6, 9));
+        calc.calc_call(
+            &MirPlace {
+                local: FnLocal::new(2, 1),
+                projection: vec![],
+            },
+            range(6, 9),
+        );
         let out: Vec<_> = calc
             .take_decorations()
             .iter()
-            .map(|d| CalcDecos::range_of(d))
+            .map(CalcDecos::range_of)
             .collect();
         assert_eq!(
             out,
