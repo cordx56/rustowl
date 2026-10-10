@@ -250,7 +250,7 @@ const REFERENCE_FUNCTION_COUNT: usize = 74;
 
 /// What the reference output records for one function.
 #[derive(Serialize)]
-struct GoldenFunction {
+struct ReferenceFunction {
     fn_id: u32,
     name: String,
     decls: Vec<MirDecl>,
@@ -260,7 +260,7 @@ struct GoldenFunction {
 type RawWorkspace = BTreeMap<String, BTreeMap<String, Vec<Function>>>;
 
 /// Canonical form of a [`RawWorkspace`]: crate -> file -> functions.
-type GoldenWorkspace = BTreeMap<String, BTreeMap<String, Vec<GoldenFunction>>>;
+type ReferenceWorkspace = BTreeMap<String, BTreeMap<String, Vec<ReferenceFunction>>>;
 
 /// Append every function of one document to its (crate, file) bucket.
 fn accumulate(into: &mut RawWorkspace, workspace: Workspace) {
@@ -344,7 +344,7 @@ fn canonical_json(function: &Function) -> Result<String, String> {
 }
 
 /// Collapse repeated deliveries of one function, refusing to do so silently.
-fn normalize_items(mut items: Vec<Function>) -> Vec<GoldenFunction> {
+fn normalize_items(mut items: Vec<Function>) -> Vec<ReferenceFunction> {
     items.sort_by_key(|item| item.fn_id);
     for item in &mut items {
         normalize_function(item);
@@ -369,7 +369,7 @@ fn normalize_items(mut items: Vec<Function>) -> Vec<GoldenFunction> {
 
     deduped
         .into_iter()
-        .map(|function| GoldenFunction {
+        .map(|function| ReferenceFunction {
             fn_id: function.fn_id,
             name: function.name,
             decls: function.decls,
@@ -377,7 +377,7 @@ fn normalize_items(mut items: Vec<Function>) -> Vec<GoldenFunction> {
         .collect()
 }
 
-fn normalize_workspace(raw: RawWorkspace, fixture_root: &Path) -> GoldenWorkspace {
+fn normalize_workspace(raw: RawWorkspace, fixture_root: &Path) -> ReferenceWorkspace {
     raw.into_iter()
         .map(|(crate_name, files)| {
             let per_file = files
@@ -547,5 +547,28 @@ async fn test_workspace_reference() {
          got {analysed}: {counted}"
     );
 
-    insta::assert_json_snapshot!(reference);
+    insta::assert_snapshot!(render_reference(&reference));
+}
+
+/// Render the reference output with one compact line per function.
+///
+/// Pretty-printed JSON put every range on its own line, which made the stored
+/// snapshot ~103k lines for 74 functions and swamped any diff. The content is
+/// identical -- only the framing changes -- so a behaviour change now shows up
+/// as one changed line naming one function.
+fn render_reference(reference: &ReferenceWorkspace) -> String {
+    let mut out = String::new();
+    for (crate_name, files) in reference {
+        out.push_str(&format!("{crate_name}:\n"));
+        for (file, functions) in files {
+            out.push_str(&format!("  {file}:\n"));
+            for function in functions {
+                out.push_str(&format!(
+                    "    {}\n",
+                    serde_json::to_string(function).expect("a function must serialize")
+                ));
+            }
+        }
+    }
+    out
 }
