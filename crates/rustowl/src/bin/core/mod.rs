@@ -59,11 +59,16 @@ fn override_queries(_session: &rustc_session::Session, local: &mut Providers) {
 fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::ProvidedValue<'_> {
     log::debug!("start borrowck of {def_id:?}");
 
-    let default_borrowck_result = DEFAULT_MIR_BORROWCK(tcx, def_id);
+    // Must precede DEFAULT_MIR_BORROWCK: that provider steals `tcx.mir_built`,
+    // and the mir_built index is keyed on hashing it. Hash it after the steal
+    // and every root reports "already stolen", the index stays empty, and the
+    // whole optimisation is dead code.
     let analyzers = MirAnalyzer::init(AsRustc::from_rustc(tcx), AsRustc::from_rustc(def_id));
+
+    let default_borrowck_result = DEFAULT_MIR_BORROWCK(tcx, def_id);
     {
         let mut tasks = TASKS.lock().unwrap();
-        for (_, analyzer) in analyzers {
+        for analyzer in analyzers {
             match analyzer {
                 MirAnalyzerInitResult::Cached(cached) => {
                     handle_analyzed_result(tcx, cached);
