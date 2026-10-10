@@ -452,6 +452,42 @@ pub struct CalcDecos {
     current_fn_id: u32,
 }
 impl CalcDecos {
+    /// Build a calculator over a fixed decoration list, for tests.
+    #[cfg(test)]
+    pub fn with_decorations(decorations: Vec<Deco>) -> Self {
+        Self {
+            locals: HashSet::new(),
+            decorations,
+            current_fn_id: 0,
+        }
+    }
+
+    /// The order `handle_overlapping` draws in, as a small comparable value.
+    #[cfg(test)]
+    pub fn draw_order(deco: &Deco) -> u8 {
+        Self::get_deco_order(deco)
+    }
+
+    #[cfg(test)]
+    pub fn range_of(deco: &Deco) -> Range {
+        match deco {
+            Deco::Lifetime { range, .. }
+            | Deco::ImmBorrow { range, .. }
+            | Deco::MutBorrow { range, .. }
+            | Deco::Move { range, .. }
+            | Deco::Call { range, .. }
+            | Deco::SharedMut { range, .. }
+            | Deco::Outlive { range, .. }
+            | Deco::DefinitelyLive { range, .. }
+            | Deco::MaybeInitialized { range, .. } => *range,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn take_decorations(&mut self) -> Vec<Deco> {
+        std::mem::take(&mut self.decorations)
+    }
+
     pub fn new(locals: impl IntoIterator<Item = FnLocal>) -> Self {
         Self {
             locals: locals.into_iter().collect(),

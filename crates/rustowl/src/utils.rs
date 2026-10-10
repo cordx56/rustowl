@@ -17,16 +17,37 @@ pub fn common_range(r1: Range, r2: Range) -> Option<Range> {
     Range::new(from, until)
 }
 
+/// Intersections of every pair, flattened.
 pub fn common_ranges(ranges: &[Range]) -> Vec<Range> {
-    let mut common_ranges = Vec::new();
-    for i in 0..ranges.len() {
-        for j in i + 1..ranges.len() {
-            if let Some(common) = common_range(ranges[i], ranges[j]) {
-                common_ranges.push(common);
+    if ranges.len() < 2 {
+        return Vec::new();
+    }
+    // (position, +1 at a range start, -1 at its end)
+    let mut events: Vec<(u32, i8)> = Vec::with_capacity(ranges.len() * 2);
+    for range in ranges {
+        events.push((range.from().0, 1));
+        events.push((range.until().0, -1));
+    }
+    events.sort_by_key(|(pos, delta)| (*pos, *delta));
+
+    let mut result: Vec<Range> = Vec::new();
+    let mut covering = 0i8;
+    let mut start = 0u32;
+    let mut open = false;
+    for (pos, delta) in events {
+        let before = covering;
+        covering += delta;
+        if before >= 2 && covering < 2 {
+            if let Some(range) = Range::new(Loc(start), Loc(pos)) {
+                result.push(range);
             }
+            open = false;
+        } else if covering >= 2 && !open {
+            start = pos;
+            open = true;
         }
     }
-    eliminated_ranges(common_ranges)
+    eliminated_ranges(result)
 }
 
 /// merge two ranges, result is superset of two ranges
