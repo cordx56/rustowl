@@ -68,30 +68,31 @@ impl Analyzer {
 
         let metadata = match cargo_cmd.spawn() {
             Err(e) => {
-                log::warn!("could not launch cargo metadata: {e}");
+                tracing::warn!("could not launch cargo metadata: {e}");
                 None
             }
             Ok(child) => match child.wait_with_output().await {
                 Ok(output) => {
                     // cargo's stderr is the only explanation for an invalid target.
                     if !output.status.success() {
-                        log::warn!(
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        tracing::warn!(
                             "cargo metadata exited with {}: {}",
                             output.status,
-                            String::from_utf8_lossy(&output.stderr).trim()
+                            stderr.trim()
                         );
                     }
                     let data = String::from_utf8_lossy(&output.stdout);
                     match cargo_metadata::MetadataCommand::parse(data) {
                         Ok(metadata) => Some(metadata),
                         Err(e) => {
-                            log::warn!("could not parse cargo metadata output: {e}");
+                            tracing::warn!("could not parse cargo metadata output: {e}");
                             None
                         }
                     }
                 }
                 Err(e) => {
-                    log::warn!("waiting for cargo metadata failed: {e}");
+                    tracing::warn!("waiting for cargo metadata failed: {e}");
                     None
                 }
             },
@@ -108,7 +109,7 @@ impl Analyzer {
                 metadata: None,
             })
         } else {
-            log::warn!("Invalid analysis target: {}", path.display());
+            tracing::warn!("Invalid analysis target: {}", path.display());
             Err(InvalidTargetError)
         }
     }
@@ -144,7 +145,7 @@ impl Analyzer {
             .map(|v| v.name.to_string())
             .collect();
         let target_dir = metadata.target_directory.as_std_path().join("owl");
-        log::debug!("clear cargo cache");
+        tracing::debug!("clear cargo cache");
         for package_name in &package_names {
             let mut command = toolchain::setup_cargo_command().await;
             command
@@ -179,17 +180,13 @@ impl Analyzer {
             set_cache_path(&mut command, target_dir);
         }
 
-        if log::max_level()
-            .to_level()
-            .map(|v| v < log::Level::Info)
-            .unwrap_or(true)
-        {
+        if !tracing::enabled!(tracing::Level::INFO) {
             command.stderr(std::process::Stdio::null());
         }
 
         let package_count = metadata.packages.len();
 
-        log::debug!("start analyzing package {package_names:?}");
+        tracing::debug!("start analyzing package {package_names:?}");
         let mut child = command.spawn().unwrap();
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
@@ -203,7 +200,7 @@ impl Analyzer {
                     serde_json::from_str(&line)
                 {
                     let checked = target.name;
-                    log::debug!("crate {checked} checked");
+                    tracing::debug!("crate {checked} checked");
 
                     let event = AnalyzerEvent::CrateChecked {
                         package: checked,
@@ -216,10 +213,10 @@ impl Analyzer {
                     let _ = sender.send(event).await;
                 }
                 if !line.is_empty() {
-                    log::trace!("unknown format stdout from rustowlc");
+                    tracing::trace!("unknown format stdout from rustowlc");
                 }
             }
-            log::debug!("stdout closed");
+            tracing::debug!("stdout closed");
             notify_c.notify_one();
         });
 
@@ -250,15 +247,11 @@ impl Analyzer {
 
         toolchain::set_rustc_env(&mut command, &sysroot);
 
-        if log::max_level()
-            .to_level()
-            .map(|v| v < log::Level::Info)
-            .unwrap_or(true)
-        {
+        if !tracing::enabled!(tracing::Level::INFO) {
             command.stderr(std::process::Stdio::null());
         }
 
-        log::debug!("start analyzing {}", path.display());
+        tracing::debug!("start analyzing {}", path.display());
         let mut child = command.spawn().unwrap();
         let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
 
@@ -273,7 +266,7 @@ impl Analyzer {
                     let _ = sender.send(event).await;
                 }
             }
-            log::debug!("stdout closed");
+            tracing::debug!("stdout closed");
             notify_c.notify_one();
         });
 

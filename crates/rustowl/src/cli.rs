@@ -1,4 +1,5 @@
-use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
+use clap::{Args, Parser, Subcommand, ValueHint};
+use clap_verbosity_flag::{InfoLevel, Verbosity};
 
 #[derive(Debug, Parser)]
 #[command(author)]
@@ -7,9 +8,9 @@ pub struct Cli {
     #[arg(short('V'), long)]
     pub version: bool,
 
-    /// Suppress output.
-    #[arg(short, long, action(ArgAction::Count))]
-    pub quiet: u8,
+    /// Increase or decrease verbosity
+    #[command(flatten)]
+    pub verbosity: Verbosity<InfoLevel>,
 
     /// Use stdio to communicate with the LSP server.
     #[arg(long)]
@@ -94,6 +95,7 @@ pub enum ToolchainCommands {
 }
 
 #[derive(Args, Debug)]
+#[command(arg_required_else_help = true)]
 pub struct Completions {
     /// The shell to generate completions for.
     #[arg(value_enum)]
