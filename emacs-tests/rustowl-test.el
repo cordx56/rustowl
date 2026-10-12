@@ -254,5 +254,108 @@
           (rustowl-cursor-call)
           (should
            (equal called '(:position (:line 0 :character 1) :document (:uri "file:///fake")))))))))
+(defconst rustowl-test--directory
+  (file-name-directory (or load-file-name buffer-file-name)))
+
+(defun rustowl-test--wait (predicate)
+  "Wait at most five seconds for PREDICATE to become true."
+  (let ((deadline (+ (float-time) 5)))
+    (while (and (not (funcall predicate)) (< (float-time) deadline))
+      (accept-process-output nil 0.01))
+    (should (funcall predicate))))
+
+(ert-deftest rustowl-test-bridge-stdio ()
+  (skip-unless (executable-find "python3"))
+  (let* ((rustowl-command
+          (list (executable-find "python3")
+                (expand-file-name "fake-rustowl.py" rustowl-test--directory)))
+         (rustowl--bridge-sessions (make-hash-table :test #'equal))
+         (first (generate-new-buffer " *rustowl-first*"))
+         (second (generate-new-buffer " *rustowl-second*"))
+         session connection)
+    (unwind-protect
+        (progn
+          (with-current-buffer first
+            (setq buffer-file-name "/tmp/rustowl-test/first.rs")
+            (setq-local lsp-bridge-mode t)
+            (insert "abcdef")
+            (set-buffer-modified-p nil))
+          (with-current-buffer second
+            (setq buffer-file-name "/tmp/rustowl-test/second.rs")
+            (setq-local lsp-bridge-mode t)
+            (insert "abcdef")
+            (set-buffer-modified-p nil))
+          (cl-letf (((symbol-function 'rustowl--bridge-root)
+                     (lambda () temporary-file-directory)))
+            (with-current-buffer first
+              (rustowl--analyze-request)
+              (setq session rustowl--bridge-session
+                    connection (rustowl--session-connection session)))
+            (with-current-buffer second
+              (rustowl-cursor-call)
+              (should (eq session rustowl--bridge-session)))
+            ;; The response arrives while another buffer is current.
+            (rustowl-test--wait
+             (lambda () (buffer-local-value 'rustowl-overlays second)))
+            (with-current-buffer second
+              (should (= (length rustowl-overlays) 1))
+              (should (equal (overlay-get (car rustowl-overlays) 'face)
+                             '(:underline (:color "#0000cc" :style line))))
+              (insert "x")
+              (should-not rustowl-overlays)
+              (set-buffer-modified-p nil)
+              (rustowl--analyze-request)
+              (rustowl-cursor-call))
+            (rustowl-test--wait
+             (lambda () (buffer-local-value 'rustowl-overlays second)))
+            ;; Disabling one buffer must keep the shared process alive.
+            (with-current-buffer first
+              (setq-local lsp-bridge-mode nil)
+              (rustowl--bridge-mode-changed)
+              (should-not rustowl--bridge-session))
+            (kill-buffer first)
+            (should (jsonrpc-running-p connection))
+            (kill-buffer second)
+            (should-not (jsonrpc-running-p connection))
+            (should (= (hash-table-count rustowl--bridge-sessions) 0))))
+      (when (buffer-live-p first) (kill-buffer first))
+      (when (buffer-live-p second) (kill-buffer second))
+      (when session (rustowl--bridge-stop session)))))
+
+(ert-deftest rustowl-test-stale-response ()
+  (with-temp-buffer
+    (setq-local lsp-mode t)
+    (let (callback called)
+      (cl-letf (((symbol-function 'lsp-workspaces) (lambda () '(workspace)))
+                ((symbol-function 'lsp-request-async)
+                 (lambda (_method _params receive &rest _args)
+                   (setq callback receive))))
+        (rustowl--request "rustowl/cursor" nil (lambda (_) (setq called t)))
+        (rustowl-disable-cursor)
+        (funcall callback nil)
+        (should-not called)))))
+
+(ert-deftest rustowl-test-buffer-local-overlays ()
+  (with-temp-buffer
+    (insert "abc")
+    (let ((overlay (rustowl-underline 1 2 "green" nil)))
+      (with-temp-buffer
+        (rustowl-clear-overlays))
+      (should (overlay-buffer overlay))
+      (rustowl-clear-overlays))))
+
+(ert-deftest rustowl-test-file-uri ()
+  (should (equal (rustowl--file-uri "/tmp/a #中?.rs")
+                 "file:///tmp/a%20%23%E4%B8%AD%3F.rs")))
+
+(ert-deftest rustowl-test-bridge-remote-buffer ()
+  (with-temp-buffer
+    (setq-local lsp-bridge-mode t)
+    (setq buffer-file-name "/ssh:host:/tmp/main.rs")
+    (should-not (rustowl--backend))
+    (setq buffer-file-name "/tmp/main.rs")
+    (setq-local lsp-bridge-remote-file-flag t)
+    (should-not (rustowl--backend))))
+
 (provide 'rustowl-test)
 ;;; rustowl-test.el ends here
