@@ -1,7 +1,7 @@
 use super::analyze::*;
 use crate::{lsp::*, models::*, utils};
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::{sync::RwLock, task::JoinSet};
 use tokio_util::sync::CancellationToken;
@@ -24,6 +24,8 @@ pub struct Backend {
     processes: Arc<RwLock<JoinSet<()>>>,
     process_tokens: Arc<RwLock<BTreeMap<usize, CancellationToken>>>,
     work_done_progress: Arc<RwLock<bool>>,
+    /// paths the editor currently has open; the compiler analyses only these
+    open_files: Arc<RwLock<BTreeSet<PathBuf>>>,
 }
 
 impl Backend {
@@ -36,6 +38,7 @@ impl Backend {
             processes: Arc::new(RwLock::new(JoinSet::new())),
             process_tokens: Arc::new(RwLock::new(BTreeMap::new())),
             work_done_progress: Arc::new(RwLock::new(false)),
+            open_files: Arc::new(RwLock::new(BTreeSet::new())),
         }
     }
 
@@ -97,6 +100,7 @@ impl Backend {
             };
 
             let process_tokens = self.process_tokens.clone();
+            let open_files: Vec<PathBuf> = self.open_files.read().await.iter().cloned().collect();
             self.processes.write().await.spawn(async move {
                 let mut progress_token = None;
                 if *work_done_progress.read().await {
@@ -104,7 +108,10 @@ impl Backend {
                         Some(progress::ProgressToken::begin(client, None::<&str>).await)
                 };
 
-                let Some(mut iter) = analyzer.analyze(all_targets, all_features).await else {
+                let Some(mut iter) = analyzer
+                    .analyze(all_targets, all_features, &open_files)
+                    .await
+                else {
                     log::error!(
                         "could not launch rustowl for {}",
                         analyzer.target_path().display()
@@ -374,9 +381,17 @@ impl LanguageServer for Backend {
         if let Ok(path) = params.text_document.uri.to_file_path()
             && path.is_file()
             && params.text_document.language_id == "rust"
-            && self.add_analyze_target(&path).await
         {
-            self.do_analyze().await;
+            self.open_files.write().await.insert(path.clone());
+            if self.add_analyze_target(&path).await {
+                self.do_analyze().await;
+            }
+        }
+    }
+
+    async fn did_close(&self, params: lsp_types::DidCloseTextDocumentParams) {
+        if let Ok(path) = params.text_document.uri.to_file_path() {
+            self.open_files.write().await.remove(&path);
         }
     }
 
