@@ -120,7 +120,10 @@ async fn handle_show_command(opts: cli::Show) {
         }
     };
 
-    let mut iter = analyzer.analyze(opts.all_targets, opts.all_features).await;
+    let Some(mut iter) = analyzer.analyze(opts.all_targets, opts.all_features).await else {
+        log::error!("could not launch cargo; nothing analyzed");
+        return;
+    };
 
     // Collect analysis results
     let mut crate_data: Option<rustowl::models::Crate> = None;
