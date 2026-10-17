@@ -5,9 +5,9 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::{sync::RwLock, task::JoinSet};
 use tokio_util::sync::CancellationToken;
-use tower_lsp::jsonrpc;
-use tower_lsp::lsp_types;
-use tower_lsp::{Client, LanguageServer, LspService};
+use tower_lsp_server::gen_lsp_types;
+use tower_lsp_server::jsonrpc;
+use tower_lsp_server::{Client, LanguageServer, LspService};
 
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -101,9 +101,8 @@ impl Backend {
             self.processes.write().await.spawn(async move {
                 let mut progress_token = None;
                 if *work_done_progress.read().await {
-                    progress_token =
-                        Some(progress::ProgressToken::begin(client, None::<&str>).await)
-                };
+                    progress_token = Some(progress::ProgressToken::begin(client).await);
+                }
 
                 let mut iter = analyzer.analyze(all_targets, all_features).await;
                 let mut analyzed_package_count = 0;
@@ -121,10 +120,7 @@ impl Backend {
                                 let percentage =
                                     (analyzed_package_count * 100 / package_count).min(100);
                                 token
-                                    .report(
-                                        Some(format!("{package} analyzed")),
-                                        Some(percentage as u32),
-                                    )
+                                    .report(format!("{package} analyzed"), percentage as u32)
                                     .await;
                             }
                         }
@@ -288,53 +284,55 @@ impl Backend {
     }
 }
 
-#[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(
         &self,
-        params: lsp_types::InitializeParams,
-    ) -> jsonrpc::Result<lsp_types::InitializeResult> {
+        params: gen_lsp_types::InitializeParams,
+    ) -> jsonrpc::Result<gen_lsp_types::InitializeResult> {
         let mut workspaces = Vec::new();
-        if let Some(root) = params.root_uri
-            && let Ok(path) = root.to_file_path()
+        if let Some(gen_lsp_types::WorkspaceFolders::WorkspaceFolderList(folders)) =
+            params.workspace_folders_initialize_params.workspace_folders
         {
-            workspaces.push(path);
-        }
-        if let Some(wss) = params.workspace_folders {
-            workspaces.extend(wss.iter().filter_map(|v| v.uri.to_file_path().ok()));
+            workspaces.extend(
+                folders
+                    .iter()
+                    .filter_map(|v| utils::uri_to_file_path(&v.uri)),
+            );
         }
         for path in workspaces {
             self.add_analyze_target(&path).await;
         }
         self.do_analyze().await;
 
-        let sync_options = lsp_types::TextDocumentSyncOptions {
+        let sync_options = gen_lsp_types::TextDocumentSyncOptions {
             open_close: Some(true),
-            save: Some(lsp_types::TextDocumentSyncSaveOptions::Supported(true)),
-            change: Some(lsp_types::TextDocumentSyncKind::INCREMENTAL),
+            save: Some(gen_lsp_types::Save::Bool(true)),
+            change: Some(gen_lsp_types::TextDocumentSyncKind::Incremental),
             ..Default::default()
         };
-        let workspace_cap = lsp_types::WorkspaceServerCapabilities {
-            workspace_folders: Some(lsp_types::WorkspaceFoldersServerCapabilities {
+        let workspace_cap = gen_lsp_types::WorkspaceOptions {
+            workspace_folders: Some(gen_lsp_types::WorkspaceFoldersServerCapabilities {
                 supported: Some(true),
-                change_notifications: Some(lsp_types::OneOf::Left(true)),
+                change_notifications: Some(gen_lsp_types::ChangeNotifications::Bool(true)),
             }),
             ..Default::default()
         };
-        let server_cap = lsp_types::ServerCapabilities {
-            text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Options(sync_options)),
+        let server_cap = gen_lsp_types::ServerCapabilities {
+            text_document_sync: Some(gen_lsp_types::TextDocumentSync::Options(sync_options)),
             workspace: Some(workspace_cap),
             ..Default::default()
         };
-        let init_res = lsp_types::InitializeResult {
+        let init_res = gen_lsp_types::InitializeResult {
             capabilities: server_cap,
             ..Default::default()
         };
         let health_checker = async move {
-            if let Some(process_id) = params.process_id {
+            // `processId` is an `i32` per the spec, while `process_alive` takes a
+            // `u32` pid, so a nonsensical negative value just disables the check.
+            if let Some(pid) = params.process_id.and_then(|v| u32::try_from(v).ok()) {
                 loop {
                     tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-                    if !process_alive::state(process_alive::Pid::from(process_id)).is_alive() {
+                    if !process_alive::state(process_alive::Pid::from(pid)).is_alive() {
                         panic!("The client process is dead");
                     }
                 }
@@ -354,10 +352,10 @@ impl LanguageServer for Backend {
 
     async fn did_change_workspace_folders(
         &self,
-        params: lsp_types::DidChangeWorkspaceFoldersParams,
+        params: gen_lsp_types::DidChangeWorkspaceFoldersParams,
     ) -> () {
         for added in params.event.added {
-            if let Ok(path) = added.uri.to_file_path()
+            if let Some(path) = utils::uri_to_file_path(&added.uri)
                 && self.add_analyze_target(&path).await
             {
                 self.do_analyze().await;
@@ -365,17 +363,17 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
-        if let Ok(path) = params.text_document.uri.to_file_path()
+    async fn did_open(&self, params: gen_lsp_types::DidOpenTextDocumentParams) {
+        if let Some(path) = utils::uri_to_file_path(&params.text_document.uri)
             && path.is_file()
-            && params.text_document.language_id == "rust"
+            && params.text_document.language_id == gen_lsp_types::LanguageKind::Rust
             && self.add_analyze_target(&path).await
         {
             self.do_analyze().await;
         }
     }
 
-    async fn did_change(&self, _params: lsp_types::DidChangeTextDocumentParams) {
+    async fn did_change(&self, _params: gen_lsp_types::DidChangeTextDocumentParams) {
         *self.analyzed.write().await = None;
         self.shutdown_subprocesses().await;
     }

@@ -7,7 +7,7 @@ use clap_complete::generate;
 use rustowl::*;
 use std::env;
 use std::io;
-use tower_lsp::{LspService, Server};
+use tower_lsp_server::{LspService, Server};
 
 use crate::cli::{Cli, Commands, ToolchainCommands};
 
