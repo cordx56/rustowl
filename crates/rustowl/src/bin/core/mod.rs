@@ -128,11 +128,10 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
             };
             match RUNTIME.block_on(handle) {
                 Ok(result) => {
-                        tracing::debug!("one task joined");
+                    tracing::debug!("one task joined");
                     handle_analyzed_result(tcx, result);
                 }
-                    Err(e) => tracing::warn!("analysis task failed: {e}"),
-                }
+                Err(e) => tracing::warn!("analysis task failed: {e}"),
             }
         }
         if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {

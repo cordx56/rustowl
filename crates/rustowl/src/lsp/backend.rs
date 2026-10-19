@@ -104,7 +104,7 @@ impl Backend {
                 }
 
                 let Some(mut iter) = analyzer.analyze(all_targets, all_features).await else {
-                    log::error!(
+                    tracing::error!(
                         "could not launch rustowl for {}",
                         analyzer.target_path().display()
                     );

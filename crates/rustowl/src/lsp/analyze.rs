@@ -156,7 +156,7 @@ impl Analyzer {
                 Ok(mut child) => {
                     child.wait().await.ok();
                 }
-                Err(e) => log::warn!("could not launch cargo clean: {e}"),
+                Err(e) => tracing::warn!("could not launch cargo clean: {e}"),
             }
         }
 
@@ -264,10 +264,7 @@ impl Analyzer {
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(e) => {
-                tracing::warn!(
-                    "could not launch cargo check for {}: {e}",
-                    path.display()
-                );
+                tracing::warn!("could not launch cargo check for {}: {e}", path.display());
                 return None;
             }
         };
