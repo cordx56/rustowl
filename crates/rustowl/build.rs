@@ -5,7 +5,6 @@ use std::env;
 use std::fs;
 use std::io::Error;
 use std::path::PathBuf;
-use std::process::Command;
 
 include!("src/cli.rs");
 include!("src/shells.rs");
@@ -54,7 +53,9 @@ fn main() -> Result<(), Error> {
     let man_out_dir = out_dir.join("man");
     fs::create_dir_all(&man_out_dir)?;
 
-    fs::write(man_out_dir.join("rustowl.1"), manpage().render())?;
+    let manual = manpage();
+    let man_path = manual.path();
+    fs::write(man_out_dir.join(man_path), manual.render())?;
 
     Ok(())
 }
@@ -162,7 +163,7 @@ fn rustc_release() -> Option<String> {
 /// Runs `program` and returns its trimmed stdout, or `None` if it cannot be
 /// spawned, exits non-zero, or prints nothing.
 fn command_output(program: &str, args: &[&str]) -> Option<String> {
-    Command::new(program)
+    std::process::Command::new(program)
         .args(args)
         .output()
         .ok()
@@ -174,6 +175,24 @@ fn command_output(program: &str, args: &[&str]) -> Option<String> {
 
 /// Formats the build time as UTC.
 fn build_time() -> Option<String> {
+    build_timestamp().map(|ts| format!("{} UTC", ts.strftime("%F %T")))
+}
+
+/// The date shown in the manual page header.
+///
+/// The date of the commit being built is preferred, because it stays the same
+/// for every build of that commit. Builds without git metadata fall back to
+/// the build timestamp.
+fn manpage_date() -> Option<String> {
+    git_output(&["log", "-1", "--format=%cs"])
+        .or_else(|| build_timestamp().map(|ts| ts.strftime("%F").to_string()))
+}
+
+/// Resolves the build timestamp.
+///
+/// `SOURCE_DATE_EPOCH` takes precedence, so reproducible builds stay
+/// reproducible.
+fn build_timestamp() -> Option<Timestamp> {
     let secs = match env::var("SOURCE_DATE_EPOCH") {
         Ok(epoch) => epoch.trim().parse::<u64>().ok()?,
         Err(_) => std::time::SystemTime::now()
@@ -181,6 +200,5 @@ fn build_time() -> Option<String> {
             .ok()?
             .as_secs(),
     };
-    let ts = Timestamp::from_second(secs as i64).ok()?;
-    Some(format!("{} UTC", ts.strftime("%F %T")))
+    Timestamp::from_second(secs as i64).ok()
 }
