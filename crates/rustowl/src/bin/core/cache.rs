@@ -37,17 +37,17 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
         let s = match std::fs::read_to_string(&cache_path) {
             Ok(v) => v,
             Err(e) => {
-                log::warn!("failed to read incremental cache file: {e}");
+                tracing::warn!("failed to read incremental cache file: {e}");
                 return Some(CacheData::default());
             }
         };
         // a cache written in an older format is discarded, so that it is
         // rebuilt instead of disabling the cache
         let read = serde_json::from_str(&s).unwrap_or_else(|e| {
-            log::warn!("discard incompatible incremental cache file: {e}");
+            tracing::warn!("discard incompatible incremental cache file: {e}");
             CacheData::default()
         });
-        log::debug!("cache read: {}", cache_path.display());
+        tracing::debug!("cache read: {}", cache_path.display());
         Some(read)
     } else {
         None
@@ -57,7 +57,7 @@ pub fn get_cache(krate: &str) -> Option<CacheData> {
 pub fn write_cache(krate: &str, cache: &CacheData) {
     if let Some(cache_path) = rustowl::cache::get_cache_path() {
         if let Err(e) = std::fs::create_dir_all(&cache_path) {
-            log::warn!("failed to create cache dir: {e}");
+            tracing::warn!("failed to create cache dir: {e}");
             return;
         }
         let cache_path = cache_path.join(format!("{krate}.json"));
@@ -70,13 +70,13 @@ pub fn write_cache(krate: &str, cache: &CacheData) {
         {
             Ok(v) => v,
             Err(e) => {
-                log::warn!("failed to open incremental cache file: {e}");
+                tracing::warn!("failed to open incremental cache file: {e}");
                 return;
             }
         };
         if let Err(e) = f.write_all(s.as_bytes()) {
-            log::warn!("failed to write incremental cache file: {e}");
+            tracing::warn!("failed to write incremental cache file: {e}");
         }
-        log::debug!("incremental cache saved: {}", cache_path.display());
+        tracing::debug!("incremental cache saved: {}", cache_path.display());
     }
 }

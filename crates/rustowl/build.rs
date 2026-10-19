@@ -1,12 +1,15 @@
 use clap::CommandFactory;
 use clap_complete::generate_to;
+use jiff::Timestamp;
 use std::env;
 use std::fs;
 use std::io::Error;
+use std::path::PathBuf;
 use std::process::Command;
 
 include!("src/cli.rs");
 include!("src/shells.rs");
+include!("src/man.rs");
 
 fn main() -> Result<(), Error> {
     // Declare custom cfg flags to avoid warnings
@@ -21,6 +24,9 @@ fn main() -> Result<(), Error> {
 
     let host_tuple = get_host_tuple();
     println!("cargo::rustc-env=HOST_TUPLE={host_tuple}");
+
+    emit_rerun_conditions();
+    emit_build_provenance();
 
     #[cfg(target_os = "macos")]
     {
@@ -47,11 +53,8 @@ fn main() -> Result<(), Error> {
     }
     let man_out_dir = out_dir.join("man");
     fs::create_dir_all(&man_out_dir)?;
-    let man = clap_mangen::Man::new(cmd);
-    let mut buffer: Vec<u8> = Default::default();
-    man.render(&mut buffer)?;
 
-    std::fs::write(man_out_dir.join("rustowl.1"), buffer)?;
+    fs::write(man_out_dir.join("rustowl.1"), manpage().render())?;
 
     Ok(())
 }
@@ -63,8 +66,8 @@ fn get_toolchain() -> String {
     } else if let Ok(v) = env::var("TOOLCHAIN_CHANNEL") {
         format!("{v}-{}", get_host_tuple())
     } else {
-        let rustc_v = rustc_version::version().expect("failed to get rustc version");
-        format!("{}-{}", rustc_v, get_host_tuple())
+        let rustc_v = rustc_release().expect("failed to get rustc version");
+        format!("{rustc_v}-{}", get_host_tuple())
     }
 }
 fn get_channel() -> String {
@@ -87,10 +90,97 @@ fn get_toolchain_date() -> Option<String> {
     r.find(&get_toolchain()).map(|v| v.as_str().to_owned())
 }
 fn get_host_tuple() -> String {
-    Command::new(env::var("RUSTC").unwrap_or("rustc".to_string()))
-        .arg("--print")
-        .arg("host-tuple")
+    rustc_output(&["--print", "host-tuple"]).expect("failed to obtain host-tuple")
+}
+
+/// Bakes build provenance into the binary for `--version` to report.
+fn emit_build_provenance() {
+    let provenance = [
+        ("GIT_TAG", git_output(&["describe", "--tags", "--abbrev=0"])),
+        (
+            "GIT_COMMIT_HASH",
+            git_output(&["rev-parse", "--short", "HEAD"]),
+        ),
+        ("BUILD_TIME", build_time()),
+        ("RUSTC_VERSION", rustc_output(&["--version"])),
+    ];
+    for (key, value) in provenance {
+        println!("cargo::rustc-env={key}={}", value.unwrap_or_default());
+    }
+}
+
+/// Declares what makes the provenance above stale.
+///
+/// Git metadata is best-effort.
+fn emit_rerun_conditions() {
+    // Provenance inputs.
+    println!("cargo::rerun-if-env-changed=SOURCE_DATE_EPOCH");
+    // Inputs the implicit default used to cover.
+    for path in ["src", "build.rs", "Cargo.toml"] {
+        println!("cargo::rerun-if-changed={path}");
+    }
+    // Git inputs: HEAD moves on checkout/branch switch, the ref moves on commit.
+    let Some(git_dir) = git_output(&["rev-parse", "--absolute-git-dir"]) else {
+        return;
+    };
+    rerun_if_path_exists(std::path::Path::new(&git_dir).join("HEAD"));
+    let common_dir = git_output(&["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+    let ref_name = git_output(&["symbolic-ref", "HEAD"]);
+    if let (Some(common_dir), Some(ref_name)) = (common_dir, ref_name) {
+        rerun_if_path_exists(std::path::Path::new(&common_dir).join(ref_name));
+    }
+}
+
+/// Watches `path` only if it exists.
+fn rerun_if_path_exists(path: PathBuf) {
+    if path.exists() {
+        println!("cargo::rerun-if-changed={}", path.display());
+    }
+}
+
+/// Runs `git` and returns its trimmed stdout, or `None` if git is missing,
+/// the command fails, or it produces no output.
+fn git_output(args: &[&str]) -> Option<String> {
+    command_output("git", args)
+}
+
+/// Runs the active compiler and returns its trimmed stdout.
+fn rustc_output(args: &[&str]) -> Option<String> {
+    command_output(&env::var("RUSTC").unwrap_or("rustc".to_string()), args)
+}
+
+/// The active compiler's version, as it reports itself.
+fn rustc_release() -> Option<String> {
+    rustc_output(&["-vV"])?
+        .lines()
+        .find_map(|line| line.strip_prefix("release: "))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
+/// Runs `program` and returns its trimmed stdout, or `None` if it cannot be
+/// spawned, exits non-zero, or prints nothing.
+fn command_output(program: &str, args: &[&str]) -> Option<String> {
+    Command::new(program)
+        .args(args)
         .output()
-        .map(|v| String::from_utf8(v.stdout).unwrap().trim().to_string())
-        .expect("failed to obtain host-tuple")
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+/// Formats the build time as UTC.
+fn build_time() -> Option<String> {
+    let secs = match env::var("SOURCE_DATE_EPOCH") {
+        Ok(epoch) => epoch.trim().parse::<u64>().ok()?,
+        Err(_) => std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs(),
+    };
+    let ts = Timestamp::from_second(secs as i64).ok()?;
+    Some(format!("{} UTC", ts.strftime("%F %T")))
 }
