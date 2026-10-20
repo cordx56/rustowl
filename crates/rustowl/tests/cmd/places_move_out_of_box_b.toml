@@ -1,0 +1,28 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "places.rs", "move_out_of_box", "b"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'b' (1/1) in function 'move_out_of_box' ===
+
+  29 | // since a place behind a dereference is not a fragment (compiles).
+  30 | fn move_out_of_box() {
+  31 |     let b = Box::new(String::new());
+     |         -   -----------------------
+  32 |     let s = *b;
+     |         -   --
+  33 |     println!("{s}");
+     |     ---------------
+  34 | }
+     | -
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

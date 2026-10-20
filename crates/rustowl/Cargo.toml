@@ -62,6 +62,7 @@ url.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 insta.workspace = true
+trycmd.workspace = true
 
 [build-dependencies]
 clap.workspace = true

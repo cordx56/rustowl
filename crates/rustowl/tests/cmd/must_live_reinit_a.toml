@@ -1,0 +1,32 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "reinit", "a"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'a' (1/1) in function 'reinit' ===
+
+ 175 | // `a` is moved while borrowed and then reassigned (does not compile).
+ 176 | fn reinit() {
+ 177 |     let mut a = String::from("a");
+     |         -----   -----------------
+ 178 |     let r = &a;
+     |         -   --
+ 179 |     drop(a);
+     |     ---- -
+ 180 |     a = String::from("b");
+     |     -                   -
+ 181 |     println!("{r} {a}");
+     |     ~~~~~~~~~~~~~~~~~~~
+ 182 | }
+     | -
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''
