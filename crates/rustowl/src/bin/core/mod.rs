@@ -134,7 +134,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
         for analyzer in analyzers {
             match analyzer {
                 MirAnalyzerInitResult::Cached(cached) => {
-                    handle_analyzed_result(tcx, cached);
+                    handle_analyzed_result(Ok(cached));
                 }
                 MirAnalyzerInitResult::Analyzer(analyzer) => {
                     tasks.push(
@@ -158,17 +158,64 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
         }
         drop(tasks);
         for handle in ready {
-            match RUNTIME.block_on(handle) {
-                Ok(result) => {
-                    tracing::debug!("one task joined");
-                    handle_analyzed_result(tcx, result);
-                }
-                Err(e) => tracing::warn!("analysis task failed: {e}"),
-            }
+            handle_analyzed_result(RUNTIME.block_on(handle).map_err(|e| e.to_string()));
         }
     }
 
     default_borrowck_result
+}
+
+/// Results of one compilation, printed as one `Workspace` per crate: the
+/// receiver merges whole crates, so a crate costs one wrap, one parse and one
+/// write instead of one per function.
+#[derive(Default)]
+pub struct Batch {
+    results: Vec<AnalyzeResult>,
+}
+
+static BATCH: Mutex<Batch> = Mutex::new(Batch {
+    results: Vec::new(),
+});
+
+impl Batch {
+    fn push(&mut self, result: Result<AnalyzeResult, String>) {
+        match result {
+            Ok(result) => {
+                // The entry must stay in the cache: a later compile reads it to
+                // skip borrowck for an unchanged root, which saves far more
+                // than the copy costs.
+                if !result.from_cache {
+                    cache::put_entry(
+                        &result.key,
+                        result.base,
+                        std::sync::Arc::clone(&result.analyzed),
+                    );
+                }
+                self.results.push(result);
+            }
+            Err(e) => tracing::warn!("analysis task failed: {e}"),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.results.is_empty()
+    }
+
+    fn build_workspace(&self, crate_name: &str) -> Workspace {
+        let mut files: HashMap<String, File> = HashMap::new();
+        for result in &self.results {
+            files
+                .entry(result.file_path.to_string_lossy().into_owned())
+                .or_insert_with(|| File { items: Vec::new() })
+                .items
+                .push(std::sync::Arc::clone(&result.analyzed));
+        }
+        Workspace(HashMap::from([(crate_name.to_string(), Crate(files))]))
+    }
+}
+
+fn handle_analyzed_result(result: Result<AnalyzeResult, String>) {
+    BATCH.lock().unwrap().push(result);
 }
 
 pub struct AnalyzerCallback;
@@ -187,6 +234,7 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         tcx: TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
         cache::init_cache(&tcx.crate_name(LOCAL_CRATE).to_string());
+        *BATCH.lock().unwrap() = Batch::default();
         let result = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
 
         // Join all tasks after all analysis finished.
@@ -196,12 +244,13 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
             let Some(handle) = next else {
                 break;
             };
-            match RUNTIME.block_on(handle) {
-                Ok(result) => {
-                    tracing::debug!("one task joined");
-                    handle_analyzed_result(tcx, result);
-                }
-                Err(e) => tracing::warn!("analysis task failed: {e}"),
+            handle_analyzed_result(RUNTIME.block_on(handle).map_err(|e| e.to_string()));
+        }
+        {
+            let batch = BATCH.lock().unwrap();
+            if !batch.is_empty() {
+                let ws = batch.build_workspace(&tcx.crate_name(LOCAL_CRATE).to_string());
+                println!("{}", serde_json::to_string(&ws).unwrap());
             }
         }
         cache::persist_entries(&tcx.crate_name(LOCAL_CRATE).to_string());
@@ -212,31 +261,6 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
             rustc_driver::Compilation::Stop
         }
     }
-}
-
-pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
-    let AnalyzeResult {
-        file_path,
-        key,
-        base,
-        from_cache,
-        analyzed: function,
-    } = analyzed;
-    // The entry must stay in the cache: a later compile reads it to skip borrowck
-    // for an unchanged root, which saves far more than the copy costs.
-    if !from_cache {
-        cache::put_entry(&key, base, std::sync::Arc::clone(&function));
-    }
-    let krate = Crate(HashMap::from([(
-        file_path.to_string_lossy().to_string(),
-        File {
-            items: vec![(*function).clone()],
-        },
-    )]));
-    // get currently-compiling crate name
-    let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
-    let ws = Workspace(HashMap::from([(crate_name.clone(), krate)]));
-    println!("{}", serde_json::to_string(&ws).unwrap());
 }
 
 pub fn run_compiler() -> ExitCode {
@@ -265,4 +289,68 @@ pub fn run_compiler() -> ExitCode {
     rustc_driver::catch_with_exit_code(|| {
         run_compiler_entrypoint(&args, &mut AnalyzerCallback);
     })
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use super::*;
+    use rustowl::models::{Function, MirDecl};
+    use std::path::PathBuf;
+
+    fn result(path: &str, fn_id: u32) -> AnalyzeResult {
+        AnalyzeResult {
+            file_path: PathBuf::from(path),
+            key: cache::key::FunctionKey {
+                def_path: u64::from(fn_id),
+                fn_text_hash: 0,
+                mir_hash: String::new(),
+                analysis_version: 0,
+                toolchain_hash: 0,
+            },
+            base: Loc(0),
+            from_cache: false,
+            analyzed: Arc::new(Function {
+                fn_id,
+                name: format!("f{fn_id}"),
+                basic_blocks: Vec::new(),
+                decls: Vec::<MirDecl>::new(),
+            }),
+        }
+    }
+
+    #[test]
+    fn a_batched_emission_survives_a_failed_result() {
+        let mut batch = Batch::default();
+        batch.push(Ok(result("lib.rs", 1)));
+        batch.push(Err("analysis task failed".to_string()));
+        batch.push(Ok(result("lib.rs", 2)));
+
+        assert_eq!(
+            batch.build_workspace("crate").0["crate"].0["lib.rs"]
+                .items
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn an_empty_batch_prints_nothing() {
+        let mut batch = Batch::default();
+        batch.push(Err("analysis task failed".to_string()));
+        assert!(batch.is_empty());
+    }
+
+    #[test]
+    fn the_batch_keeps_the_arc_it_was_given() {
+        let entry = result("lib.rs", 1);
+        let shared = Arc::clone(&entry.analyzed);
+        let mut batch = Batch::default();
+        batch.push(Ok(entry));
+
+        let ws = batch.build_workspace("crate");
+        assert!(
+            Arc::ptr_eq(&shared, &ws.0["crate"].0["lib.rs"].items[0]),
+            "the emitted body must be the same allocation the cache holds"
+        );
+    }
 }
