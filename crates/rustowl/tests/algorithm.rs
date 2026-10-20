@@ -446,20 +446,11 @@ async fn rustowl_cargo_command(rustowlc: &str, target_dir: &Path) -> tokio::proc
     command
 }
 
-/// Analyse the perf fixture, returning every `Workspace` document rustowlc printed,
-/// accumulated raw. Not via `Workspace::merge`: merging dedups by `fn_id` before
-/// `normalize_items` can assert on a repeated delivery.
-async fn analyze_perf_fixture(fixture: &Path) -> RawWorkspace {
-    let rustowlc = env!("CARGO_BIN_EXE_rustowlc");
-    let cargo = toolchain::get_executable_path("cargo").await;
-    let target_dir = fixture.join("target").join("owl-reference");
-
-    tokio::fs::remove_dir_all(target_dir.join("cache"))
-        .await
-        .ok();
-
-    for package in workspace_packages(&cargo, fixture).await {
-        let mut clean = rustowl_cargo_command(rustowlc, &target_dir).await;
+/// Remove every workspace package's build state, forcing the next check to
+/// re-invoke rustowlc. Leaves `target_dir/cache` alone.
+async fn clean_workspace_packages(cargo: &str, fixture: &Path, target_dir: &Path) {
+    for package in workspace_packages(cargo, fixture).await {
+        let mut clean = rustowl_cargo_command(env!("CARGO_BIN_EXE_rustowlc"), target_dir).await;
         clean
             .args(["clean", "--package", package.as_str()])
             .current_dir(fixture)
@@ -473,6 +464,21 @@ async fn analyze_perf_fixture(fixture: &Path) -> RawWorkspace {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+}
+
+/// Analyse the perf fixture, returning every `Workspace` document rustowlc printed,
+/// accumulated raw. Not via `Workspace::merge`: merging dedups by `fn_id` before
+/// `normalize_items` can assert on a repeated delivery.
+async fn analyze_perf_fixture(fixture: &Path) -> RawWorkspace {
+    let rustowlc = env!("CARGO_BIN_EXE_rustowlc");
+    let cargo = toolchain::get_executable_path("cargo").await;
+    let target_dir = fixture.join("target").join("owl-reference");
+
+    tokio::fs::remove_dir_all(target_dir.join("cache"))
+        .await
+        .ok();
+
+    clean_workspace_packages(&cargo, fixture, &target_dir).await;
 
     let mut command = rustowl_cargo_command(rustowlc, &target_dir).await;
     command
@@ -571,4 +577,104 @@ fn render_reference(reference: &ReferenceWorkspace) -> String {
         }
     }
     out
+}
+
+/// Analyse the fixture with `RUST_LOG=debug`, returning the driver's stderr.
+/// With `use_cache` false the cache is disabled entirely.
+async fn check_fixture_for_cache(fixture: &Path, target_dir: &Path, use_cache: bool) -> String {
+    let mut command = rustowl_cargo_command(env!("CARGO_BIN_EXE_rustowlc"), target_dir).await;
+    if !use_cache {
+        command.env_remove("RUSTOWL_CACHE_DIR");
+    }
+    command
+        .env("RUST_LOG", "debug")
+        .args([
+            "check",
+            "--workspace",
+            "--keep-going",
+            "--message-format=json",
+        ])
+        .current_dir(fixture)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let output = command.output().await.expect("cargo check must run");
+    assert!(
+        output.status.success(),
+        "cargo check over the perf fixture failed ({})\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+fn count_cache_hits(stderr: &str) -> usize {
+    stderr.matches("MIR cache hit").count()
+}
+
+/// `test_workspace_reference` wipes the cache on every run, so the warm path needs its own test.
+#[tokio::test]
+async fn warm_run_serves_bodies_from_cache() {
+    require_toolchain_sysroot();
+
+    let fixture: PathBuf = [env!("CARGO_MANIFEST_DIR"), "perf-tests", "dummy-package"]
+        .iter()
+        .collect();
+    let fixture = fixture.canonicalize().expect("the perf fixture must exist");
+    let target_dir = fixture.join("target").join("owl-warm");
+
+    tokio::fs::remove_dir_all(&target_dir).await.ok();
+
+    let cargo = toolchain::get_executable_path("cargo").await;
+
+    clean_workspace_packages(&cargo, &fixture, &target_dir).await;
+    let cold = check_fixture_for_cache(&fixture, &target_dir, true).await;
+    assert_eq!(
+        count_cache_hits(&cold),
+        0,
+        "a cold cache must produce no hits"
+    );
+
+    let mut entries = tokio::fs::read_dir(target_dir.join("cache"))
+        .await
+        .expect("a cold run must write the cache directory");
+    assert!(
+        entries.next_entry().await.expect("cache dir").is_some(),
+        "a cold run must leave at least one cache file behind"
+    );
+
+    clean_workspace_packages(&cargo, &fixture, &target_dir).await;
+    let warm = check_fixture_for_cache(&fixture, &target_dir, true).await;
+    assert!(
+        count_cache_hits(&warm) > 0,
+        "an unchanged warm run served nothing from the cache\n{}",
+        warm.lines().rev().take(40).collect::<Vec<_>>().join("\n")
+    );
+}
+
+/// The control for the test above: without it a cache that is never consulted
+/// still passes, because "no error" and "hit every time" look the same.
+#[tokio::test]
+async fn no_cache_dir_means_no_hits() {
+    require_toolchain_sysroot();
+
+    let fixture: PathBuf = [env!("CARGO_MANIFEST_DIR"), "perf-tests", "dummy-package"]
+        .iter()
+        .collect();
+    let fixture = fixture.canonicalize().expect("the perf fixture must exist");
+    let target_dir = fixture.join("target").join("owl-no-cache");
+
+    tokio::fs::remove_dir_all(&target_dir).await.ok();
+
+    let cargo = toolchain::get_executable_path("cargo").await;
+    clean_workspace_packages(&cargo, &fixture, &target_dir).await;
+    let first = check_fixture_for_cache(&fixture, &target_dir, false).await;
+    clean_workspace_packages(&cargo, &fixture, &target_dir).await;
+    let second = check_fixture_for_cache(&fixture, &target_dir, false).await;
+
+    assert_eq!(
+        count_cache_hits(&first) + count_cache_hits(&second),
+        0,
+        "a disabled cache must never report a hit"
+    );
 }
