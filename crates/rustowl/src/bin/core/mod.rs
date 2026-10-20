@@ -10,7 +10,6 @@ use rustc_middle::{ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{Arc, LazyLock, Mutex, atomic::AtomicBool};
