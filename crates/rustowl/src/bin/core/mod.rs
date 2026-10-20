@@ -186,6 +186,7 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         _compiler: &interface::Compiler,
         tcx: TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
+        cache::init_cache(&tcx.crate_name(LOCAL_CRATE).to_string());
         let result = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
 
         // Join all tasks after all analysis finished.
@@ -203,9 +204,7 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
                 Err(e) => tracing::warn!("analysis task failed: {e}"),
             }
         }
-        if let Some(cache) = cache::CACHE.lock().unwrap().as_ref() {
-            cache::write_cache(&tcx.crate_name(LOCAL_CRATE).to_string(), cache);
-        }
+        cache::persist_entries(&tcx.crate_name(LOCAL_CRATE).to_string());
 
         if result.is_ok() {
             rustc_driver::Compilation::Continue
@@ -218,21 +217,20 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
 pub fn handle_analyzed_result(tcx: TyCtxt<'_>, analyzed: AnalyzeResult) {
     let AnalyzeResult {
         file_path,
-        file_hash,
-        mir_hash,
+        key,
+        base,
+        from_cache,
         analyzed: function,
     } = analyzed;
-    // The entry has to stay in the cache. It is what a later compile reads to
-    // skip borrowck for an unchanged root, so a copy here buys a whole skipped
-    // borrow check -- worth far more than the copy costs. Taking it back out
-    // instead leaves the cache empty, and every root is then re-analysed.
-    if let Some(cache) = cache::CACHE.lock().unwrap().as_mut() {
-        cache.insert_cache(file_hash, mir_hash, function.clone());
+    // The entry must stay in the cache: a later compile reads it to skip borrowck
+    // for an unchanged root, which saves far more than the copy costs.
+    if !from_cache {
+        cache::put_entry(&key, base, std::sync::Arc::clone(&function));
     }
     let krate = Crate(HashMap::from([(
         file_path.to_string_lossy().to_string(),
         File {
-            items: vec![function],
+            items: vec![(*function).clone()],
         },
     )]));
     // get currently-compiling crate name
