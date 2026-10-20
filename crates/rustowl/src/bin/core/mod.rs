@@ -297,6 +297,16 @@ fn handle_analyzed_result(result: Result<AnalyzeResult, String>) {
     BATCH.push(result);
 }
 
+#[rustversion::since(2026-11-23)]
+fn analysis<'tcx>(tcx: TyCtxt<'tcx>) {
+    rustc_interface::passes::full_analysis(tcx);
+}
+
+#[rustversion::before(2026-11-23)]
+fn analysis<'tcx>(tcx: TyCtxt<'tcx>) {
+    tcx.analysis(())
+}
+
 pub struct AnalyzerCallback;
 impl rustc_driver::Callbacks for AnalyzerCallback {
     fn config(&mut self, config: &mut interface::Config) {
@@ -314,7 +324,8 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
     ) -> rustc_driver::Compilation {
         cache::init_cache(&tcx.crate_name(LOCAL_CRATE).to_string());
         BATCH.reset();
-        let result = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
+
+        let result = rustc_driver::catch_fatal_errors(|| analysis(tcx));
 
         // Wait for the analyses that are still running: they publish their own
         // results.

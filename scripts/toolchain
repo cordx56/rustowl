@@ -1,7 +1,7 @@
 #!/bin/sh -e
 
 # config
-DEFAULT_TOOLCHAIN_CHANNEL="1.99.0"
+DEFAULT_TOOLCHAIN_CHANNEL="1.100.1"
 DEFAULT_RUST_COMPONENTS="rustc,rust-std,cargo,rustc-dev,llvm-tools $RUST_COMPONENTS"
 
 # shared helpers (colors, host tuple, version gate). POSIX sh: this script runs
@@ -69,7 +69,7 @@ download_component() {
 # across /bin/sh implementations (dash, bash-as-sh, busybox ash).
 install_component() {
     temp="$(mktemp -d)" || return 1
-    if ! download_component "$1" | tar xzf - -C "$temp" > /dev/null; then
+    if ! download_component "$1" | tar xzf - -C "$temp" >/dev/null; then
         echo "Component $1 failed to download or extract" 1>&2
         rm -rf "$temp"
         return 1
@@ -84,12 +84,15 @@ install_component() {
     while IFS= read -r com || [ -n "$com" ]; do
         [ -z "$com" ] && continue
         base="$temp/$component/$com"
-        if ! (cd "$base" && find . -type f | while IFS= read -r f || [ -n "$f" ]; do f="${f#./}"; mkdir -p "$2/$(dirname "$f")" && mv "$base/$f" "$2/$f" || exit 1; done); then
+        if ! (cd "$base" && find . -type f | while IFS= read -r f || [ -n "$f" ]; do
+            f="${f#./}"
+            mkdir -p "$2/$(dirname "$f")" && mv "$base/$f" "$2/$f" || exit 1
+        done); then
             echo "Component $1 failed to install files" 1>&2
             rm -rf "$temp"
             return 1
         fi
-    done < "$temp/$component/components"
+    done <"$temp/$component/components"
 
     rm -rf "$temp"
 }
@@ -140,17 +143,17 @@ install_toolchain() {
         # shellcheck disable=SC2086
         for m in $starts; do
             case "$m" in
-                "$pid:"*) start=${m#*:} ;;
+            "$pid:"*) start=${m#*:} ;;
             esac
         done
         if wait "$pid"; then
             done_count=$((done_count + 1))
-            elapsed=$(( $(date +%s) - start ))
+            elapsed=$(($(date +%s) - start))
             echo "== [$done_count/$total] $component installed in ${elapsed}s" 1>&2
             # Single writer: only the parent records success, so concurrent
             # appends cannot interleave or duplicate entries.
             if ! grep -qxF "$component" "$1/installed.txt"; then
-                echo "$component" >> "$1/installed.txt"
+                echo "$component" >>"$1/installed.txt"
             fi
         else
             echo "!! $component FAILED" 1>&2
@@ -169,4 +172,3 @@ install_toolchain() {
 #
 install_toolchain "${SYSROOT}"
 exec "$@"
-
