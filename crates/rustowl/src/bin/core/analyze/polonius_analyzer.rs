@@ -254,7 +254,7 @@ pub fn reference_local_live_range(
     region_vids: impl Iterator<Item = (LocalId, RegionVid)>,
     location_table: &PoloniusLocationTable,
     location_ranges: &LocationRanges,
-) -> IndexMap<LocalId, Vec<Range>> {
+) -> IndexMap<LocalId, Arc<[Range]>> {
     let origin_live_on_entry = output.origin_live_on_entry();
     region_vids
         .map(|(local, vid)| {
@@ -275,7 +275,10 @@ pub fn reference_local_live_range(
                 .collect();
             (
                 local,
-                utils::eliminated_ranges(rich_locations_to_ranges(location_ranges, &locations)),
+                Arc::from(utils::eliminated_ranges(rich_locations_to_ranges(
+                    location_ranges,
+                    &locations,
+                ))),
             )
         })
         .collect()
