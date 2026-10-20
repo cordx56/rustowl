@@ -80,7 +80,7 @@ impl MirAnalyzer {
                 })
             });
             if let Some(hits) = resolved {
-                log::debug!("all bodies of {fn_id:?} served from the mir_built index");
+                tracing::debug!("all bodies of {fn_id:?} served from the mir_built index");
                 result.extend(hits);
                 return result;
             }
