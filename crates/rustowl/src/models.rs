@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FnLocal {
@@ -273,7 +274,7 @@ pub enum Item {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct File {
-    pub items: Vec<Function>,
+    pub items: Vec<Arc<Function>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -302,8 +303,16 @@ impl Crate {
         let Crate(files) = other;
         for (file, mir) in files {
             if let Some(insert) = self.0.get_mut(&file) {
-                insert.items.extend_from_slice(&mir.items);
-                insert.items.dedup_by(|a, b| a.fn_id == b.fn_id);
+                for item in mir.items {
+                    match insert
+                        .items
+                        .iter_mut()
+                        .find(|existing| existing.fn_id == item.fn_id)
+                    {
+                        Some(existing) => *existing = item,
+                        None => insert.items.push(item),
+                    }
+                }
             } else {
                 self.0.insert(file, mir);
             }
@@ -827,5 +836,46 @@ mod tests {
             assert_eq!(a.from().0, b.from().0 + 7);
             assert_eq!(a.until().0, b.until().0 + 7);
         }
+    }
+
+    /// A re-delivered function replaces the earlier one: runs overlap, so the newer body wins.
+    #[test]
+    fn a_second_delivery_of_a_function_replaces_it() {
+        use super::{Crate, File, Workspace};
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        let sibling = {
+            let mut f = sample_function();
+            f.fn_id = 8;
+            f.name = "g".into();
+            Arc::new(f)
+        };
+        let stale = Arc::new(sample_function());
+        let fresh = {
+            // the same function after an edit above it: every span moved
+            let mut f = sample_function();
+            f.shift(25);
+            Arc::new(f)
+        };
+        let deliver = |items: Vec<Arc<Function>>| {
+            Workspace(HashMap::from([(
+                "krate".to_string(),
+                Crate(HashMap::from([("lib.rs".to_string(), File { items })])),
+            )]))
+        };
+
+        let mut published = deliver(vec![Arc::clone(&stale), Arc::clone(&sibling)]);
+        published.merge(deliver(vec![Arc::clone(&fresh), Arc::clone(&sibling)]));
+
+        let Crate(files) = &published.0["krate"];
+        let items = &files["lib.rs"].items;
+        assert_eq!(
+            items.len(),
+            2,
+            "a re-delivered function must replace, not duplicate"
+        );
+        let found = items.iter().find(|f| f.fn_id == 7).unwrap();
+        assert!(Arc::ptr_eq(found, &fresh), "the newer delivery must win");
     }
 }
