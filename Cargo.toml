@@ -13,9 +13,10 @@ repository = "https://github.com/cordx56/rustowl"
 license = "MPL-2.0"
 
 [workspace.dependencies]
+TinyUFO = "0.9"
 anstyle = "1"
-archery = "1.2.3"
 arc-swap = "1.9.3"
+archery = "1.2.3"
 cargo_metadata = "0.23"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
@@ -40,7 +41,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tar = "0.4.46"
 tempfile = "3"
-TinyUFO = "0.9"
 tikv-jemalloc-sys = { version = "0.7", features = ["override_allocator_on_supported_platforms"] }
 tokio = { version = "1", features = [
   "fs",
@@ -61,7 +61,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter-highlight = "0.27"
 tree-sitter-rust = "0.24"
 trycmd = "1.2"
-uuid = { version = "1", features = ["v4"] }
 wild = "2"
 url = "2"
 zip = "9"
