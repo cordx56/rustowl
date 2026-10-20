@@ -69,7 +69,10 @@ impl Results {
         self.start_generation();
         let wanted = path.to_string_lossy();
         self.view
-            .rcu(|current| Published(Arc::new(current.0.without_file(&wanted))));
+            .rcu(|current| match current.0.without_file(&wanted) {
+                Some(snapshot) => Published(Arc::new(snapshot)),
+                None => Published(Arc::clone(&current.0)),
+            });
     }
 
     pub fn snapshot(&self) -> Arc<Snapshot> {
@@ -88,8 +91,8 @@ mod tests {
     fn function(fn_id: u32) -> SharedPointer<Function, ArcK> {
         SharedPointer::new(Function {
             fn_id,
-            name: format!("f{fn_id}"),
-            basic_blocks: Vec::new(),
+            name: Arc::from(format!("f{fn_id}")),
+            basic_blocks: Arc::from(Vec::new()),
             decls: Vec::new(),
         })
     }

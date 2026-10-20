@@ -17,7 +17,7 @@ pub struct Places {
 impl Places {
     pub fn new<'a>(targets: impl Iterator<Item = &'a MirPlace>) -> Self {
         let places: IndexSet<_> = targets
-            .flat_map(|target| [MirPlace::root(target.local), target.clone()])
+            .flat_map(|target| [MirPlace::root(target.local), MirPlace::shared(target)])
             .collect();
         // a fragment shares the local, so only the places of the same local
         // are compared
