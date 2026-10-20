@@ -10,6 +10,7 @@ use crate::utils::{self, MirVisitor};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
+use std::sync::Arc;
 
 mod syntax;
 
@@ -421,7 +422,7 @@ pub fn find_file<'a>(crate_data: &'a Crate, file_path: &Path) -> Option<&'a File
 
     // Try matching by file name or relative path
     for (path, file) in &crate_data.0 {
-        let normalized_path = normalize_file_path(Path::new(path));
+        let normalized_path = normalize_file_path(Path::new(path.as_ref()));
         if normalized_path.ends_with(&file_path_str) || file_path_str.ends_with(&normalized_path) {
             return Some(file);
         }
@@ -462,7 +463,7 @@ pub fn show_variable(
     variable_name: &str,
 ) -> Result<(), VisualizeError> {
     // Collect all matching variables across files
-    let mut all_found: Vec<(String, VariableInfo)> = Vec::new();
+    let mut all_found: Vec<(Arc<str>, VariableInfo)> = Vec::new();
 
     if let Some(path) = file_path {
         // Search in specific file
@@ -475,7 +476,7 @@ pub fn show_variable(
         }
 
         for var in finder.found {
-            all_found.push((path.to_string_lossy().to_string(), var));
+            all_found.push((Arc::from(path.to_string_lossy().as_ref()), var));
         }
     } else {
         // Search in all files
@@ -486,7 +487,7 @@ pub fn show_variable(
             }
 
             for var in finder.found {
-                all_found.push((file_path_str.clone(), var));
+                all_found.push((Arc::clone(file_path_str), var));
             }
         }
     }
@@ -501,12 +502,12 @@ pub fn show_variable(
 
     // Display each found variable
     for (idx, (file_path_str, var_info)) in all_found.iter().enumerate() {
-        let file_path = Path::new(file_path_str);
+        let file_path = Path::new(file_path_str.as_ref());
 
         // Get the file data for calculating decorations
         // Use find_file to normalize the path (handles UNC vs non-UNC paths on Windows)
         let file = find_file(crate_data, file_path)
-            .ok_or_else(|| VisualizeError::FileNotFound(file_path_str.clone()))?;
+            .ok_or_else(|| VisualizeError::FileNotFound(file_path_str.to_string()))?;
 
         // Read the source file
         let source = std::fs::read_to_string(file_path)?;
@@ -582,15 +583,15 @@ mod tests {
     use super::find_file;
     use crate::lsp::decoration::{CalcDecos, Deco};
     use crate::models::*;
-    use std::collections::HashMap;
+    use archery::{ArcK, SharedPointer};
     use std::path::Path;
+    use std::sync::Arc;
 
     #[test]
     fn find_file_matches_relative_suffix() {
-        let crate_data = Crate(HashMap::from([(
-            String::from("algo-tests/src/vec.rs"),
-            File { items: vec![] },
-        )]));
+        let path: Arc<str> = Arc::from("algo-tests/src/vec.rs");
+        let file: SharedPointer<File, ArcK> = SharedPointer::new(File::new());
+        let crate_data: Crate = Crate([(path, file)].into_iter().collect());
 
         let file = find_file(&crate_data, Path::new("./algo-tests/src/vec.rs"));
         assert!(file.is_some());
@@ -599,10 +600,9 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn find_file_matches_windows_verbatim_path() {
-        let crate_data = Crate(HashMap::from([(
-            String::from("C:/repo/algo-tests/src/vec.rs"),
-            File { items: vec![] },
-        )]));
+        let path: Arc<str> = Arc::from("C:/repo/algo-tests/src/vec.rs");
+        let file: SharedPointer<File, ArcK> = SharedPointer::new(File::new());
+        let crate_data: Crate = Crate([(path, file)].into_iter().collect());
 
         let file = find_file(&crate_data, Path::new(r"\\?\C:\repo\algo-tests\src\vec.rs"));
         assert!(file.is_some());
