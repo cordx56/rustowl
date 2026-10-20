@@ -131,8 +131,8 @@ mod miri_memory_safety_tests {
         // The file is rebuilt, never copied: the earlier file keeps its bodies.
         let body: SharedPointer<Function, ArcK> = SharedPointer::new(Function {
             fn_id: 1,
-            name: "f".into(),
-            basic_blocks: vec![],
+            name: Arc::from("f"),
+            basic_blocks: Arc::from(Vec::new()),
             decls: vec![],
         });
         let grown = file.push(body);
@@ -213,9 +213,12 @@ mod miri_memory_safety_tests {
         mir_vars.push(user_var);
         mir_vars.push(other_var);
 
+        // Test duplicate insertion (should not duplicate)
+        mir_vars.push(user_var);
+
         // Test converting to vector
-        let vars_vec = mir_vars.clone().to_vec();
-        assert_eq!(vars_vec.len(), 2);
+        let vars_vec = mir_vars.to_vec();
+        assert_eq!(vars_vec.len(), 2); // Still 2, not 3
 
         // Test that we can find our variables
         let has_user_var = vars_vec
@@ -227,11 +230,6 @@ mod miri_memory_safety_tests {
 
         assert!(has_user_var);
         assert!(has_other_var);
-
-        // Test duplicate insertion (should not duplicate)
-        mir_vars.push(user_var);
-        let final_vec = mir_vars.to_vec();
-        assert_eq!(final_vec.len(), 2); // Still 2, not 3
     }
 
     #[test]
@@ -239,13 +237,18 @@ mod miri_memory_safety_tests {
         // Test Function model with complex nested structures
         let function = Function {
             fn_id: 42,
-            name: String::from("test_function"),
-            basic_blocks: Vec::new(),
+            name: Arc::from("test_function"),
+            basic_blocks: Arc::from(Vec::new()),
             decls: Vec::new(),
         };
 
-        // Test cloning of complex nested structures
-        let function_clone = function.clone();
+        // Test the complex nested structures
+        let function_clone = Function {
+            fn_id: 42,
+            name: Arc::from("test_function"),
+            basic_blocks: Arc::from(Vec::new()),
+            decls: Vec::new(),
+        };
         assert_eq!(function.fn_id, function_clone.fn_id);
         assert_eq!(
             function.basic_blocks.len(),
@@ -262,8 +265,8 @@ mod miri_memory_safety_tests {
         for i in 0..100 {
             functions.push(Function {
                 fn_id: i,
-                name: format!("function_{i}"),
-                basic_blocks: Vec::new(),
+                name: Arc::from(format!("function_{i}")),
+                basic_blocks: Arc::from(Vec::new()),
                 decls: Vec::new(),
             });
         }
@@ -271,16 +274,17 @@ mod miri_memory_safety_tests {
         assert_eq!(functions.len(), 100);
         assert_eq!(functions[50].fn_id, 50);
 
-        // Test vector capacity management
+        // Test the shared blocks
+        let blocks: Arc<[MirBasicBlock]> = Arc::from(Vec::new());
         let large_function = Function {
             fn_id: 999,
-            name: String::from("large_function"),
-            basic_blocks: Vec::with_capacity(1000),
+            name: Arc::from("large_function"),
+            basic_blocks: Arc::clone(&blocks),
             decls: Vec::with_capacity(500),
         };
 
-        assert!(large_function.basic_blocks.capacity() >= 1000);
         assert!(large_function.decls.capacity() >= 500);
+        assert!(Arc::ptr_eq(&large_function.basic_blocks, &blocks));
     }
 
     #[test]
@@ -345,12 +349,12 @@ mod miri_memory_safety_tests {
         let mut keys_to_remove = Vec::new();
         for key in map.keys() {
             if key.ends_with("_1") || key.ends_with("_2") {
-                keys_to_remove.push(key.clone());
+                keys_to_remove.push(key.to_string());
             }
         }
 
-        for key in keys_to_remove {
-            map.remove(&key);
+        for key in &keys_to_remove {
+            map.remove(key);
         }
 
         assert_eq!(map.len(), 18); // 20 - 2

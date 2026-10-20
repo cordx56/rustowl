@@ -122,17 +122,19 @@ fn open_files() -> Option<HashSet<PathBuf>> {
 /// this is a path comparison rather than a per-root recomputation.
 fn is_file_open(tcx: TyCtxt<'_>, def_id: LocalDefId) -> bool {
     /// crate name -> the open-file set resolved for it, shared by every root
-    type PerCrate = rpds::HashTrieMap<String, SharedPointer<Option<HashSet<PathBuf>>, ArcK>, ArcK>;
+    type PerCrate =
+        rpds::HashTrieMap<Arc<str>, SharedPointer<Option<HashSet<PathBuf>>, ArcK>, ArcK>;
     static CACHE: LazyLock<ArcSwap<PerCrate>> =
         LazyLock::new(|| ArcSwap::from_pointee(rpds::HashTrieMap::default()));
-    let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
+    let crate_name: Arc<str> = Arc::from(tcx.crate_name(LOCAL_CRATE).as_str());
     let set = {
         let current = CACHE.load();
         match current.get(&crate_name) {
             Some(set) => SharedPointer::clone(set),
             None => {
                 let set = SharedPointer::new(open_files());
-                CACHE.rcu(|cache| cache.insert(crate_name.clone(), SharedPointer::clone(&set)));
+                CACHE
+                    .rcu(|cache| cache.insert(Arc::clone(&crate_name), SharedPointer::clone(&set)));
                 set
             }
         }
@@ -374,7 +376,7 @@ mod batch_tests {
             key: cache::key::FunctionKey {
                 def_path: u64::from(fn_id),
                 fn_text_hash: 0,
-                mir_hash: String::new(),
+                mir_hash: 0,
                 analysis_version: 0,
                 toolchain_hash: 0,
             },
@@ -382,8 +384,8 @@ mod batch_tests {
             from_cache: false,
             analyzed: SharedPointer::new(Function {
                 fn_id,
-                name: format!("f{fn_id}"),
-                basic_blocks: Vec::new(),
+                name: Arc::from(format!("f{fn_id}")),
+                basic_blocks: Arc::from(Vec::new()),
                 decls: Vec::<MirDecl>::new(),
             }),
         }
@@ -398,7 +400,7 @@ mod batch_tests {
                 key: cache::key::FunctionKey {
                     def_path: u64::from(i),
                     fn_text_hash: 0,
-                    mir_hash: String::new(),
+                    mir_hash: 0,
                     analysis_version: 0,
                     toolchain_hash: 0,
                 },
@@ -406,8 +408,8 @@ mod batch_tests {
                 from_cache: false,
                 analyzed: SharedPointer::new(Function {
                     fn_id: i,
-                    name: format!("f{i}"),
-                    basic_blocks: Vec::new(),
+                    name: Arc::from(format!("f{i}")),
+                    basic_blocks: Arc::from(Vec::new()),
                     decls: Vec::new(),
                 }),
             })

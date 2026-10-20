@@ -1,11 +1,11 @@
 use archery::{ArcK, SharedPointer};
-use rustowl::models::{Function, MirDecl, Workspace};
+use rustowl::models::{Function, MirDecl, Range, Workspace};
 use rustowl::toolchain;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Once;
+use std::sync::{Arc, Once};
 
 static BUILD_ONCE: Once = Once::new();
 
@@ -297,6 +297,13 @@ fn decl_local_id(decl: &MirDecl) -> u32 {
     }
 }
 
+/// The lists are shared, so a sorted one is built rather than sorted in place.
+fn sorted_ranges(ranges: &[Range]) -> Arc<[Range]> {
+    let mut ranges = ranges.to_vec();
+    ranges.sort_by_key(|range| (range.from().0, range.until().0));
+    Arc::from(ranges)
+}
+
 /// Sort the parts of a decl whose order is not deterministic in production.
 fn normalize_decl(decl: &mut MirDecl) {
     let (MirDecl::User {
@@ -322,18 +329,14 @@ fn normalize_decl(decl: &mut MirDecl) {
         ..
     }) = decl;
 
-    for ranges in [
-        lives,
-        shared_borrow,
-        mutable_borrow,
-        drop_range,
-        definitely_live_at,
-        maybe_init_at,
-        deficit_at,
-        storage_range,
-    ] {
-        ranges.sort_by_key(|range| (range.from().0, range.until().0));
-    }
+    *lives = sorted_ranges(lives);
+    *shared_borrow = sorted_ranges(shared_borrow);
+    *mutable_borrow = sorted_ranges(mutable_borrow);
+    *drop_range = sorted_ranges(drop_range);
+    *definitely_live_at = sorted_ranges(definitely_live_at);
+    *maybe_init_at = sorted_ranges(maybe_init_at);
+    *deficit_at = sorted_ranges(deficit_at);
+    *storage_range = sorted_ranges(storage_range);
 }
 
 /// Canonical form of one delivered function: decls by local id, and the ranges
@@ -382,7 +385,7 @@ fn normalize_items(mut items: Vec<SharedPointer<Function, ArcK>>) -> Vec<Referen
                 .expect("the harness must own every delivered body");
             ReferenceFunction {
                 fn_id: function.fn_id,
-                name: function.name,
+                name: function.name.to_string(),
                 decls: function.decls,
             }
         })

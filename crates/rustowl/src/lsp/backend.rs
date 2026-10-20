@@ -72,21 +72,21 @@ impl Snapshot {
         })
     }
 
-    pub(crate) fn without_file(&self, path: &str) -> Snapshot {
+    pub(crate) fn without_file(&self, path: &str) -> Option<Snapshot> {
+        // The crates that do not hold the file keep their allocation.
         let mut crates: Option<HashTrieMap<Arc<str>, SharedPointer<Crate, ArcK>, ArcK>> = None;
         for (name, krate) in self.crates.0.iter() {
-            let updated = match krate.as_ref().without(path) {
-                Some(updated) => SharedPointer::new(updated),
-                None => SharedPointer::clone(krate),
-            };
-            crates = Some(match crates {
-                Some(crates) => crates.insert(Arc::clone(name), updated),
-                None => self.crates.0.insert(Arc::clone(name), updated),
-            });
+            if let Some(updated) = krate.as_ref().without(path) {
+                let updated = SharedPointer::new(updated);
+                crates = Some(match crates {
+                    Some(crates) => crates.insert(Arc::clone(name), updated),
+                    None => self.crates.0.insert(Arc::clone(name), updated),
+                });
+            }
         }
-        Snapshot {
-            crates: Workspace(crates.unwrap_or_default()),
-        }
+        crates.map(|crates| Snapshot {
+            crates: Workspace(crates),
+        })
     }
 
     /// Every file registered under `filepath`, across the workspaces that
@@ -171,10 +171,53 @@ impl ProcessRegistry {
     }
 }
 
+type Analyzers = rpds::Vector<SharedPointer<Analyzer, ArcK>, ArcK>;
+
+type Tokens = rpds::HashTrieMap<usize, Cancel, ArcK>;
+
+type OpenFiles = rpds::HashTrieSet<Arc<PathBuf>, ArcK>;
+
+/// The update is atomic: the check and the insertion both happen against the
+/// value the slot holds now, so two registrations at once both land.
+fn add_analyzer(slot: &ArcSwap<Analyzers>, analyzer: SharedPointer<Analyzer, ArcK>) -> bool {
+    let mut added = false;
+    slot.rcu(|current| {
+        if current
+            .iter()
+            .any(|a| a.target_path() == analyzer.target_path())
+        {
+            return Arc::clone(current);
+        }
+        added = true;
+        Arc::new(current.as_ref().push_back(SharedPointer::clone(&analyzer)))
+    });
+    added
+}
+
+/// The update is atomic.
+fn register_token(slot: &ArcSwap<Tokens>, key: usize, token: &Cancel) {
+    slot.rcu(|current| Arc::new(current.as_ref().insert(key, Cancel::clone(token))));
+}
+
+/// The update is atomic.
+fn unregister_token(slot: &ArcSwap<Tokens>, key: usize) {
+    slot.rcu(|current| Arc::new(current.as_ref().remove(&key)));
+}
+
+/// The update is atomic.
+fn open_path(slot: &ArcSwap<OpenFiles>, path: &Arc<PathBuf>) {
+    slot.rcu(|current| Arc::new(current.as_ref().insert(Arc::clone(path))));
+}
+
+/// The update is atomic.
+fn close_path(slot: &ArcSwap<OpenFiles>, path: &PathBuf) {
+    slot.rcu(|current| Arc::new(current.as_ref().remove(path)));
+}
+
 /// RustOwl LSP server backend
 pub struct Backend {
     client: Client,
-    analyzers: ArcSwap<rpds::Vector<SharedPointer<Analyzer, ArcK>, ArcK>>,
+    analyzers: ArcSwap<Analyzers>,
     status: Arc<ArcSwap<progress::AnalysisStatus>>,
     analyzed: Arc<Results>,
     processes: Arc<ProcessRegistry>,
@@ -183,7 +226,7 @@ pub struct Backend {
     next_token_key: AtomicUsize,
     work_done_progress: Arc<AtomicBool>,
     /// paths the editor currently has open; the compiler analyses only these
-    open_files: ArcSwap<rpds::HashTrieSet<PathBuf, ArcK>>,
+    open_files: ArcSwap<OpenFiles>,
 }
 
 impl Backend {
@@ -203,15 +246,7 @@ impl Backend {
 
     async fn add_analyze_target(&self, path: &Path) -> bool {
         if let Ok(new_analyzer) = Analyzer::new(&path).await {
-            let target = new_analyzer.target_path().to_path_buf();
-            let mut analyzers = self.analyzers.load().as_ref().clone();
-            for analyzer in &analyzers {
-                if analyzer.target_path() == target {
-                    return true;
-                }
-            }
-            analyzers = analyzers.push_back(SharedPointer::new(new_analyzer));
-            self.analyzers.store(Arc::new(analyzers));
+            add_analyzer(&self.analyzers, SharedPointer::new(new_analyzer));
             true
         } else {
             false
@@ -239,22 +274,25 @@ impl Backend {
         let generation = self.analyzed.start_generation();
         self.status
             .store(Arc::new(progress::AnalysisStatus::Analyzing));
-        let analyzers = self.analyzers.load().as_ref().clone();
+        let analyzers = self.analyzers.load();
 
         tracing::info!("analyze {} workspace(s)...", analyzers.len());
         for analyzer in analyzers.iter() {
-            let analyzed = self.analyzed.clone();
-            let client = self.client.clone();
+            let analyzed = Arc::clone(&self.analyzed);
+            let client = Client::clone(&self.client);
             let work_done_progress = Arc::clone(&self.work_done_progress);
             let cancellation_token = Cancel::new();
 
             let cancellation_token_key = self.next_token_key.fetch_add(1, Ordering::AcqRel) + 1;
-            let mut tokens = self.process_tokens.load().as_ref().clone();
-            tokens = tokens.insert(cancellation_token_key, cancellation_token.clone());
-            self.process_tokens.store(Arc::new(tokens));
+            register_token(
+                &self.process_tokens,
+                cancellation_token_key,
+                &cancellation_token,
+            );
 
             let process_tokens = Arc::clone(&self.process_tokens);
-            let open_files: Vec<PathBuf> = self.open_files.load().iter().cloned().collect();
+            let open_files: Vec<Arc<PathBuf>> =
+                self.open_files.load().iter().map(Arc::clone).collect();
             let target_path = analyzer.target_path().to_string_lossy().into_owned();
             let analyzer = SharedPointer::clone(analyzer);
             self.processes.spawn(async move {
@@ -298,9 +336,7 @@ impl Backend {
                     }
                 }
                 // remove cancellation token from list
-                let mut tokens = process_tokens.load().as_ref().clone();
-                tokens = tokens.remove(&cancellation_token_key);
-                process_tokens.store(Arc::new(tokens));
+                unregister_token(&process_tokens, cancellation_token_key);
 
                 if let Some(progress_token) = progress_token {
                     progress_token.finish().await;
@@ -308,9 +344,9 @@ impl Backend {
             });
         }
 
-        let processes = self.processes.clone();
+        let processes = Arc::clone(&self.processes);
         let status = Arc::clone(&self.status);
-        let analyzed = self.analyzed.clone();
+        let analyzed = Arc::clone(&self.analyzed);
         tokio::spawn(async move {
             processes.drain().await;
             let current = **status.load();
@@ -423,7 +459,7 @@ impl Backend {
     }
 
     pub async fn shutdown_subprocesses(&self) {
-        let tokens = self.process_tokens.load().as_ref().clone();
+        let tokens = self.process_tokens.load();
         for token in tokens.values() {
             token.cancel();
         }
@@ -515,10 +551,9 @@ impl LanguageServer for Backend {
             && path.is_file()
             && params.text_document.language_id == gen_lsp_types::LanguageKind::Rust
         {
-            let mut open_files = self.open_files.load().as_ref().clone();
-            open_files = open_files.insert(path.clone());
-            self.open_files.store(Arc::new(open_files));
-            if self.add_analyze_target(&path).await {
+            let path: Arc<PathBuf> = Arc::new(path);
+            open_path(&self.open_files, &path);
+            if self.add_analyze_target(path.as_path()).await {
                 self.do_analyze().await;
             }
         }
@@ -526,9 +561,7 @@ impl LanguageServer for Backend {
 
     async fn did_close(&self, params: gen_lsp_types::DidCloseTextDocumentParams) {
         if let Some(path) = utils::uri_to_file_path(&params.text_document.uri) {
-            let mut open_files = self.open_files.load().as_ref().clone();
-            open_files = open_files.remove(&path);
-            self.open_files.store(Arc::new(open_files));
+            close_path(&self.open_files, &path);
         }
     }
 
@@ -560,8 +593,8 @@ mod tests {
     fn function(fn_id: u32) -> SharedPointer<Function, ArcK> {
         SharedPointer::new(Function {
             fn_id,
-            name: format!("f{fn_id}"),
-            basic_blocks: Vec::new(),
+            name: Arc::from(format!("f{fn_id}")),
+            basic_blocks: Arc::from(Vec::new()),
             decls: Vec::new(),
         })
     }
@@ -637,6 +670,74 @@ mod tests {
             SharedPointer::ptr_eq(&found[0].items[0], &fresh),
             "the fresh delivery replaces the stale one"
         );
+    }
+
+    fn analyzer(path: &str) -> Analyzer {
+        Analyzer {
+            path: PathBuf::from(path),
+            metadata: None,
+        }
+    }
+
+    /// The server handles notifications concurrently, so two registrations can
+    /// overlap: a lost analyzer is a workspace that is never analysed.
+    #[test]
+    fn two_analyzers_registered_at_once_both_land() {
+        for _ in 0..64 {
+            let slot = ArcSwap::from_pointee(rpds::Vector::default());
+            let barrier = std::sync::Barrier::new(2);
+            std::thread::scope(|scope| {
+                for i in 0..2 {
+                    let slot = &slot;
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        barrier.wait();
+                        add_analyzer(slot, SharedPointer::new(analyzer(&format!("/ws{i}"))));
+                    });
+                }
+            });
+            assert_eq!(slot.load().len(), 2, "both analyzers must be registered");
+        }
+    }
+
+    /// A lost path is a file the compiler is not told about, and it is never analysed.
+    #[test]
+    fn two_files_opened_at_once_both_land() {
+        for _ in 0..64 {
+            let slot = ArcSwap::from_pointee(rpds::HashTrieSet::default());
+            let barrier = std::sync::Barrier::new(2);
+            std::thread::scope(|scope| {
+                for i in 0..2 {
+                    let slot = &slot;
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        barrier.wait();
+                        open_path(slot, &Arc::new(PathBuf::from(format!("/ws{i}.rs"))));
+                    });
+                }
+            });
+            assert_eq!(slot.load().size(), 2, "both files must be open");
+        }
+    }
+
+    /// A lost token is a task that cannot be cancelled.
+    #[test]
+    fn two_tokens_registered_at_once_both_land() {
+        for _ in 0..64 {
+            let slot = ArcSwap::from_pointee(rpds::HashTrieMap::default());
+            let barrier = std::sync::Barrier::new(2);
+            std::thread::scope(|scope| {
+                for i in 0..2 {
+                    let slot = &slot;
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        barrier.wait();
+                        register_token(slot, i, &Cancel::new());
+                    });
+                }
+            });
+            assert_eq!(slot.load().size(), 2, "both tokens must be registered");
+        }
     }
 
     #[test]
