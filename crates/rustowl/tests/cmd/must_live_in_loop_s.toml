@@ -1,0 +1,34 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "in_loop", "s"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 's' (1/1) in function 'in_loop' ===
+
+ 140 |     let mut prev: Option<&String> = None;
+ 141 |     for _ in 0..2 {
+ 142 |         let mut s = String::new();
+     |             -----   -------------
+ 143 |         s.push('a');
+     |         - ----------
+ 144 |         if let Some(p) = prev {
+     |                ---- ~    ~~~~
+ 145 |             println!("{p}");
+     |             ~~~~~~~~~~~~~~~
+ 146 |         }
+     |         -
+ 147 |         prev = Some(&s);
+     |         ----------- -- -
+ 148 |     }
+ 149 | }
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

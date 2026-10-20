@@ -1,0 +1,30 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "move_while_borrowed", "a"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'a' (1/1) in function 'move_while_borrowed' ===
+
+  89 | // The borrowed variable is moved while borrowed (does not compile).
+  90 | fn move_while_borrowed() {
+  91 |     let a = String::from("a");
+     |         -   -----------------
+  92 |     let r = &a;
+     |         -   --
+  93 |     let b = a;
+     |         -   -
+  94 |     println!("{r} {b}");
+     |     ~~~~~~~~~~~~~~~~~~~
+  95 | }
+  96 | 
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''
