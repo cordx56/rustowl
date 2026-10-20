@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-exclude = ["crates/rustowl/algo-tests", "crates/rustowl/perf-tests/dummy-package"]
+exclude = ["crates/rustowl/perf-tests/dummy-package"]
 default-members = ["crates/rustowl"]
 
 [workspace.package]
@@ -60,6 +60,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter-highlight = "0.27"
 tree-sitter-rust = "0.24"
+trycmd = "1.2"
+uuid = { version = "1", features = ["v4"] }
 wild = "2"
 url = "2"
 zip = "9"
