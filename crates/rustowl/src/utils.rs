@@ -280,7 +280,10 @@ mod uri_tests {
             Some(PathBuf::from(r"C:\Users\test"))
         );
         assert_eq!(uri_to_file_path(&parse("file:///home/user")), None);
-||||||| parent of 0a5aba0 (fix: CRLF offsets and a no-op clean_source)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
