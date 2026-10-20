@@ -1,0 +1,32 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "places.rs", "cond_partial_move", "p"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'p' (1/1) in function 'cond_partial_move' ===
+
+   1 | // A field moved out on only one branch (compiles).
+   2 | fn cond_partial_move(c: bool) {
+   3 |     let p = (String::new(), String::new());
+     |         -   ------------------------------
+   4 |     if c {
+     |        -
+   5 |         drop(p.0);
+     |         ---- ---
+   6 |     }
+     |     ~
+   7 |     println!("{}", p.1);
+     |     -------------------
+   8 | }
+   9 | 
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

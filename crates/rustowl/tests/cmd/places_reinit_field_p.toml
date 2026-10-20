@@ -1,0 +1,32 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "places.rs", "reinit_field", "p"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'p' (1/1) in function 'reinit_field' ===
+
+  11 | // again (compiles).
+  12 | fn reinit_field() {
+  13 |     let mut p = (String::new(), String::new());
+     |         -----   ------------------------------
+  14 |     let a = p.0;
+     |         -   ---
+  15 |     p.0 = a;
+     |     ---   -
+  16 |     println!("{p:?}");
+     |     -----------------
+  17 | }
+     | -
+  18 | 
+  19 | // Assigning a field of a moved tuple does not give the whole tuple a value
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

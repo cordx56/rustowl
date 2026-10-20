@@ -1,0 +1,28 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "loop_local", "s"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 's' (1/1) in function 'loop_local' ===
+
+  32 |     let mut r = &base;
+  33 |     for i in 0..3 {
+  34 |         let s = i.to_string();
+     |             -   - -----------
+  35 |         r = &s;
+     |         --- --
+  36 |         println!("{r}");
+     |         ---------------
+  37 |     }
+  38 | }
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

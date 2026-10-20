@@ -32,25 +32,26 @@ const HIGHLIGHT_NAMES: &[&str] = &[
 
 /// Map highlight index to style.
 fn style_for_highlight(index: usize) -> Option<Style> {
-    match HIGHLIGHT_NAMES.get(index)? {
-        &"attribute" => Some(colors::ATTRIBUTE),
-        &"comment" | &"comment.documentation" => Some(colors::COMMENT),
-        &"constant" | &"constant.builtin" => Some(colors::NUMBER),
-        &"constructor" => Some(colors::TYPE),
-        &"escape" => Some(colors::STRING),
-        &"function" | &"function.method" => Some(colors::MACRO),
-        &"function.macro" => Some(colors::MACRO),
-        &"keyword" => Some(colors::KEYWORD),
-        &"label" => Some(colors::LIFETIME),
-        &"operator" => Some(colors::KEYWORD),
-        &"property" => Some(colors::CYAN),
-        &"punctuation.bracket" | &"punctuation.delimiter" => Some(colors::DIM),
-        &"string" => Some(colors::STRING),
-        &"type" | &"type.builtin" => Some(colors::TYPE),
-        &"variable.builtin" => Some(colors::KEYWORD),
-        &"variable.parameter" => Some(colors::CYAN),
-        _ => None,
-    }
+    let style = match HIGHLIGHT_NAMES.get(index)? {
+        &"attribute" => colors::ATTRIBUTE,
+        &"comment" | &"comment.documentation" => colors::COMMENT,
+        &"constant" | &"constant.builtin" => colors::NUMBER,
+        &"constructor" => colors::TYPE,
+        &"escape" => colors::STRING,
+        &"function" | &"function.method" => colors::MACRO,
+        &"function.macro" => colors::MACRO,
+        &"keyword" => colors::KEYWORD,
+        &"label" => colors::LIFETIME,
+        &"operator" => colors::KEYWORD,
+        &"property" => colors::CYAN,
+        &"punctuation.bracket" | &"punctuation.delimiter" => colors::DIM,
+        &"string" => colors::STRING,
+        &"type" | &"type.builtin" => colors::TYPE,
+        &"variable.builtin" => colors::KEYWORD,
+        &"variable.parameter" => colors::CYAN,
+        _ => return None,
+    };
+    Some(colors::plain(style))
 }
 
 /// Syntax highlighter using tree-sitter-highlight for Rust.
