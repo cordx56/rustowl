@@ -491,7 +491,7 @@ impl Terminator<'_> {
             .get(&Location::from_rustc(location))
             .copied();
         match &terminator.kind {
-            TerminatorKind::Goto { target } => MirTerminator {
+            TerminatorKind::Goto { target, .. } => MirTerminator {
                 kind: MirTerminatorKind::Goto {
                     target: BasicBlockId(target.as_usize()),
                 },
