@@ -6,11 +6,15 @@ Thank you for considering to contribute RustOwl!
 
 In this document we describe how to contribute our project, as follows:
 
+- Policies for contributors and maintainers
 - How to setup development environment
 - Checklist before submitting PR
 
 ## Table of Contents
 
+- [Contribution policy](#contribution-policy)
+  - [Use of AI tools](#use-of-ai-tools)
+  - [AI-assisted review](#ai-assisted-review)
 - [Set up your environment](#set-up-your-environment)
   - [Prerequisites](#prerequisites)
     - [Common Requirements](#common-requirements)
@@ -25,6 +29,37 @@ In this document we describe how to contribute our project, as follows:
   - [Manual Checks](#manual-checks)
 - [Development Workflow](#development-workflow)
 - [Troubleshooting](#troubleshooting)
+
+## Contribution policy
+
+This section describes the policies that apply to every contributor, including maintainers.
+Please read it carefully before contributing.
+
+Maintainers may close any PR without review.
+
+### Use of AI tools
+
+If you use generative AI tools to create or modify any material in your contribution, such as code, documentation, tests, images, or commit messages, you must disclose it.
+This includes, for example, CLI tools powered by generative AI, AI features of editors, and AI-powered code completion in editors.
+
+Disclose your use of AI tools as follows:
+
+- Add a `Co-Authored-By` trailer identifying the AI tool to each commit that contains AI-generated material.
+- Describe the tools and models you used in the "AI Usage" section of the PR description.
+
+If you accept suggestions from AI tools (e.g., AI review bots) after opening the PR, update the PR description or leave a comment on the PR.
+
+Using AI tools only for consultation, without including their output in your contribution, is not covered.
+Text in PR descriptions, issues, and comments is not covered either.
+
+You must understand what every change you submit means.
+
+### AI-assisted review
+
+Maintainers may use AI tools, including AI review bots, only as an aid for reviewing.
+A maintainer who uses AI tools to review a PR must state so in the review.
+In that case, the PR must also be approved by another reviewer who is not its author before it is merged.
+The other reviewer may also use AI tools as an aid.
 
 ## Set up your environment
 
