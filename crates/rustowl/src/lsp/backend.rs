@@ -260,8 +260,7 @@ impl Backend {
             self.processes.spawn(async move {
                 let mut progress_token = None;
                 if work_done_progress.load(Ordering::Relaxed) {
-                    progress_token =
-                        Some(progress::ProgressToken::begin(client).await)
++                    progress_token = Some(progress::ProgressToken::begin(client).await)
                 };
 
                 let Some(mut iter) = analyzer
