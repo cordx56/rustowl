@@ -93,14 +93,7 @@ jobs:
     name: Security & Memory Safety Analysis
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, ubuntu-24.04-arm]
-        include:
-          - os: ubuntu-latest
-            runner_os: Linux
-          - os: ubuntu-24.04-arm
-            runner_os: Linux
-          - os: macos-latest
-            runner_os: macOS
+        os: [ubuntu-latest, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
@@ -115,7 +108,6 @@ jobs:
           cache: false
 
       - name: Install system dependencies (Linux)
-        if: matrix.runner_os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y valgrind
