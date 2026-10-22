@@ -1,10 +1,11 @@
-use rustowl::models::{Crate, Function, MirDecl, Workspace};
+use archery::{ArcK, SharedPointer};
+use rustowl::models::{Function, MirDecl, Workspace};
 use rustowl::toolchain;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Once};
+use std::sync::Once;
 
 static BUILD_ONCE: Once = Once::new();
 
@@ -260,7 +261,7 @@ struct ReferenceFunction {
 }
 
 /// Everything rustowlc printed, keyed crate -> file, before any collapsing.
-type RawWorkspace = BTreeMap<String, BTreeMap<String, Vec<Arc<Function>>>>;
+type RawWorkspace = BTreeMap<String, BTreeMap<String, Vec<SharedPointer<Function, ArcK>>>>;
 
 /// Canonical form of a [`RawWorkspace`]: crate -> file -> functions.
 type ReferenceWorkspace = BTreeMap<String, BTreeMap<String, Vec<ReferenceFunction>>>;
@@ -268,10 +269,13 @@ type ReferenceWorkspace = BTreeMap<String, BTreeMap<String, Vec<ReferenceFunctio
 /// Append every function of one document to its (crate, file) bucket.
 fn accumulate(into: &mut RawWorkspace, workspace: Workspace) {
     let Workspace(crates) = workspace;
-    for (crate_name, Crate(files)) in crates {
-        let per_file = into.entry(crate_name).or_default();
-        for (file, payload) in files {
-            per_file.entry(file).or_default().extend(payload.items);
+    for (crate_name, krate) in crates.iter() {
+        let per_file = into.entry(crate_name.to_string()).or_default();
+        for (file, payload) in krate.0.iter() {
+            let bucket = per_file.entry(file.to_string()).or_default();
+            for item in payload.items.iter() {
+                bucket.push(SharedPointer::clone(item));
+            }
         }
     }
 }
@@ -347,13 +351,14 @@ fn canonical_json(function: &Function) -> Result<String, String> {
 }
 
 /// Collapse repeated deliveries of one function, refusing to do so silently.
-fn normalize_items(mut items: Vec<Arc<Function>>) -> Vec<ReferenceFunction> {
+fn normalize_items(mut items: Vec<SharedPointer<Function, ArcK>>) -> Vec<ReferenceFunction> {
     items.sort_by_key(|item| item.fn_id);
     for item in &mut items {
-        normalize_function(Arc::make_mut(item));
+        // The harness owns every body, so this normalises in place.
+        normalize_function(SharedPointer::make_mut(item));
     }
 
-    let mut deduped: Vec<Arc<Function>> = Vec::with_capacity(items.len());
+    let mut deduped: Vec<SharedPointer<Function, ArcK>> = Vec::with_capacity(items.len());
     for item in items {
         if let Some(previous) = deduped.last()
             && previous.fn_id == item.fn_id
@@ -373,7 +378,8 @@ fn normalize_items(mut items: Vec<Arc<Function>>) -> Vec<ReferenceFunction> {
     deduped
         .into_iter()
         .map(|function| {
-            let function = Arc::try_unwrap(function).unwrap_or_else(|arc| (*arc).clone());
+            let function = SharedPointer::try_unwrap(function)
+                .expect("the harness must own every delivered body");
             ReferenceFunction {
                 fn_id: function.fn_id,
                 name: function.name,
@@ -452,6 +458,11 @@ async fn rustowl_cargo_command(rustowlc: &str, target_dir: &Path) -> tokio::proc
     command
 }
 
+/// The reference fixture is one mutable build tree: two tests driving it
+/// concurrently would see each other's rebuild as a fresh compile and get no
+/// documents, so they take turns.
+static REFERENCE_FIXTURE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Remove every workspace package's build state, forcing the next check to
 /// re-invoke rustowlc. Leaves `target_dir/cache` alone.
 async fn clean_workspace_packages(cargo: &str, fixture: &Path, target_dir: &Path) {
@@ -528,6 +539,7 @@ async fn analyze_perf_fixture(fixture: &Path) -> (RawWorkspace, usize) {
 #[tokio::test]
 async fn workspace_message_count_matches_packages() {
     require_toolchain_sysroot();
+    let _reference_fixture = REFERENCE_FIXTURE.lock().await;
 
     let fixture: PathBuf = [env!("CARGO_MANIFEST_DIR"), "perf-tests", "dummy-package"]
         .iter()
@@ -558,6 +570,7 @@ async fn workspace_message_count_matches_packages() {
 #[tokio::test]
 async fn test_workspace_reference() {
     require_toolchain_sysroot();
+    let _reference_fixture = REFERENCE_FIXTURE.lock().await;
 
     let fixture: PathBuf = [env!("CARGO_MANIFEST_DIR"), "perf-tests", "dummy-package"]
         .iter()
