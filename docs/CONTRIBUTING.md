@@ -39,7 +39,7 @@ Maintainers may close any PR without review.
 
 ### Use of AI tools
 
-If you use generative AI tools to create or modify any material in your contribution, such as code, documentation, tests, images, or commit messages, you must disclose it.
+If you use generative AI tools to create or modify any material in your contribution, such as code, documentation, tests, or images, you must disclose it.
 This includes, for example, CLI tools powered by generative AI, AI features of editors, and AI-powered code completion in editors.
 
 Disclose your use of AI tools as follows:
@@ -50,9 +50,13 @@ Disclose your use of AI tools as follows:
 If you accept suggestions from AI tools (e.g., AI review bots) after opening the PR, update the PR description or leave a comment on the PR.
 
 Using AI tools only for consultation, without including their output in your contribution, is not covered.
-Text in PR descriptions, issues, and comments is not covered either.
 
-You must understand what every change you submit means.
+You are responsible for every change you submit, whether or not you used AI tools, and you must understand what each change means.
+
+You must write PR descriptions and commit messages yourself.
+Trailers such as `Co-Authored-By` are excluded.
+You may use AI tools only to translate or proofread the text you wrote.
+Issues and comments are not covered by this rule.
 
 ### AI-assisted review
 
