@@ -19,7 +19,20 @@
 ## Description
 
 <!-- Describe the big picture of your changes to communicate to the maintainers
-  why we should accept this pull request. -->
+  why we should accept this pull request.
+  Write this description yourself; you may use AI tools only to translate or proofread it. -->
+
+## AI Usage
+
+<!--
+  If you used generative AI tools to create or modify any material in this PR
+  (including code, documentation, and images),
+  list the tools and models you used.
+  If you accept suggestions from AI tools after opening this PR,
+  update this section or leave a comment.
+  Otherwise, write "None".
+  See the "Use of AI tools" section in the contribution guidelines (/docs/CONTRIBUTING.md).
+-->
 
 <!----------------------------------------------------------------------
 Before creating the pull request, please make sure you do the following:
