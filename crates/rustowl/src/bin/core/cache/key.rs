@@ -1,14 +1,15 @@
 use archery::{ArcK, SharedPointer};
+use std::sync::Arc;
 
 use rustowl::models::{Function, Loc};
 
 /// `fn_text_hash` is the function's own source text: an edit inside it misses, an
 /// edit before it leaves the hash unchanged and the entry is served re-anchored.
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FunctionKey {
     pub def_path: u64,
     pub fn_text_hash: u64,
-    pub mir_hash: String,
+    pub mir_hash: u64,
     pub analysis_version: u32,
     pub toolchain_hash: u64,
 }
@@ -20,7 +21,7 @@ pub struct CachedEntry {
     pub base: Loc,
     pub function: SharedPointer<Function, ArcK>,
     /// The identity this body was stored under; a hit checks it.
-    pub key: String,
+    pub key: FunctionKey,
 }
 
 impl CachedEntry {
@@ -42,9 +43,19 @@ fn resolve_inner(entry: &CachedEntry, current_base: Loc) -> SharedPointer<Functi
     if delta == 0 {
         return SharedPointer::clone(&entry.function);
     }
-    let mut function = (*entry.function).clone();
-    function.shift(delta);
-    SharedPointer::new(function)
+    // The moved body is built, not copied: only the spans are new, the name
+    // and the basic blocks are shared with the cached body.
+    let source = &*entry.function;
+    SharedPointer::new(Function {
+        fn_id: source.fn_id,
+        name: Arc::clone(&source.name),
+        basic_blocks: Arc::clone(&source.basic_blocks),
+        decls: source
+            .decls
+            .iter()
+            .map(|decl| decl.shifted(delta))
+            .collect(),
+    })
 }
 
 #[cfg(test)]
@@ -60,43 +71,47 @@ mod tests {
             .collect()
     }
 
-    fn sample_function() -> Function {
-        let ty = MirType {
-            name: "T".into(),
+    fn sample_type() -> MirType {
+        MirType {
+            name: Arc::from("T"),
             reference: None,
-        };
+        }
+    }
+
+    fn sample_function() -> Function {
+        let ty = sample_type();
         Function {
             fn_id: 7,
             name: "f".into(),
-            basic_blocks: vec![],
+            basic_blocks: Arc::from(Vec::new()),
             decls: vec![
                 MirDecl::User {
                     local: FnLocal::new(0, 7),
                     name: "x".into(),
                     span: Range::new(Loc(100), Loc(110)).unwrap(),
-                    ty: ty.clone(),
-                    lives: ranges(120, 2),
-                    shared_borrow: ranges(150, 2),
-                    mutable_borrow: ranges(180, 2),
+                    ty: sample_type(),
+                    lives: Arc::from(ranges(120, 2)),
+                    shared_borrow: Arc::from(ranges(150, 2)),
+                    mutable_borrow: Arc::from(ranges(180, 2)),
                     drop: true,
-                    drop_range: ranges(210, 2),
-                    definitely_live_at: ranges(240, 2),
-                    maybe_init_at: ranges(270, 2),
-                    deficit_at: ranges(300, 2),
-                    storage_range: ranges(330, 2),
+                    drop_range: Arc::from(ranges(210, 2)),
+                    definitely_live_at: Arc::from(ranges(240, 2)),
+                    maybe_init_at: Arc::from(ranges(270, 2)),
+                    deficit_at: Arc::from(ranges(300, 2)),
+                    storage_range: Arc::from(ranges(330, 2)),
                 },
                 MirDecl::Other {
                     local: FnLocal::new(1, 7),
                     ty,
-                    lives: ranges(400, 2),
-                    shared_borrow: ranges(430, 2),
-                    mutable_borrow: ranges(460, 2),
+                    lives: Arc::from(ranges(400, 2)),
+                    shared_borrow: Arc::from(ranges(430, 2)),
+                    mutable_borrow: Arc::from(ranges(460, 2)),
                     drop: false,
-                    drop_range: ranges(490, 2),
-                    definitely_live_at: ranges(520, 2),
-                    maybe_init_at: ranges(550, 2),
-                    deficit_at: ranges(580, 2),
-                    storage_range: ranges(610, 2),
+                    drop_range: Arc::from(ranges(490, 2)),
+                    definitely_live_at: Arc::from(ranges(520, 2)),
+                    maybe_init_at: Arc::from(ranges(550, 2)),
+                    deficit_at: Arc::from(ranges(580, 2)),
+                    storage_range: Arc::from(ranges(610, 2)),
                 },
             ],
         }
@@ -106,7 +121,7 @@ mod tests {
         FunctionKey {
             def_path: 42,
             fn_text_hash,
-            mir_hash: "mir".into(),
+            mir_hash: 7,
             analysis_version: super::super::ANALYSIS_VERSION,
             toolchain_hash: super::super::toolchain_hash(),
         }
@@ -141,7 +156,7 @@ mod tests {
         let entry = CachedEntry {
             base: Loc(100),
             function: SharedPointer::new(sample_function()),
-            key: String::new(),
+            key: key(0),
         };
         let resolved = resolve(&entry, Loc(100));
         assert!(
@@ -151,16 +166,44 @@ mod tests {
     }
 
     #[test]
+    fn a_moved_body_leaves_the_cache_untouched() {
+        let entry = CachedEntry {
+            base: Loc(100),
+            function: SharedPointer::new(sample_function()),
+            key: key(0),
+        };
+        let resolved = resolve(&entry, Loc(350));
+
+        let expected = sample_function().shifted(250);
+        assert_eq!(
+            serde_json::to_string(&*resolved).unwrap(),
+            serde_json::to_string(&expected).unwrap()
+        );
+        assert!(
+            !SharedPointer::ptr_eq(&resolved, &entry.function),
+            "a moved body must not alias the cache"
+        );
+        assert_eq!(
+            serde_json::to_string(&*entry.function).unwrap(),
+            serde_json::to_string(&sample_function()).unwrap(),
+            "resolving must not drift the cached entry"
+        );
+        assert!(
+            Arc::ptr_eq(&resolved.name, &entry.function.name),
+            "the name is shared between the cached body and the moved one"
+        );
+    }
+
+    #[test]
     fn a_moved_function_is_re_anchored_by_exactly_the_delta() {
         let entry = CachedEntry {
             base: Loc(100),
             function: SharedPointer::new(sample_function()),
-            key: String::new(),
+            key: key(0),
         };
         let resolved = resolve(&entry, Loc(350));
 
-        let mut expected = sample_function();
-        expected.shift(250);
+        let expected = sample_function().shifted(250);
         assert_eq!(
             serde_json::to_string(&*resolved).unwrap(),
             serde_json::to_string(&expected).unwrap()
@@ -176,12 +219,11 @@ mod tests {
         let entry = CachedEntry {
             base: Loc(500),
             function: SharedPointer::new(sample_function()),
-            key: String::new(),
+            key: key(0),
         };
         let resolved = resolve(&entry, Loc(400));
 
-        let mut expected = sample_function();
-        expected.shift(-100);
+        let expected = sample_function().shifted(-100);
         assert_eq!(
             serde_json::to_string(&*resolved).unwrap(),
             serde_json::to_string(&expected).unwrap()
@@ -193,7 +235,7 @@ mod tests {
         let entry = CachedEntry {
             base: Loc(7),
             function: SharedPointer::new(sample_function()),
-            key: String::new(),
+            key: key(0),
         };
         let json = serde_json::to_string(&entry).expect("a cached entry must serialize");
         let back: CachedEntry = serde_json::from_str(&json).expect("a cached entry must decode");

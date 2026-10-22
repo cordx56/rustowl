@@ -113,14 +113,6 @@ pub fn init_cache(krate: &str) {
     let _ = CACHE.set(opened);
 }
 
-/// The full identity of a cached body, as it is written to disk.
-fn storage_key(key: &key::FunctionKey) -> String {
-    format!(
-        "{:x}:{:x}:{}:{}:{:x}",
-        key.def_path, key.fn_text_hash, key.mir_hash, key.analysis_version, key.toolchain_hash
-    )
-}
-
 /// The hash of the full identity: what the in-memory cache is keyed by, so a
 /// lookup builds no string.
 fn storage_hash(key: &key::FunctionKey) -> u64 {
@@ -138,7 +130,8 @@ fn storage_hash(key: &key::FunctionKey) -> u64 {
 /// request, so a hash collision is a miss rather than a wrong body.
 pub fn get_entry(key: &key::FunctionKey) -> Option<SharedPointer<key::CachedEntry, ArcK>> {
     let entry = cache()?.ufo.get(&storage_hash(key))?;
-    if entry.key != storage_key(key) {
+    // The identity is compared field by field: a lookup allocates nothing.
+    if entry.key != *key {
         return None;
     }
     Some(entry)
@@ -154,14 +147,15 @@ pub fn put_entry(
     let entry = SharedPointer::new(key::CachedEntry {
         base,
         function: analyzed,
-        key: storage_key(key),
+        key: *key,
     });
     cache
         .ufo
         .force_put(hash, SharedPointer::clone(&entry), weight(&entry));
-    let mut touched = cache.touched.load().as_ref().clone();
-    touched = touched.insert(hash);
-    cache.touched.store(Arc::new(touched));
+    // The set is updated atomically: two bodies stored at once both land.
+    cache
+        .touched
+        .rcu(|touched| Arc::new(touched.as_ref().insert(hash)));
 }
 
 /// Persist bodies recorded this run.
@@ -236,21 +230,33 @@ mod tests {
             base: Loc(0),
             function: SharedPointer::new(Function {
                 fn_id: 1,
-                name: "f".into(),
-                basic_blocks: vec![],
+                name: Arc::from("f"),
+                basic_blocks: Arc::from(Vec::new()),
                 decls: vec![],
             }),
-            key: String::new(),
+            key: key::FunctionKey {
+                def_path: 0,
+                fn_text_hash: 0,
+                mir_hash: 0,
+                analysis_version: 0,
+                toolchain_hash: 0,
+            },
         };
         let huge = key::CachedEntry {
             base: Loc(0),
             function: SharedPointer::new(Function {
                 fn_id: 1,
-                name: "a".repeat(6 * 1024 * 1024),
-                basic_blocks: vec![],
+                name: Arc::from("a".repeat(6 * 1024 * 1024)),
+                basic_blocks: Arc::from(Vec::new()),
                 decls: vec![],
             }),
-            key: String::new(),
+            key: key::FunctionKey {
+                def_path: 0,
+                fn_text_hash: 0,
+                mir_hash: 0,
+                analysis_version: 0,
+                toolchain_hash: 0,
+            },
         };
 
         assert_eq!(

@@ -192,6 +192,12 @@ impl_as_rustc!(
     rustc_borrowck::consumers::BodyWithBorrowckFacts<'tcx>
 );
 impl<'tcx> BorrowckFacts<'tcx> {
+    /// The body's span, borrowed: copying the body to read a span would copy
+    /// the whole MIR.
+    pub fn span(&self) -> Span {
+        AsRustc::from_rustc(self.as_rustc().body.span)
+    }
+
     pub fn body(&self) -> Body<'tcx> {
         AsRustc::from_rustc(self.as_rustc().body.clone())
     }

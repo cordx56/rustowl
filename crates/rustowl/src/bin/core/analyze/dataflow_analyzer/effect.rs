@@ -32,7 +32,7 @@ pub fn operands_effects<'a>(
     operands: impl IntoIterator<Item = &'a MirOperand>,
 ) -> impl Iterator<Item = (MirPlace, Effect)> {
     operands.into_iter().filter_map(|operand| match operand {
-        MirOperand::Move { place } => Some((place.clone(), Effect::Move)),
+        MirOperand::Move { place } => Some((MirPlace::shared(place), Effect::Move)),
         MirOperand::Copy { .. } | MirOperand::Other => None,
     })
 }
@@ -50,7 +50,7 @@ pub fn rval_operands(rval: &MirRval) -> Vec<&MirOperand> {
 pub fn statement_effects(statement: &MirStatement) -> Vec<(MirPlace, Effect)> {
     match &statement.kind {
         MirStatementKind::Assign { place, rval, .. } => operands_effects(rval_operands(rval))
-            .chain([(place.clone(), Effect::Assign)])
+            .chain([(MirPlace::shared(place), Effect::Assign)])
             .collect(),
         MirStatementKind::StorageDead { local } => {
             vec![(MirPlace::root(*local), Effect::StorageDead)]
@@ -64,14 +64,14 @@ pub fn terminator_effects(terminator: &MirTerminator) -> Vec<(MirPlace, Effect)>
     match &terminator.kind {
         MirTerminatorKind::SwitchInt { discr: operand, .. }
         | MirTerminatorKind::Assert { cond: operand, .. } => operands_effects([operand]).collect(),
-        MirTerminatorKind::Drop { place, .. } => vec![(place.clone(), Effect::Drop)],
+        MirTerminatorKind::Drop { place, .. } => vec![(MirPlace::shared(place), Effect::Drop)],
         MirTerminatorKind::Call {
             func,
             args,
             destination,
             ..
         } => operands_effects(std::iter::once(func).chain(args))
-            .chain([(destination.clone(), Effect::Assign)])
+            .chain([(MirPlace::shared(destination), Effect::Assign)])
             .collect(),
         MirTerminatorKind::TailCall { func, args, .. } => {
             operands_effects(std::iter::once(func).chain(args)).collect()
