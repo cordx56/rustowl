@@ -29,6 +29,7 @@ harness = false
 name = "rustowl_bench_simple"
 
 [dependencies]
+TinyUFO.workspace = true
 anstyle.workspace = true
 arc-swap = { workspace = true }
 archery = { workspace = true, features = ["serde"] }
@@ -49,7 +50,6 @@ serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
 tar.workspace = true
 tempfile.workspace = true
-TinyUFO.workspace = true
 tokio.workspace = true
 tower-lsp-server.workspace = true
 tracing.workspace = true
@@ -62,6 +62,7 @@ url.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 insta.workspace = true
+trycmd.workspace = true
 
 [build-dependencies]
 clap.workspace = true

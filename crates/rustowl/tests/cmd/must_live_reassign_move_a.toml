@@ -1,0 +1,30 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "reassign_move", "a"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'a' (1/1) in function 'reassign_move' ===
+
+  18 | // Reassignment after the borrowed variable is moved (compiles).
+  19 | fn reassign_move() {
+  20 |     let a = String::from("a");
+     |         -   -----------------
+  21 |     let mut r = &a;
+     |         -----   --
+  22 |     println!("{r}");
+     |     ---------------
+  23 |     drop(a);
+     |     ---- -
+  24 |     let b = String::from("b");
+  25 |     r = &b;
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

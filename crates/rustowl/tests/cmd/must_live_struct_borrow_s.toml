@@ -1,0 +1,32 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "struct_borrow", "s"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 's' (1/1) in function 'struct_borrow' ===
+
+ 122 | // A borrow held by a struct and used through another reference (compiles).
+ 123 | fn struct_borrow() {
+ 124 |     let s = String::from("s");
+     |         -   -----------------
+ 125 |     let h = Holder(&s);
+     |         -   ------ -- -
+ 126 |     let t = &h;
+     |         -   --
+ 127 |     println!("{}", t.0);
+     |     -------------------
+ 128 | }
+     | -
+ 129 | 
+ 130 | // A guard borrows the mutex until the end of the block (compiles).
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''
