@@ -7,6 +7,7 @@
   - [Table Of Contents](#table-of-contents)
   - [Quick Start](#quick-start)
   - [Basic Setup](#basic-setup)
+  - [lsp-bridge Setup](#lsp-bridge-setup)
   - [What the package does](#what-the-package-does)
   - [Defaults and variables](#defaults-and-variables)
   - [How highlighting works](#how-highlighting-works)
@@ -43,14 +44,51 @@ Use-package example:
   :after lsp-mode)
 ```
 
+## lsp-bridge Setup
+
+With `lsp-bridge` already installed and configured for Rust, load RustOwl after it:
+
+```elisp
+(use-package rustowl
+  :after lsp-bridge)
+```
+
+For a local checkout, add its directory to `load-path` and use
+`(require 'rustowl)` after loading `lsp-bridge`.
+
+Open a saved Rust file with `lsp-bridge-mode` enabled, then move the cursor
+onto a variable. RustOwl starts automatically on the next idle cursor request
+or save. The executable must be on Emacs's `exec-path`; alternatively set:
+
+```elisp
+(setq rustowl-command '("/absolute/path/to/rustowl"))
+```
+
+This integration uses Emacs's built-in JSON-RPC support to run a separate
+RustOwl process per project. It does not require `lsp-mode`, Python handlers,
+or changes to lsp-bridge's language-server configuration. Your existing
+rust-analyzer completion and navigation continue to use lsp-bridge.
+RustOwl uses lsp-bridge's project-root function, falling back to the nearest
+`Cargo.toml` directory or the file's directory.
+
+Initialization is asynchronous. Buffers in the same project share a process;
+closing the last buffer or disabling lsp-bridge in all associated buffers
+stops it. A later request restarts a process that has exited.
+
+RustOwl analyzes files on disk. Save edits before requesting highlights;
+editing clears existing overlays, and saving requests analysis again.
+This backend supports local files only, not TRAMP or lsp-bridge remote files.
+If both client modes are enabled, RustOwl prefers lsp-bridge.
+
 ## What the package does
 
-- Registers an LSP client for `rust-mode`, `rust-ts-mode`, and `rustic-mode` using `rustowl` as the executable.
+- With lsp-mode, registers an LSP client for `rust-mode`, `rust-ts-mode`, and `rustic-mode` using `rustowl` as the executable.
 - Sends `rustowl/analyze` on save (see `rustowl-enable-analyze-on-save`).
 - Sends `rustowl/cursor` when the cursor has been idle for `rustowl-cursor-timeout` seconds (default 2.0 seconds) and applies underlines via overlays.
 
 ## Defaults and variables
 
+- `rustowl-command` — executable and arguments for the lsp-bridge backend; default: `("rustowl")`.
 - `rustowl-cursor-timeout` (float) — default: 2.0 seconds. Idle time before the cursor request is sent.
 - `rustowl-cursor-timer` — internal timer variable managed by the package.
 
@@ -78,7 +116,7 @@ Use-package example:
 To disable analyze-on-save globally, remove the hooks or call:
 
 ```elisp
-(remove-hook 'rust-mode-hook #'rustowl-enable-cursor)
+(remove-hook 'rust-mode-hook #'rustowl-enable-analyze-on-save)
 ```
 
 To customize the timeout in your config:
@@ -89,7 +127,7 @@ To customize the timeout in your config:
 
 ## Troubleshooting
 
-- If overlays don't appear, ensure `lsp-mode` is active and `rustowl` server is reachable.
+- If overlays don't appear, ensure `lsp-mode` or `lsp-bridge-mode` is active and the `rustowl` executable is on `exec-path`. For lsp-bridge, check `*rustowl-stderr*` for startup errors and save the file before requesting highlights.
 - Use `M-x rustowl-clear-overlays` to clear overlays if they persist.
 
 See `docs/lsp-spec.md` for the LSP request/response shapes.
