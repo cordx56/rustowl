@@ -25,7 +25,7 @@ criterion = { version = "0.8", features = ["html_reports"] }
 flate2 = "1"
 indexmap = "2.14.0"
 indicatif = "0.18"
-insta = "1.47"
+insta = { version = "1.47", features = ["json"] }
 jiff = { version = "0.2", default-features = false }
 man = "0.3"
 process_alive = "0.2"
