@@ -1,0 +1,28 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "vec.rs", "f5", "r"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'r' (1/1) in function 'f5' ===
+
+  42 | fn f5() {
+  43 |     let mut v1: Vec<_> = (0..100).collect();
+  44 |     let r = &v1[0];
+     |         -
+  45 |     println!("{v1:?}");
+     |     ------------------
+  46 |     println!("{r}");
+     |     ---------------
+  47 |     // here, lifetime of r is already dead in NLL
+  48 |     v1.push(100);
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''
