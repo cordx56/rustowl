@@ -166,6 +166,9 @@ Then use-package:
   :after lsp-mode)
 ```
 
+For lsp-bridge, use `:after lsp-bridge` instead. RustOwl runs alongside
+rust-analyzer using Emacs's built-in JSON-RPC support; lsp-mode is not required.
+
 You have to install RustOwl LSP server manually.
 
 For more detailed configuration options, see the [Emacs Configuration Guide](./docs/emacs-configuration.md).
