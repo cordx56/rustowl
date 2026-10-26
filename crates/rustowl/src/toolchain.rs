@@ -23,6 +23,10 @@ impl std::fmt::Display for ToolchainError {
 
 impl std::error::Error for ToolchainError {}
 
+pub fn fallback_runtime_dir() -> &'static Path {
+    &FALLBACK_RUNTIME_DIR
+}
+
 pub static FALLBACK_RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let opt = PathBuf::from("/opt/rustowl");
     if sysroot_from_runtime(&opt).is_dir() {
@@ -55,17 +59,18 @@ pub fn sysroot_from_runtime(runtime: impl AsRef<Path>) -> PathBuf {
 }
 
 async fn get_runtime_dir() -> PathBuf {
-    let sysroot = sysroot_from_runtime(&*FALLBACK_RUNTIME_DIR);
-    if FALLBACK_RUNTIME_DIR.is_dir() && sysroot.is_dir() {
-        return FALLBACK_RUNTIME_DIR.clone();
+    let runtime = fallback_runtime_dir();
+    let sysroot = sysroot_from_runtime(runtime);
+    if runtime.is_dir() && sysroot.is_dir() {
+        return runtime.to_path_buf();
     }
 
     tracing::info!("sysroot not found; start setup toolchain");
-    if let Err(e) = setup_toolchain(&*FALLBACK_RUNTIME_DIR, false).await {
+    if let Err(e) = setup_toolchain(runtime, false).await {
         tracing::error!("{e:?}");
         std::process::exit(1);
     } else {
-        FALLBACK_RUNTIME_DIR.clone()
+        runtime.to_path_buf()
     }
 }
 
@@ -174,9 +179,9 @@ async fn install_components(
     for component in components {
         let pb = m.add(ProgressBar::new(100));
         pb.set_style(progress_bar_style()?);
-        pb.set_message(component.clone());
+        pb.set_message(component.to_string());
 
-        let dest = dest.clone();
+        let dest = dest.to_path_buf();
         let handle = tokio::spawn(async move {
             let tempdir =
                 tempfile::tempdir().map_err(|_| ToolchainError("failed to create temp dir"))?;
@@ -367,19 +372,25 @@ pub async fn setup_cargo_command() -> tokio::process::Command {
     let sysroot = get_sysroot().await;
     // use `RUSTOWLC` and `RUSTOWLC_WORKSPACE_WRAPPER` env var to configure `rustowlc` path
     let rustowlc = env::var("RUSTOWLC").unwrap_or(rustowlc);
-    let rustowlc_workspace = env::var("RUSTOWLC_WORKSPACE_WRAPPER").unwrap_or(rustowlc.clone());
-    command
-        .env("RUSTC", &rustowlc)
-        .env("RUSTC_WORKSPACE_WRAPPER", &rustowlc_workspace)
-        .env(
-            "CARGO_ENCODED_RUSTFLAGS",
-            format!(
-                "{}--sysroot={}{}",
-                encoded_flags,
-                sysroot.display(),
-                rustflags
-            ),
-        );
+    command.env("RUSTC", &rustowlc);
+    match env::var("RUSTOWLC_WORKSPACE_WRAPPER") {
+        Ok(workspace) => {
+            command.env("RUSTC_WORKSPACE_WRAPPER", workspace);
+        }
+        // Without a workspace wrapper, the compiler is its own wrapper.
+        Err(_) => {
+            command.env("RUSTC_WORKSPACE_WRAPPER", &rustowlc);
+        }
+    }
+    command.env(
+        "CARGO_ENCODED_RUSTFLAGS",
+        format!(
+            "{}--sysroot={}{}",
+            encoded_flags,
+            sysroot.display(),
+            rustflags
+        ),
+    );
     set_rustc_env(&mut command, &sysroot);
     command
 }
@@ -414,5 +425,20 @@ pub fn set_rustc_env(command: &mut tokio::process::Command, sysroot: &Path) {
         paths.push_front(sysroot.join("bin"));
         let paths = env::join_paths(paths).unwrap();
         command.env("Path", paths);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_runtime_directory_is_borrowed_not_copied() {
+        let first = fallback_runtime_dir();
+        let second = fallback_runtime_dir();
+        assert!(
+            std::ptr::eq(first, second),
+            "the runtime directory must be the same value, not a copy"
+        );
     }
 }

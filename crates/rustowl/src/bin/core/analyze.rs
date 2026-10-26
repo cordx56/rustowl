@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::Arc;
 
 pub type MirAnalyzeFuture = Pin<Box<dyn Future<Output = MirAnalyzer> + Send + Sync>>;
 
@@ -47,8 +48,8 @@ pub struct MirAnalyzer {
     mutable_live: HashMap<LocalId, Vec<Range>>,
     drop_range: HashMap<LocalId, Vec<Range>>,
     storage_range: HashMap<LocalId, Vec<Range>>,
-    definitely_live_range: HashMap<LocalId, Vec<Range>>,
-    maybe_init_range: HashMap<LocalId, Vec<Range>>,
+    definitely_live_range: HashMap<LocalId, Arc<[Range]>>,
+    maybe_init_range: HashMap<LocalId, Arc<[Range]>>,
 }
 
 /// Content hash of source text.
@@ -78,7 +79,7 @@ impl MirAnalyzer {
 
         let facts = tcx.get_borrowck_facts(fn_id);
         for (fn_id, mut facts) in facts {
-            let source_info = if let Some(v) = source_info_from_span(tcx, facts.body().span()) {
+            let source_info = if let Some(v) = source_info_from_span(tcx, facts.span()) {
                 v
             } else {
                 continue;
@@ -86,13 +87,22 @@ impl MirAnalyzer {
             let name = tcx.def_name(fn_id);
             tracing::debug!("facts of {fn_id:?} ({name}) prepared; start analyze...");
 
+            // The body is copied out of the facts: the hash consumes it
+            // (rustc's erase_region_variables takes it), and the analysis
+            // needs it afterwards.
             let body = facts.body();
 
             let file_path = source_info.path().to_path_buf();
 
             // region variables should not be hashed (it results an error)
             // so we erase region variables and set 'static as new region
-            let mir_hash = tcx.get_hash(body.clone().erase_region_variables(tcx).as_rustc());
+            let mir_hash = {
+                use std::hash::{Hash, Hasher};
+                let hash = tcx.get_hash(body.clone().erase_region_variables(tcx).as_rustc());
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                hash.hash(&mut hasher);
+                hasher.finish()
+            };
 
             let base = body_anchor(&source_info, body.span());
             // The function's own text: a comment inside the body leaves MIR unchanged,
@@ -110,7 +120,7 @@ impl MirAnalyzer {
             let key = cache::key::FunctionKey {
                 def_path: tcx.def_path_hash(fn_id),
                 fn_text_hash,
-                mir_hash: mir_hash.clone(),
+                mir_hash,
                 analysis_version: cache::ANALYSIS_VERSION,
                 toolchain_hash: cache::toolchain_hash(),
             };
@@ -127,6 +137,13 @@ impl MirAnalyzer {
                 }));
                 continue;
             }
+
+            // collect borrow data
+            // this must be done in local thread
+            let borrow_data = facts.borrow_map();
+
+            let input = facts.polonius_input();
+            let location_table = facts.location_table();
 
             // these are only needed to build the analyzer, so they stay behind the
             // cache check: get_local_decls pretty-prints a type per local
@@ -149,13 +166,6 @@ impl MirAnalyzer {
             // compute storage ranges based on StorageLive/StorageDead
             // this must be done in local thread as body cannot be sent across threads
             let storage_range = body.compute_storage_ranges(&source_info);
-
-            // collect borrow data
-            // this must be done in local thread
-            let borrow_data = facts.borrow_map();
-
-            let input = facts.polonius_input();
-            let location_table = facts.location_table();
 
             let analyzer = Box::pin(async move {
                 tracing::debug!("start re-computing borrow check with dump: true");
@@ -212,9 +222,9 @@ impl MirAnalyzer {
                 let mut reference_local_live = reference_local_live;
                 for (local, ranges) in &mut maybe_init_range {
                     if let Some(ref_ranges) = reference_local_live.shift_remove(local) {
-                        *ranges = ref_ranges.clone();
+                        *ranges = Arc::clone(&ref_ranges);
                         if let Some(ranges) = definitely_live_range.get_mut(local) {
-                            *ranges = ref_ranges;
+                            *ranges = Arc::clone(&ref_ranges);
                         }
                     }
                 }
@@ -277,32 +287,32 @@ impl MirAnalyzer {
                 if let Some((span, name)) = user_vars.shift_remove(&local) {
                     MirDecl::User {
                         local: fn_local,
-                        name,
+                        name: Arc::from(name),
                         span,
                         ty,
-                        lives,
-                        shared_borrow,
-                        mutable_borrow,
-                        deficit_at,
+                        lives: Arc::from(lives),
+                        shared_borrow: Arc::from(shared_borrow),
+                        mutable_borrow: Arc::from(mutable_borrow),
+                        deficit_at: Arc::from(deficit_at),
                         drop,
-                        drop_range,
-                        storage_range,
-                        definitely_live_at,
-                        maybe_init_at,
+                        drop_range: Arc::from(drop_range),
+                        storage_range: Arc::from(storage_range),
+                        definitely_live_at: Arc::clone(&definitely_live_at),
+                        maybe_init_at: Arc::clone(&maybe_init_at),
                     }
                 } else {
                     MirDecl::Other {
                         local: fn_local,
                         ty,
-                        lives,
-                        shared_borrow,
-                        mutable_borrow,
+                        lives: Arc::from(lives),
+                        shared_borrow: Arc::from(shared_borrow),
+                        mutable_borrow: Arc::from(mutable_borrow),
                         drop,
-                        drop_range,
-                        deficit_at,
-                        storage_range,
-                        definitely_live_at,
-                        maybe_init_at,
+                        drop_range: Arc::from(drop_range),
+                        deficit_at: Arc::from(deficit_at),
+                        storage_range: Arc::from(storage_range),
+                        definitely_live_at: Arc::clone(&definitely_live_at),
+                        maybe_init_at: Arc::clone(&maybe_init_at),
                     }
                 }
             })
@@ -330,8 +340,8 @@ impl MirAnalyzer {
             from_cache: false,
             analyzed: archery::SharedPointer::new(Function {
                 fn_id: self.fn_id.as_u32(),
-                name: self.name,
-                basic_blocks,
+                name: Arc::from(self.name),
+                basic_blocks: Arc::from(basic_blocks),
                 decls,
             }),
         }

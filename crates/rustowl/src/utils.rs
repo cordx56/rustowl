@@ -21,15 +21,17 @@ pub fn common_range(r1: Range, r2: Range) -> Option<Range> {
 }
 
 /// Intersections of every pair, flattened.
-pub fn common_ranges(ranges: &[Range]) -> Vec<Range> {
-    if ranges.len() < 2 {
-        return Vec::new();
-    }
+pub fn common_ranges<'a>(ranges: impl IntoIterator<Item = &'a Range>) -> Vec<Range> {
     // (position, +1 at a range start, -1 at its end)
-    let mut events: Vec<(u32, i8)> = Vec::with_capacity(ranges.len() * 2);
+    let mut events: Vec<(u32, i8)> = Vec::new();
+    let mut count = 0;
     for range in ranges {
         events.push((range.from().0, 1));
         events.push((range.until().0, -1));
+        count += 1;
+    }
+    if count < 2 {
+        return Vec::new();
     }
     events.sort_by_key(|(pos, delta)| (*pos, *delta));
 
@@ -88,10 +90,10 @@ pub fn eliminated_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
 
 /// Compute intersection of two range lists.
 /// Returns ranges that are covered by both lists.
-pub fn intersect_ranges(ranges1: Vec<Range>, ranges2: Vec<Range>) -> Vec<Range> {
+pub fn intersect_ranges(ranges1: &[Range], ranges2: &[Range]) -> Vec<Range> {
     let mut result = Vec::new();
-    for r1 in &ranges1 {
-        for r2 in &ranges2 {
+    for r1 in ranges1 {
+        for r2 in ranges2 {
             if let Some(common) = common_range(*r1, *r2) {
                 result.push(common);
             }
@@ -102,9 +104,9 @@ pub fn intersect_ranges(ranges1: Vec<Range>, ranges2: Vec<Range>) -> Vec<Range> 
 
 /// Compute union of two range lists.
 /// Returns ranges that are covered by either list.
-pub fn union_ranges(ranges1: Vec<Range>, ranges2: Vec<Range>) -> Vec<Range> {
-    let mut combined = ranges1;
-    combined.extend(ranges2);
+pub fn union_ranges(ranges1: &[Range], ranges2: &[Range]) -> Vec<Range> {
+    let mut combined = ranges1.to_vec();
+    combined.extend_from_slice(ranges2);
     eliminated_ranges(combined)
 }
 
@@ -141,7 +143,7 @@ pub fn mir_visit(func: &Function, visitor: &mut impl MirVisitor) {
     for decl in &func.decls {
         visitor.visit_decl(decl);
     }
-    for bb in &func.basic_blocks {
+    for bb in func.basic_blocks.iter() {
         for stmt in &bb.statements {
             visitor.visit_stmt(stmt);
         }

@@ -1,6 +1,7 @@
 use crate::{lsp::progress, models::*, utils};
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tower_lsp_server::gen_lsp_types;
 
 // TODO: Variable name should be checked?
@@ -16,62 +17,78 @@ pub enum Deco<R = Range> {
     Lifetime {
         local: FnLocal,
         range: R,
-        hover_text: String,
+        hover_text: Arc<str>,
         overlapped: bool,
     },
     ImmBorrow {
         local: FnLocal,
         range: R,
-        hover_text: String,
+        hover_text: Arc<str>,
         overlapped: bool,
     },
     MutBorrow {
         local: FnLocal,
         range: R,
-        hover_text: String,
+        hover_text: Arc<str>,
         overlapped: bool,
     },
     Move {
         local: FnLocal,
         range: R,
-        hover_text: String,
+        hover_text: Arc<str>,
         overlapped: bool,
     },
     Call {
         local: FnLocal,
         range: R,
-        hover_text: String,
+        hover_text: Arc<str>,
         overlapped: bool,
     },
     SharedMut {
         local: FnLocal,
         range: R,
-        hover_text: String,
+        hover_text: Arc<str>,
         overlapped: bool,
     },
     Outlive {
         local: FnLocal,
         range: R,
-        hover_text: String,
+        hover_text: Arc<str>,
         overlapped: bool,
     },
 
     DefinitelyLive {
         local: FnLocal,
         range: R,
-        hover_text: String,
+        hover_text: Arc<str>,
         overlapped: bool,
     },
     MaybeInitialized {
         local: FnLocal,
         range: R,
-        hover_text: String,
+        hover_text: Arc<str>,
         overlapped: bool,
     },
 }
+impl<R> Deco<R> {
+    pub fn hover_text(&self) -> &str {
+        match self {
+            Deco::Lifetime { hover_text, .. }
+            | Deco::ImmBorrow { hover_text, .. }
+            | Deco::MutBorrow { hover_text, .. }
+            | Deco::Move { hover_text, .. }
+            | Deco::Call { hover_text, .. }
+            | Deco::SharedMut { hover_text, .. }
+            | Deco::Outlive { hover_text, .. }
+            | Deco::DefinitelyLive { hover_text, .. }
+            | Deco::MaybeInitialized { hover_text, .. } => hover_text,
+        }
+    }
+}
+
 impl Deco<Range> {
     pub fn to_lsp_range(&self, s: &str) -> Deco<gen_lsp_types::Range> {
-        match self.clone() {
+        match self {
             Deco::Lifetime {
                 local,
                 range,
@@ -89,10 +106,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::Lifetime {
-                    local,
+                    local: *local,
                     range: gen_lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: Arc::clone(hover_text),
+                    overlapped: *overlapped,
                 }
             }
             Deco::ImmBorrow {
@@ -112,10 +129,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::ImmBorrow {
-                    local,
+                    local: *local,
                     range: gen_lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: Arc::clone(hover_text),
+                    overlapped: *overlapped,
                 }
             }
             Deco::MutBorrow {
@@ -135,10 +152,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::MutBorrow {
-                    local,
+                    local: *local,
                     range: gen_lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: Arc::clone(hover_text),
+                    overlapped: *overlapped,
                 }
             }
             Deco::Move {
@@ -158,10 +175,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::Move {
-                    local,
+                    local: *local,
                     range: gen_lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: Arc::clone(hover_text),
+                    overlapped: *overlapped,
                 }
             }
             Deco::Call {
@@ -181,10 +198,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::Call {
-                    local,
+                    local: *local,
                     range: gen_lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: Arc::clone(hover_text),
+                    overlapped: *overlapped,
                 }
             }
             Deco::SharedMut {
@@ -204,13 +221,12 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::SharedMut {
-                    local,
+                    local: *local,
                     range: gen_lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: Arc::clone(hover_text),
+                    overlapped: *overlapped,
                 }
             }
-
             Deco::Outlive {
                 local,
                 range,
@@ -228,13 +244,12 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::Outlive {
-                    local,
+                    local: *local,
                     range: gen_lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: Arc::clone(hover_text),
+                    overlapped: *overlapped,
                 }
             }
-
             Deco::DefinitelyLive {
                 local,
                 range,
@@ -252,10 +267,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::DefinitelyLive {
-                    local,
+                    local: *local,
                     range: gen_lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: Arc::clone(hover_text),
+                    overlapped: *overlapped,
                 }
             }
             Deco::MaybeInitialized {
@@ -275,10 +290,10 @@ impl Deco<Range> {
                     character: end.1,
                 };
                 Deco::MaybeInitialized {
-                    local,
+                    local: *local,
                     range: gen_lsp_types::Range { start, end },
-                    hover_text,
-                    overlapped,
+                    hover_text: Arc::clone(hover_text),
+                    overlapped: *overlapped,
                 }
             }
         }
@@ -375,7 +390,7 @@ impl utils::MirVisitor for SelectLocal {
             MirDecl::User { local, ty, .. } => (local, ty),
             MirDecl::Other { local, ty, .. } => (local, ty),
         };
-        if ASYNC_RESUME_TY.contains(&ty.name.as_str()) {
+        if ASYNC_RESUME_TY.contains(&ty.name.as_ref()) {
             return;
         }
         self.candidate_local_decls.push(*local);
@@ -583,7 +598,7 @@ impl CalcDecos {
                             } => Deco::Lifetime {
                                 local: *local,
                                 range,
-                                hover_text: hover_text.clone(),
+                                hover_text: Arc::clone(hover_text),
                                 overlapped: false,
                             },
                             Deco::ImmBorrow {
@@ -591,7 +606,7 @@ impl CalcDecos {
                             } => Deco::ImmBorrow {
                                 local: *local,
                                 range,
-                                hover_text: hover_text.clone(),
+                                hover_text: Arc::clone(hover_text),
                                 overlapped: false,
                             },
                             Deco::MutBorrow {
@@ -599,7 +614,7 @@ impl CalcDecos {
                             } => Deco::MutBorrow {
                                 local: *local,
                                 range,
-                                hover_text: hover_text.clone(),
+                                hover_text: Arc::clone(hover_text),
                                 overlapped: false,
                             },
                             Deco::Move {
@@ -607,7 +622,7 @@ impl CalcDecos {
                             } => Deco::Move {
                                 local: *local,
                                 range,
-                                hover_text: hover_text.clone(),
+                                hover_text: Arc::clone(hover_text),
                                 overlapped: false,
                             },
                             Deco::Call {
@@ -615,7 +630,7 @@ impl CalcDecos {
                             } => Deco::Call {
                                 local: *local,
                                 range,
-                                hover_text: hover_text.clone(),
+                                hover_text: Arc::clone(hover_text),
                                 overlapped: false,
                             },
                             Deco::SharedMut {
@@ -623,7 +638,7 @@ impl CalcDecos {
                             } => Deco::SharedMut {
                                 local: *local,
                                 range,
-                                hover_text: hover_text.clone(),
+                                hover_text: Arc::clone(hover_text),
                                 overlapped: false,
                             },
                             Deco::Outlive {
@@ -631,7 +646,7 @@ impl CalcDecos {
                             } => Deco::Outlive {
                                 local: *local,
                                 range,
-                                hover_text: hover_text.clone(),
+                                hover_text: Arc::clone(hover_text),
                                 overlapped: false,
                             },
                             Deco::DefinitelyLive {
@@ -639,7 +654,7 @@ impl CalcDecos {
                             } => Deco::DefinitelyLive {
                                 local: *local,
                                 range,
-                                hover_text: hover_text.clone(),
+                                hover_text: Arc::clone(hover_text),
                                 overlapped: false,
                             },
                             Deco::MaybeInitialized {
@@ -647,7 +662,7 @@ impl CalcDecos {
                             } => Deco::MaybeInitialized {
                                 local: *local,
                                 range,
-                                hover_text: hover_text.clone(),
+                                hover_text: Arc::clone(hover_text),
                                 overlapped: false,
                             },
                         };
@@ -708,7 +723,7 @@ impl CalcDecos {
             self.decorations.push(Deco::Move {
                 local: place.local,
                 range,
-                hover_text: "variable moved".to_string(),
+                hover_text: Arc::from("variable moved"),
                 overlapped: false,
             });
         }
@@ -730,7 +745,7 @@ impl CalcDecos {
         self.decorations.push(Deco::Call {
             local: destination.local,
             range: fn_span,
-            hover_text: "function call".to_string(),
+            hover_text: Arc::from("function call"),
             overlapped: false,
         });
     }
@@ -814,51 +829,52 @@ impl utils::MirVisitor for CalcDecos {
             // - drop variables (Non-Copy): intersection of drop_range and storage_range
             // - non-drop variables (Copy): union of lives and storage_range
             let drop_copy_live = if *drop {
-                utils::intersect_ranges(drop_range.clone(), storage_range.clone())
+                utils::intersect_ranges(drop_range, storage_range)
             } else {
-                utils::union_ranges(lives.clone(), storage_range.clone())
+                utils::union_ranges(lives, storage_range)
             };
             for range in &drop_copy_live {
                 self.decorations.push(Deco::Lifetime {
                     local,
                     range: *range,
-                    hover_text: format!("lifetime of {var_str}"),
+                    hover_text: Arc::from(format!("lifetime of {var_str}")),
                     overlapped: false,
                 });
             }
-            let mut borrow_ranges = shared_borrow.clone();
-            borrow_ranges.extend_from_slice(mutable_borrow);
-            let shared_mut = utils::common_ranges(&borrow_ranges);
+            let shared_mut =
+                utils::common_ranges(shared_borrow.iter().chain(mutable_borrow.iter()));
             for range in shared_mut {
                 self.decorations.push(Deco::SharedMut {
                     local,
                     range,
-                    hover_text: format!("immutable and mutable borrows of {var_str} exist here"),
+                    hover_text: Arc::from(format!(
+                        "immutable and mutable borrows of {var_str} exist here"
+                    )),
                     overlapped: false,
                 });
             }
-            for range in deficit_at {
+            for range in deficit_at.iter() {
                 self.decorations.push(Deco::Outlive {
                     local,
                     range: *range,
-                    hover_text: format!("{var_str} is required to live here"),
+                    hover_text: Arc::from(format!("{var_str} is required to live here")),
                     overlapped: false,
                 });
             }
 
-            for range in definitely_live_at {
+            for range in definitely_live_at.iter() {
                 self.decorations.push(Deco::DefinitelyLive {
                     local,
                     range: *range,
-                    hover_text: format!("{var_str} definitely lives here"),
+                    hover_text: Arc::from(format!("{var_str} definitely lives here")),
                     overlapped: false,
                 })
             }
-            for range in maybe_init_at {
+            for range in maybe_init_at.iter() {
                 self.decorations.push(Deco::MaybeInitialized {
                     local,
                     range: *range,
-                    hover_text: format!("{var_str} maybe lives here"),
+                    hover_text: Arc::from(format!("{var_str} maybe lives here")),
                     overlapped: false,
                 })
             }
@@ -886,14 +902,14 @@ impl utils::MirVisitor for CalcDecos {
                             self.decorations.push(Deco::MutBorrow {
                                 local: place.local,
                                 range,
-                                hover_text: "mutable borrow".to_string(),
+                                hover_text: Arc::from("mutable borrow"),
                                 overlapped: false,
                             });
                         } else {
                             self.decorations.push(Deco::ImmBorrow {
                                 local: place.local,
                                 range,
-                                hover_text: "immutable borrow".to_string(),
+                                hover_text: Arc::from("immutable borrow"),
                                 overlapped: false,
                             });
                         }
@@ -960,7 +976,7 @@ mod tests {
         Deco::Move {
             local: FnLocal::new(1, 1),
             range: range(from, until),
-            hover_text: "move".to_string(),
+            hover_text: Arc::from("move"),
             overlapped: false,
         }
     }
@@ -969,7 +985,7 @@ mod tests {
         Deco::Lifetime {
             local: FnLocal::new(local, 1),
             range: range(from, until),
-            hover_text: "lifetime".to_string(),
+            hover_text: Arc::from("lifetime"),
             overlapped: false,
         }
     }
@@ -998,6 +1014,31 @@ mod tests {
             "Lifetime must draw under Move, got {:?}",
             calc.decorations[0]
         );
+    }
+
+    #[test]
+    fn split_decorations_keep_their_text() {
+        let mut calc = CalcDecos::new([]);
+        calc.decorations.push(move_deco(0, 10));
+        calc.decorations.push(lifetime_deco(2, 4, 6));
+        calc.handle_overlapping();
+
+        assert!(
+            calc.decorations.len() >= 2,
+            "the outer decoration must be split"
+        );
+        for deco in &calc.decorations {
+            let expected = match deco {
+                Deco::Move { .. } => "move",
+                Deco::Lifetime { .. } => "lifetime",
+                _ => continue,
+            };
+            assert_eq!(
+                deco.hover_text(),
+                expected,
+                "a split decoration must keep its text"
+            );
+        }
     }
 
     /// Overlapping ranges on different locals are trimmed rather than dropped.

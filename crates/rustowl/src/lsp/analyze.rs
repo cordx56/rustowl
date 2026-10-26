@@ -40,8 +40,9 @@ pub enum AnalyzerEvent {
 
 #[derive(Clone)]
 pub struct Analyzer {
-    path: PathBuf,
-    metadata: Option<cargo_metadata::Metadata>,
+    pub(crate) path: PathBuf,
+    /// The cargo metadata, shared: the dependency graph behind it is large.
+    pub(crate) metadata: Option<archery::SharedPointer<cargo_metadata::Metadata, archery::ArcK>>,
 }
 
 impl Analyzer {
@@ -82,7 +83,7 @@ impl Analyzer {
                     }
                     let data = String::from_utf8_lossy(&output.stdout);
                     match cargo_metadata::MetadataCommand::parse(data) {
-                        Ok(metadata) => Some(metadata),
+                        Ok(metadata) => Some(archery::SharedPointer::new(metadata)),
                         Err(e) => {
                             tracing::warn!("could not parse cargo metadata output: {e}");
                             None
@@ -126,7 +127,7 @@ impl Analyzer {
         &self,
         all_targets: bool,
         all_features: bool,
-        open_files: &[PathBuf],
+        open_files: &[Arc<PathBuf>],
     ) -> Option<AnalyzeEventIter> {
         if let Some(metadata) = &self.metadata {
             self.analyze_package(metadata, all_targets, all_features, open_files)
@@ -141,7 +142,7 @@ impl Analyzer {
         metadata: &cargo_metadata::Metadata,
         all_targets: bool,
         all_features: bool,
-        open_files: &[PathBuf],
+        open_files: &[Arc<PathBuf>],
     ) -> Option<AnalyzeEventIter> {
         let package_names: Vec<_> = metadata
             .workspace_packages()
@@ -217,7 +218,7 @@ impl Analyzer {
 
         let (sender, receiver) = mpsc::channel(1024);
         let notify = Arc::new(Notify::new());
-        let notify_c = notify.clone();
+        let notify_c = Arc::clone(&notify);
         let _handle = tokio::spawn(async move {
             // prevent command from dropped
             while let Ok(Some(line)) = stdout.next_line().await {
@@ -288,7 +289,7 @@ impl Analyzer {
 
         let (sender, receiver) = mpsc::channel(1024);
         let notify = Arc::new(Notify::new());
-        let notify_c = notify.clone();
+        let notify_c = Arc::clone(&notify);
         let _handle = tokio::spawn(async move {
             // prevent command from dropped
             while let Ok(Some(line)) = stdout.next_line().await {

@@ -434,13 +434,20 @@ pub enum MirProjectionElem {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MirPlace {
     pub local: FnLocal,
-    pub projection: Vec<MirProjectionElem>,
+    pub projection: Arc<[MirProjectionElem]>,
 }
 impl MirPlace {
+    pub fn shared(place: &MirPlace) -> Self {
+        Self {
+            local: place.local,
+            projection: Arc::clone(&place.projection),
+        }
+    }
+
     pub fn root(local: FnLocal) -> Self {
         Self {
             local,
-            projection: Vec::new(),
+            projection: Arc::from(Vec::new()),
         }
     }
 }
@@ -502,7 +509,7 @@ pub enum MirTerminatorKind {
     },
     SwitchInt {
         discr: MirOperand,
-        targets: Vec<BasicBlockId>,
+        targets: Arc<[BasicBlockId]>,
     },
     Return,
     Unreachable,
@@ -528,21 +535,25 @@ pub enum MirTerminatorKind {
     },
     // TODO: UnwindResume, UnwindTerminate, Yield, CoroutineDrop, FalseEdge, FalseUnwind, InlineAsm
     Other {
-        successors: Vec<BasicBlockId>,
+        successors: Arc<[BasicBlockId]>,
     },
 }
 impl MirTerminator {
-    pub fn successors(&self) -> Vec<BasicBlockId> {
+    /// The blocks this terminator can continue at, borrowed where it holds a list.
+    pub fn successors(&self) -> std::borrow::Cow<'_, [BasicBlockId]> {
         match &self.kind {
-            MirTerminatorKind::Goto { target } => vec![*target],
-            MirTerminatorKind::SwitchInt { targets, .. } => targets.clone(),
-            MirTerminatorKind::Drop { target, .. } => vec![*target],
-            MirTerminatorKind::Call { target, .. } => (*target).into_iter().collect(),
-            MirTerminatorKind::Assert { target, .. } => vec![*target],
-            MirTerminatorKind::Other { successors } => successors.clone(),
+            MirTerminatorKind::Goto { target } => std::borrow::Cow::Owned(vec![*target]),
+            MirTerminatorKind::SwitchInt { targets, .. } => std::borrow::Cow::Borrowed(targets),
+            MirTerminatorKind::Drop { target, .. } => std::borrow::Cow::Owned(vec![*target]),
+            MirTerminatorKind::Call { target, .. } => match target {
+                Some(target) => std::borrow::Cow::Owned(vec![*target]),
+                None => std::borrow::Cow::Borrowed(&[]),
+            },
+            MirTerminatorKind::Assert { target, .. } => std::borrow::Cow::Owned(vec![*target]),
+            MirTerminatorKind::Other { successors } => std::borrow::Cow::Borrowed(successors),
             MirTerminatorKind::TailCall { .. }
             | MirTerminatorKind::Return
-            | MirTerminatorKind::Unreachable => Vec::new(),
+            | MirTerminatorKind::Unreachable => std::borrow::Cow::Borrowed(&[]),
         }
     }
 }
@@ -564,7 +575,7 @@ pub struct MirRefType {
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct MirType {
-    pub name: String,
+    pub name: Arc<str>,
     pub reference: Option<Box<MirRefType>>,
 }
 
@@ -573,41 +584,41 @@ pub struct MirType {
 pub enum MirDecl {
     User {
         local: FnLocal,
-        name: String,
+        name: Arc<str>,
         span: Range,
         ty: MirType,
-        lives: Vec<Range>,
-        shared_borrow: Vec<Range>,
-        mutable_borrow: Vec<Range>,
+        lives: Arc<[Range]>,
+        shared_borrow: Arc<[Range]>,
+        mutable_borrow: Arc<[Range]>,
         drop: bool,
-        drop_range: Vec<Range>,
-        definitely_live_at: Vec<Range>,
-        maybe_init_at: Vec<Range>,
-        deficit_at: Vec<Range>,
+        drop_range: Arc<[Range]>,
+        definitely_live_at: Arc<[Range]>,
+        maybe_init_at: Arc<[Range]>,
+        deficit_at: Arc<[Range]>,
         /// Range from StorageLive to StorageDead for this variable
-        storage_range: Vec<Range>,
+        storage_range: Arc<[Range]>,
     },
     Other {
         local: FnLocal,
         ty: MirType,
-        lives: Vec<Range>,
-        shared_borrow: Vec<Range>,
-        mutable_borrow: Vec<Range>,
+        lives: Arc<[Range]>,
+        shared_borrow: Arc<[Range]>,
+        mutable_borrow: Arc<[Range]>,
         drop: bool,
-        drop_range: Vec<Range>,
-        definitely_live_at: Vec<Range>,
-        maybe_init_at: Vec<Range>,
-        deficit_at: Vec<Range>,
+        drop_range: Arc<[Range]>,
+        definitely_live_at: Arc<[Range]>,
+        maybe_init_at: Arc<[Range]>,
+        deficit_at: Arc<[Range]>,
         /// Range from StorageLive to StorageDead for this variable
-        storage_range: Vec<Range>,
+        storage_range: Arc<[Range]>,
     },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Function {
     pub fn_id: u32,
-    pub name: String,
-    pub basic_blocks: Vec<MirBasicBlock>,
+    pub name: Arc<str>,
+    pub basic_blocks: Arc<[MirBasicBlock]>,
     pub decls: Vec<MirDecl>,
 }
 
@@ -615,79 +626,115 @@ impl Function {
     /// Cached entries keep absolute spans: an unmoved function needs no shift and
     /// its allocation can be shared, a moved one is shifted by the offset its
     /// function travelled. `basic_blocks` carries no ranges.
-    pub fn shift(&mut self, delta: i64) {
-        if delta == 0 {
-            return;
+    pub fn shifted(&self, delta: i64) -> Self {
+        Self {
+            fn_id: self.fn_id,
+            name: Arc::clone(&self.name),
+            basic_blocks: Arc::clone(&self.basic_blocks),
+            decls: self.decls.iter().map(|decl| decl.shifted(delta)).collect(),
         }
-        for decl in &mut self.decls {
-            decl.translate(delta);
+    }
+}
+
+impl Range {
+    pub fn shifted(&self, delta: i64) -> Self {
+        let mut range = *self;
+        range.translate(delta);
+        range
+    }
+}
+
+fn shifted_ranges(ranges: &[Range], delta: i64) -> Arc<[Range]> {
+    Arc::from(
+        ranges
+            .iter()
+            .map(|range| range.shifted(delta))
+            .collect::<Vec<Range>>(),
+    )
+}
+
+impl MirType {
+    pub fn shifted(&self, delta: i64) -> Self {
+        Self {
+            name: Arc::clone(&self.name),
+            reference: self
+                .reference
+                .as_ref()
+                .map(|reference| Box::new(reference.shifted(delta))),
+        }
+    }
+}
+
+impl MirRefType {
+    pub fn shifted(&self, delta: i64) -> Self {
+        Self {
+            refer_to: self.refer_to.shifted(delta),
+            mutable: self.mutable,
         }
     }
 }
 
 impl MirDecl {
-    fn translate(&mut self, delta: i64) {
+    /// Built, not copied: the names and the type structure are shared, and
+    /// only the spans are new.
+    pub fn shifted(&self, delta: i64) -> Self {
         // Matched, not shared by field: a new variant must be a compile error
         // here rather than a silently unshifted set of spans.
         match self {
             MirDecl::User {
+                local,
+                name,
                 span,
+                ty,
                 lives,
                 shared_borrow,
                 mutable_borrow,
+                drop,
                 drop_range,
                 definitely_live_at,
                 maybe_init_at,
                 deficit_at,
                 storage_range,
-                ..
-            } => {
-                span.translate(delta);
-                translate_all_ranges(
-                    delta,
-                    &mut [
-                        lives,
-                        shared_borrow,
-                        mutable_borrow,
-                        drop_range,
-                        definitely_live_at,
-                        maybe_init_at,
-                        deficit_at,
-                        storage_range,
-                    ],
-                );
-            }
+            } => MirDecl::User {
+                local: *local,
+                name: Arc::clone(name),
+                span: span.shifted(delta),
+                ty: ty.shifted(delta),
+                lives: shifted_ranges(lives, delta),
+                shared_borrow: shifted_ranges(shared_borrow, delta),
+                mutable_borrow: shifted_ranges(mutable_borrow, delta),
+                drop: *drop,
+                drop_range: shifted_ranges(drop_range, delta),
+                definitely_live_at: shifted_ranges(definitely_live_at, delta),
+                maybe_init_at: shifted_ranges(maybe_init_at, delta),
+                deficit_at: shifted_ranges(deficit_at, delta),
+                storage_range: shifted_ranges(storage_range, delta),
+            },
             MirDecl::Other {
+                local,
+                ty,
                 lives,
                 shared_borrow,
                 mutable_borrow,
+                drop,
                 drop_range,
                 definitely_live_at,
                 maybe_init_at,
                 deficit_at,
                 storage_range,
-                ..
-            } => translate_all_ranges(
-                delta,
-                &mut [
-                    lives,
-                    shared_borrow,
-                    mutable_borrow,
-                    drop_range,
-                    definitely_live_at,
-                    maybe_init_at,
-                    deficit_at,
-                    storage_range,
-                ],
-            ),
-        }
-    }
-}
-
-fn translate_all_ranges(delta: i64, sets: &mut [&mut Vec<Range>]) {
-    for set in sets {
-        for range in set.iter_mut() {
-            range.translate(delta);
+            } => MirDecl::Other {
+                local: *local,
+                ty: ty.shifted(delta),
+                lives: shifted_ranges(lives, delta),
+                shared_borrow: shifted_ranges(shared_borrow, delta),
+                mutable_borrow: shifted_ranges(mutable_borrow, delta),
+                drop: *drop,
+                drop_range: shifted_ranges(drop_range, delta),
+                definitely_live_at: shifted_ranges(definitely_live_at, delta),
+                maybe_init_at: shifted_ranges(maybe_init_at, delta),
+                deficit_at: shifted_ranges(deficit_at, delta),
+                storage_range: shifted_ranges(storage_range, delta),
+            },
         }
     }
 }
@@ -879,43 +926,47 @@ mod tests {
             .collect()
     }
 
-    fn sample_function() -> Function {
-        let ty = MirType {
-            name: "T".into(),
+    fn sample_type() -> MirType {
+        MirType {
+            name: Arc::from("T"),
             reference: None,
-        };
+        }
+    }
+
+    fn sample_function() -> Function {
+        let ty = sample_type();
         Function {
             fn_id: 7,
-            name: "f".into(),
-            basic_blocks: vec![],
+            name: Arc::from("f"),
+            basic_blocks: Arc::from(Vec::new()),
             decls: vec![
                 MirDecl::User {
                     local: FnLocal::new(0, 7),
                     name: "x".into(),
                     span: Range::new(Loc(100), Loc(110)).unwrap(),
-                    ty: ty.clone(),
-                    lives: ranges(120, 2),
-                    shared_borrow: ranges(150, 2),
-                    mutable_borrow: ranges(180, 2),
+                    ty: sample_type(),
+                    lives: Arc::from(ranges(120, 2)),
+                    shared_borrow: Arc::from(ranges(150, 2)),
+                    mutable_borrow: Arc::from(ranges(180, 2)),
                     drop: true,
-                    drop_range: ranges(210, 2),
-                    definitely_live_at: ranges(240, 2),
-                    maybe_init_at: ranges(270, 2),
-                    deficit_at: ranges(300, 2),
-                    storage_range: ranges(330, 2),
+                    drop_range: Arc::from(ranges(210, 2)),
+                    definitely_live_at: Arc::from(ranges(240, 2)),
+                    maybe_init_at: Arc::from(ranges(270, 2)),
+                    deficit_at: Arc::from(ranges(300, 2)),
+                    storage_range: Arc::from(ranges(330, 2)),
                 },
                 MirDecl::Other {
                     local: FnLocal::new(1, 7),
                     ty,
-                    lives: ranges(400, 2),
-                    shared_borrow: ranges(430, 2),
-                    mutable_borrow: ranges(460, 2),
+                    lives: Arc::from(ranges(400, 2)),
+                    shared_borrow: Arc::from(ranges(430, 2)),
+                    mutable_borrow: Arc::from(ranges(460, 2)),
                     drop: false,
-                    drop_range: ranges(490, 2),
-                    definitely_live_at: ranges(520, 2),
-                    maybe_init_at: ranges(550, 2),
-                    deficit_at: ranges(580, 2),
-                    storage_range: ranges(610, 2),
+                    drop_range: Arc::from(ranges(490, 2)),
+                    definitely_live_at: Arc::from(ranges(520, 2)),
+                    maybe_init_at: Arc::from(ranges(550, 2)),
+                    deficit_at: Arc::from(ranges(580, 2)),
+                    storage_range: Arc::from(ranges(610, 2)),
                 },
             ],
         }
@@ -991,8 +1042,7 @@ mod tests {
     #[test]
     fn shift_moves_every_range_by_the_delta() {
         let before = collect_ranges(&sample_function());
-        let mut moved = sample_function();
-        moved.shift(7);
+        let moved = sample_function().shifted(7);
         let after = collect_ranges(&moved);
 
         assert_eq!(before.len(), after.len());
@@ -1012,14 +1062,13 @@ mod tests {
         let sibling: SharedPointer<Function, ArcK> = {
             let mut f = sample_function();
             f.fn_id = 8;
-            f.name = "g".into();
+            f.name = Arc::from("g");
             SharedPointer::new(f)
         };
         let stale: SharedPointer<Function, ArcK> = SharedPointer::new(sample_function());
         let fresh: SharedPointer<Function, ArcK> = {
             // the same function after an edit above it: every span moved
-            let mut f = sample_function();
-            f.shift(25);
+            let f = sample_function().shifted(25);
             SharedPointer::new(f)
         };
         let deliver = |items: Vec<SharedPointer<Function, ArcK>>| {

@@ -328,7 +328,7 @@ impl Place<'_> {
     pub fn transform(place: &rustc_middle::mir::Place<'_>, fn_id: DefId) -> MirPlace {
         use rustc_middle::mir::ProjectionElem;
         let local = FnLocal::new(place.local.as_u32(), fn_id.as_u32());
-        let projection = place
+        let projection: Vec<MirProjectionElem> = place
             .projection
             .iter()
             .map(|e| match e {
@@ -342,7 +342,10 @@ impl Place<'_> {
                 _ => MirProjectionElem::Other,
             })
             .collect();
-        MirPlace { local, projection }
+        MirPlace {
+            local,
+            projection: Arc::from(projection),
+        }
     }
 }
 
@@ -496,13 +499,16 @@ impl Terminator<'_> {
             },
             TerminatorKind::SwitchInt { discr, targets } => {
                 let discr = Operand::transform(discr, fn_id);
-                let targets = targets
+                let targets: Vec<BasicBlockId> = targets
                     .all_targets()
                     .iter()
                     .map(|v| BasicBlockId(v.as_usize()))
                     .collect();
                 MirTerminator {
-                    kind: MirTerminatorKind::SwitchInt { discr, targets },
+                    kind: MirTerminatorKind::SwitchInt {
+                        discr,
+                        targets: Arc::from(targets),
+                    },
                     range,
                 }
             }
@@ -574,12 +580,14 @@ impl Terminator<'_> {
                 }
             }
             _ => {
-                let successors = terminator
+                let successors: Vec<BasicBlockId> = terminator
                     .successors()
                     .map(|v| BasicBlockId(v.as_usize()))
                     .collect();
                 MirTerminator {
-                    kind: MirTerminatorKind::Other { successors },
+                    kind: MirTerminatorKind::Other {
+                        successors: Arc::from(successors),
+                    },
                     range,
                 }
             }
