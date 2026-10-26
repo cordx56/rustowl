@@ -1,14 +1,20 @@
 pub mod key;
 
+use arc_swap::ArcSwap;
+use archery::{ArcK, SharedPointer};
 use rustowl::models::*;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 
 use tinyufo::TinyUfo;
 
 /// Bumped when the meaning of a cached payload changes.
-pub const ANALYSIS_VERSION: u32 = 1;
+///
+/// 2: the store is keyed by the hash of the body's identity, and an entry
+/// carries that identity, so a hash collision is a miss rather than a wrong
+/// body.
+pub const ANALYSIS_VERSION: u32 = 2;
 
 /// In-memory weight budget, in TinyUfo's 4 KiB clusters.
 const WEIGHT_BUDGET: usize = 65_536;
@@ -19,9 +25,9 @@ const GHOST_CAPACITY: usize = 65_536;
 pub const ENTRIES_FILE: &str = "entries.json";
 
 pub struct Cache {
-    ufo: TinyUfo<String, Arc<key::CachedEntry>>,
+    ufo: TinyUfo<u64, SharedPointer<key::CachedEntry, ArcK>>,
     /// Storage keys written this run; a hit-only run leaves it empty and writes nothing.
-    touched: Mutex<BTreeSet<String>>,
+    touched: ArcSwap<rpds::HashTrieSet<u64, ArcK>>,
 }
 
 /// Hash of the running rustc version, or `0` if it cannot be identified.
@@ -86,12 +92,16 @@ fn open_cache(krate: &str) -> Option<Cache> {
         .unwrap_or_default();
     let ufo = TinyUfo::new(WEIGHT_BUDGET, GHOST_CAPACITY);
     for (sk, entry) in stored {
+        // A key that is not a hash belongs to an older format: it is dropped.
+        let Ok(hash) = u64::from_str_radix(&sk, 16) else {
+            continue;
+        };
         let w = weight(&entry);
-        ufo.force_put(sk, Arc::new(entry), w);
+        ufo.force_put(hash, SharedPointer::new(entry), w);
     }
     Some(Cache {
         ufo,
-        touched: Mutex::new(BTreeSet::new()),
+        touched: ArcSwap::from_pointee(rpds::HashTrieSet::default()),
     })
 }
 
@@ -103,6 +113,7 @@ pub fn init_cache(krate: &str) {
     let _ = CACHE.set(opened);
 }
 
+/// The full identity of a cached body, as it is written to disk.
 fn storage_key(key: &key::FunctionKey) -> String {
     format!(
         "{:x}:{:x}:{}:{}:{:x}",
@@ -110,29 +121,47 @@ fn storage_key(key: &key::FunctionKey) -> String {
     )
 }
 
-/// The returned entry is a cheap clone: its payload sits behind an `Arc`.
-pub fn get_entry(key: &key::FunctionKey) -> Option<key::CachedEntry> {
-    let entry = cache()?.ufo.get(&storage_key(key))?;
-    Some((*entry).clone())
+/// The hash of the full identity: what the in-memory cache is keyed by, so a
+/// lookup builds no string.
+fn storage_hash(key: &key::FunctionKey) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    key.def_path.hash(&mut hasher);
+    key.fn_text_hash.hash(&mut hasher);
+    key.mir_hash.hash(&mut hasher);
+    key.analysis_version.hash(&mut hasher);
+    key.toolchain_hash.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Look up a cached body. The entry's own identity is checked against the
+/// request, so a hash collision is a miss rather than a wrong body.
+pub fn get_entry(key: &key::FunctionKey) -> Option<SharedPointer<key::CachedEntry, ArcK>> {
+    let entry = cache()?.ufo.get(&storage_hash(key))?;
+    if entry.key != storage_key(key) {
+        return None;
+    }
+    Some(entry)
 }
 
 pub fn put_entry(
     key: &key::FunctionKey,
     base: rustowl::models::Loc,
-    analyzed: std::sync::Arc<Function>,
+    analyzed: SharedPointer<Function, ArcK>,
 ) {
     let Some(cache) = cache() else { return };
-    let sk = storage_key(key);
-    let entry = Arc::new(key::CachedEntry {
+    let hash = storage_hash(key);
+    let entry = SharedPointer::new(key::CachedEntry {
         base,
         function: analyzed,
+        key: storage_key(key),
     });
     cache
         .ufo
-        .force_put(sk.clone(), Arc::clone(&entry), weight(&entry));
-    if let Ok(mut keys) = cache.touched.lock() {
-        keys.insert(sk);
-    }
+        .force_put(hash, SharedPointer::clone(&entry), weight(&entry));
+    let mut touched = cache.touched.load().as_ref().clone();
+    touched = touched.insert(hash);
+    cache.touched.store(Arc::new(touched));
 }
 
 /// Persist bodies recorded this run.
@@ -150,14 +179,12 @@ pub fn persist_entries(krate: &str) {
     if !store.is_dir() {
         return;
     }
-    let Ok(touched) = cache.touched.lock() else {
-        return;
-    };
+    let touched = cache.touched.load();
     if touched.is_empty() {
         return;
     }
     let path = store.join(ENTRIES_FILE);
-    let mut entries: HashMap<String, key::CachedEntry> = std::fs::read(&path)
+    let mut entries: HashMap<String, SharedPointer<key::CachedEntry, ArcK>> = std::fs::read(&path)
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default();
@@ -165,7 +192,7 @@ pub fn persist_entries(krate: &str) {
     for sk in touched.iter() {
         // An entry evicted this run is not rewritten; its disk copy is still good.
         if let Some(entry) = cache.ufo.get(sk) {
-            entries.insert(sk.clone(), (*entry).clone());
+            entries.insert(format!("{sk:x}"), entry);
             stored += 1;
         }
     }
@@ -207,21 +234,23 @@ mod tests {
     fn weight_is_bounded_in_clusters() {
         let small = key::CachedEntry {
             base: Loc(0),
-            function: Arc::new(Function {
+            function: SharedPointer::new(Function {
                 fn_id: 1,
                 name: "f".into(),
                 basic_blocks: vec![],
                 decls: vec![],
             }),
+            key: String::new(),
         };
         let huge = key::CachedEntry {
             base: Loc(0),
-            function: Arc::new(Function {
+            function: SharedPointer::new(Function {
                 fn_id: 1,
                 name: "a".repeat(6 * 1024 * 1024),
                 basic_blocks: vec![],
                 decls: vec![],
             }),
+            key: String::new(),
         };
 
         assert_eq!(

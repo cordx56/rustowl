@@ -12,6 +12,11 @@ include!("src/shells.rs");
 include!("src/man.rs");
 
 fn main() -> Result<(), Error> {
+    // The script reads the CLI and the shell list, both under `src`. Saying so
+    // keeps cargo from fingerprinting the whole package, which includes the
+    // perf fixture's build tree that the tests rewrite while they run.
+    println!("cargo::rerun-if-changed=src");
+
     // Declare custom cfg flags to avoid warnings
     println!("cargo::rustc-check-cfg=cfg(miri)");
 

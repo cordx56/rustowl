@@ -23,7 +23,7 @@ pub struct AnalyzeResult {
     pub from_cache: bool,
     /// Shared with the cache: an analysed body is stored and emitted from one
     /// allocation instead of deep-cloned on the way out.
-    pub analyzed: std::sync::Arc<Function>,
+    pub analyzed: archery::SharedPointer<Function, archery::ArcK>,
 }
 
 pub enum MirAnalyzerInitResult {
@@ -328,7 +328,7 @@ impl MirAnalyzer {
             key: self.key,
             base: self.base,
             from_cache: false,
-            analyzed: std::sync::Arc::new(Function {
+            analyzed: archery::SharedPointer::new(Function {
                 fn_id: self.fn_id.as_u32(),
                 name: self.name,
                 basic_blocks,
