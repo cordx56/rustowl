@@ -1,113 +1,238 @@
+pub mod key;
+
 use rustowl::models::*;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::io::Write;
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
-pub static CACHE: LazyLock<Mutex<Option<CacheData>>> = LazyLock::new(|| Mutex::new(None));
+use tinyufo::TinyUfo;
 
-/// One body as recorded in the `by_built` index.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CachedBody {
-    pub def_id: u32,
-    pub file_hash: String,
-    pub mir_hash: String,
-    pub file_path: PathBuf,
+/// Bumped when the meaning of a cached payload changes.
+pub const ANALYSIS_VERSION: u32 = 1;
+
+/// In-memory weight budget, in TinyUfo's 4 KiB clusters.
+const WEIGHT_BUDGET: usize = 65_536;
+
+/// The ghost queue keeps admission history for evicted keys.
+const GHOST_CAPACITY: usize = 65_536;
+
+pub const ENTRIES_FILE: &str = "entries.json";
+
+pub struct Cache {
+    ufo: TinyUfo<String, Arc<key::CachedEntry>>,
+    /// Storage keys written this run; a hit-only run leaves it empty and writes nothing.
+    touched: Mutex<BTreeSet<String>>,
 }
 
-/// Incremental analysis cache.
+/// Hash of the running rustc version, or `0` if it cannot be identified.
 ///
-/// `by_file` holds the payloads, keyed file hash then MIR body hash. `by_built`
-/// indexes them by the hash of `tcx.mir_built`, which is available *without*
-/// running borrow check, so a warm root can be answered without paying for a
-/// second `get_borrowck_facts`.
-#[derive(Serialize, Deserialize, Clone, Default, Debug)]
-pub struct CacheData {
-    pub by_file: HashMap<String, HashMap<String, Function>>,
-    #[serde(default)]
-    pub by_built: HashMap<String, Vec<CachedBody>>,
+/// `version_meta` shells out to the compiler, so it is computed once per process.
+static TOOLCHAIN_HASH: OnceLock<u64> = OnceLock::new();
+
+pub fn toolchain_hash() -> u64 {
+    *TOOLCHAIN_HASH.get_or_init(|| {
+        use std::hash::{Hash, Hasher};
+        match rustc_version::version_meta() {
+            Ok(meta) => {
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                meta.semver.hash(&mut hasher);
+                hasher.finish()
+            }
+            Err(e) => {
+                tracing::warn!("could not identify the running rustc: {e}");
+                0
+            }
+        }
+    })
 }
-impl CacheData {
-    pub fn get_cache(&self, file_hash: &str, mir_hash: &str) -> Option<Function> {
-        self.by_file
-            .get(file_hash)
-            .and_then(|v| v.get(mir_hash))
-            .cloned()
-    }
-    /// Remove and return the entry, so the caller moves it instead of cloning.
-    pub fn take_cache(&mut self, file_hash: &str, mir_hash: &str) -> Option<Function> {
-        self.by_file
-            .get_mut(file_hash)
-            .and_then(|v| v.remove(mir_hash))
-    }
-    pub fn insert_cache(&mut self, file_hash: String, mir_hash: String, analyzed: Function) {
-        self.by_file
-            .entry(file_hash)
-            .or_default()
-            .insert(mir_hash, analyzed);
-    }
-    pub fn index_built(&mut self, built_hash: String, body: CachedBody) {
-        let entry = self.by_built.entry(built_hash).or_default();
-        if !entry.iter().any(|b| b.def_id == body.def_id) {
-            entry.push(body);
+
+static CACHE: OnceLock<Option<Cache>> = OnceLock::new();
+
+pub fn cache() -> Option<&'static Cache> {
+    CACHE.get().and_then(Option::as_ref)
+}
+
+/// A store from another rustowl or toolchain gets its own path, so it is inert.
+fn store_path(root: &std::path::Path, krate: &str) -> PathBuf {
+    root.join(format!("{krate}.v{ANALYSIS_VERSION}.t{}", toolchain_hash()))
+}
+
+/// The entry's weight in TinyUfo's 4 KiB clusters.
+fn weight(entry: &key::CachedEntry) -> u16 {
+    entry.estimated_bytes().div_ceil(4 * 1024).clamp(1, 1024) as u16
+}
+
+/// The JSON file is the durable store; TinyUfo only bounds how much of it stays hot.
+fn open_cache(krate: &str) -> Option<Cache> {
+    let root = rustowl::cache::get_cache_path()?;
+    let store = store_path(&root, krate);
+    let tag = store.file_name()?.to_str()?.rsplit_once('.')?.1.to_owned();
+
+    if let Ok(entries) = std::fs::read_dir(&root) {
+        for entry in entries.flatten() {
+            let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            if name.starts_with(&format!("{krate}.")) && !name.ends_with(&tag) {
+                let _ = std::fs::remove_dir_all(entry.path());
+            }
         }
     }
-    pub fn bodies_for(&self, built_hash: &str) -> Option<&Vec<CachedBody>> {
-        self.by_built.get(built_hash)
+    std::fs::create_dir_all(&store).ok()?;
+
+    let stored: HashMap<String, key::CachedEntry> = std::fs::read(store.join(ENTRIES_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default();
+    let ufo = TinyUfo::new(WEIGHT_BUDGET, GHOST_CAPACITY);
+    for (sk, entry) in stored {
+        let w = weight(&entry);
+        ufo.force_put(sk, Arc::new(entry), w);
+    }
+    Some(Cache {
+        ufo,
+        touched: Mutex::new(BTreeSet::new()),
+    })
+}
+
+pub fn init_cache(krate: &str) {
+    let opened = open_cache(krate);
+    if opened.is_some() {
+        tracing::debug!("incremental cache opened for {krate}");
+    }
+    let _ = CACHE.set(opened);
+}
+
+fn storage_key(key: &key::FunctionKey) -> String {
+    format!(
+        "{:x}:{:x}:{}:{}:{:x}",
+        key.def_path, key.fn_text_hash, key.mir_hash, key.analysis_version, key.toolchain_hash
+    )
+}
+
+/// The returned entry is a cheap clone: its payload sits behind an `Arc`.
+pub fn get_entry(key: &key::FunctionKey) -> Option<key::CachedEntry> {
+    let entry = cache()?.ufo.get(&storage_key(key))?;
+    Some((*entry).clone())
+}
+
+pub fn put_entry(
+    key: &key::FunctionKey,
+    base: rustowl::models::Loc,
+    analyzed: std::sync::Arc<Function>,
+) {
+    let Some(cache) = cache() else { return };
+    let sk = storage_key(key);
+    let entry = Arc::new(key::CachedEntry {
+        base,
+        function: analyzed,
+    });
+    cache
+        .ufo
+        .force_put(sk.clone(), Arc::clone(&entry), weight(&entry));
+    if let Ok(mut keys) = cache.touched.lock() {
+        keys.insert(sk);
     }
 }
 
-/// Get cache data
+/// Persist bodies recorded this run.
 ///
-/// If cache is not enabled, then return None.
-/// If file is not exists, it returns empty [`CacheData`].
-pub fn get_cache(krate: &str) -> Option<CacheData> {
-    if let Some(cache_path) = rustowl::cache::get_cache_path() {
-        let cache_path = cache_path.join(format!("{krate}.json"));
-        let s = match std::fs::read_to_string(&cache_path) {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::warn!("failed to read incremental cache file: {e}");
-                return Some(CacheData::default());
-            }
-        };
-        // a cache written in an older format is discarded, so that it is
-        // rebuilt instead of disabling the cache
-        let read = serde_json::from_str(&s).unwrap_or_else(|e| {
-            tracing::warn!("discard incompatible incremental cache file: {e}");
-            CacheData::default()
-        });
-        tracing::debug!("cache read: {}", cache_path.display());
-        Some(read)
+/// The file is read back and merged, so hit bodies are never rewritten and
+/// bodies analysed in earlier runs stay stored.
+pub fn persist_entries(krate: &str) {
+    let Some(root) = rustowl::cache::get_cache_path() else {
+        return;
+    };
+    let Some(cache) = cache() else {
+        return;
+    };
+    let store = store_path(&root, krate);
+    if !store.is_dir() {
+        return;
+    }
+    let Ok(touched) = cache.touched.lock() else {
+        return;
+    };
+    if touched.is_empty() {
+        return;
+    }
+    let path = store.join(ENTRIES_FILE);
+    let mut entries: HashMap<String, key::CachedEntry> = std::fs::read(&path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default();
+    let mut stored = 0;
+    for sk in touched.iter() {
+        // An entry evicted this run is not rewritten; its disk copy is still good.
+        if let Some(entry) = cache.ufo.get(sk) {
+            entries.insert(sk.clone(), (*entry).clone());
+            stored += 1;
+        }
+    }
+    if let Err(e) = std::fs::write(
+        &path,
+        serde_json::to_string(&entries).expect("entries must serialize"),
+    ) {
+        tracing::warn!("failed to write the cached bodies: {e}");
     } else {
-        None
+        tracing::debug!("persisted {stored} newly analysed bodies for {krate}");
     }
 }
 
-pub fn write_cache(krate: &str, cache: &CacheData) {
-    if let Some(cache_path) = rustowl::cache::get_cache_path() {
-        if let Err(e) = std::fs::create_dir_all(&cache_path) {
-            tracing::warn!("failed to create cache dir: {e}");
-            return;
-        }
-        let cache_path = cache_path.join(format!("{krate}.json"));
-        let s = serde_json::to_string(cache).unwrap();
-        let mut f = match std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&cache_path)
-        {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::warn!("failed to open incremental cache file: {e}");
-                return;
-            }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn store_path_carries_the_version_and_toolchain() {
+        let name = store_path(std::path::Path::new("/cache"), "my_crate");
+        let name = name.file_name().unwrap().to_str().unwrap().to_owned();
+
+        assert!(name.starts_with("my_crate.v"), "{name}");
+        assert!(
+            name.contains(&toolchain_hash().to_string()),
+            "{name} must carry the toolchain identity"
+        );
+    }
+
+    #[test]
+    fn no_cache_dir_means_no_cache() {
+        assert!(
+            open_cache("test_crate").is_none(),
+            "a cache must not be built without RUSTOWL_CACHE_DIR"
+        );
+    }
+
+    #[test]
+    fn weight_is_bounded_in_clusters() {
+        let small = key::CachedEntry {
+            base: Loc(0),
+            function: Arc::new(Function {
+                fn_id: 1,
+                name: "f".into(),
+                basic_blocks: vec![],
+                decls: vec![],
+            }),
         };
-        if let Err(e) = f.write_all(s.as_bytes()) {
-            tracing::warn!("failed to write incremental cache file: {e}");
-        }
-        tracing::debug!("incremental cache saved: {}", cache_path.display());
+        let huge = key::CachedEntry {
+            base: Loc(0),
+            function: Arc::new(Function {
+                fn_id: 1,
+                name: "a".repeat(6 * 1024 * 1024),
+                basic_blocks: vec![],
+                decls: vec![],
+            }),
+        };
+
+        assert_eq!(
+            weight(&small),
+            1,
+            "the smallest body still weighs 1 cluster"
+        );
+        assert_eq!(
+            weight(&huge),
+            1024,
+            "a body larger than 4 MiB must not overflow u16 weights"
+        );
     }
 }

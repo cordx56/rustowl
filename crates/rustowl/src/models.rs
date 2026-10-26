@@ -19,6 +19,13 @@ impl FnLocal {
 #[serde(transparent)]
 pub struct Loc(pub u32);
 impl Loc {
+    /// Move by a signed delta, saturating so a bad delta cannot wrap into a
+    /// huge offset that would silently misplace every span.
+    fn translate(self, delta: i64) -> Self {
+        let moved = i64::from(self.0) + delta;
+        Self(moved.clamp(0, i64::from(u32::MAX)) as u32)
+    }
+
     pub fn new(source: &str, byte_pos: u32, offset: u32) -> Self {
         let byte_pos = byte_pos.saturating_sub(offset) as usize;
         let byte_pos = if byte_pos >= source.len() {
@@ -201,6 +208,10 @@ impl Range {
     }
     pub fn size(&self) -> u32 {
         self.until.0 - self.from.0
+    }
+    fn translate(&mut self, delta: i64) {
+        self.from = self.from.translate(delta);
+        self.until = self.until.translate(delta);
     }
 }
 
@@ -489,9 +500,90 @@ pub struct Function {
     pub decls: Vec<MirDecl>,
 }
 
+impl Function {
+    /// Cached entries keep absolute spans: an unmoved function needs no shift and
+    /// its allocation can be shared, a moved one is shifted by the offset its
+    /// function travelled. `basic_blocks` carries no ranges.
+    pub fn shift(&mut self, delta: i64) {
+        if delta == 0 {
+            return;
+        }
+        for decl in &mut self.decls {
+            decl.translate(delta);
+        }
+    }
+}
+
+impl MirDecl {
+    fn translate(&mut self, delta: i64) {
+        // Matched, not shared by field: a new variant must be a compile error
+        // here rather than a silently unshifted set of spans.
+        match self {
+            MirDecl::User {
+                span,
+                lives,
+                shared_borrow,
+                mutable_borrow,
+                drop_range,
+                definitely_live_at,
+                maybe_init_at,
+                deficit_at,
+                storage_range,
+                ..
+            } => {
+                span.translate(delta);
+                translate_all_ranges(
+                    delta,
+                    &mut [
+                        lives,
+                        shared_borrow,
+                        mutable_borrow,
+                        drop_range,
+                        definitely_live_at,
+                        maybe_init_at,
+                        deficit_at,
+                        storage_range,
+                    ],
+                );
+            }
+            MirDecl::Other {
+                lives,
+                shared_borrow,
+                mutable_borrow,
+                drop_range,
+                definitely_live_at,
+                maybe_init_at,
+                deficit_at,
+                storage_range,
+                ..
+            } => translate_all_ranges(
+                delta,
+                &mut [
+                    lives,
+                    shared_borrow,
+                    mutable_borrow,
+                    drop_range,
+                    definitely_live_at,
+                    maybe_init_at,
+                    deficit_at,
+                    storage_range,
+                ],
+            ),
+        }
+    }
+}
+
+fn translate_all_ranges(delta: i64, sets: &mut [&mut Vec<Range>]) {
+    for set in sets {
+        for range in set.iter_mut() {
+            range.translate(delta);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Loc, Range, SourceIndex};
+    use super::{FnLocal, Function, Loc, MirDecl, MirType, Range, SourceIndex};
 
     #[test]
     fn loc_new_subtracts_offset() {
@@ -604,5 +696,136 @@ mod tests {
         let index = SourceIndex::new("ab\ncd\nef");
         assert!(index.is_multiline(&Range::new(Loc(1), Loc(4)).unwrap()));
         assert!(!index.is_multiline(&Range::new(Loc(0), Loc(2)).unwrap()));
+    }
+
+    fn ranges(start: u32, n: usize) -> Vec<Range> {
+        (0..n)
+            .map(|i| {
+                Range::new(Loc(start + i as u32 * 10), Loc(start + i as u32 * 10 + 5)).unwrap()
+            })
+            .collect()
+    }
+
+    fn sample_function() -> Function {
+        let ty = MirType {
+            name: "T".into(),
+            reference: None,
+        };
+        Function {
+            fn_id: 7,
+            name: "f".into(),
+            basic_blocks: vec![],
+            decls: vec![
+                MirDecl::User {
+                    local: FnLocal::new(0, 7),
+                    name: "x".into(),
+                    span: Range::new(Loc(100), Loc(110)).unwrap(),
+                    ty: ty.clone(),
+                    lives: ranges(120, 2),
+                    shared_borrow: ranges(150, 2),
+                    mutable_borrow: ranges(180, 2),
+                    drop: true,
+                    drop_range: ranges(210, 2),
+                    definitely_live_at: ranges(240, 2),
+                    maybe_init_at: ranges(270, 2),
+                    deficit_at: ranges(300, 2),
+                    storage_range: ranges(330, 2),
+                },
+                MirDecl::Other {
+                    local: FnLocal::new(1, 7),
+                    ty,
+                    lives: ranges(400, 2),
+                    shared_borrow: ranges(430, 2),
+                    mutable_borrow: ranges(460, 2),
+                    drop: false,
+                    drop_range: ranges(490, 2),
+                    definitely_live_at: ranges(520, 2),
+                    maybe_init_at: ranges(550, 2),
+                    deficit_at: ranges(580, 2),
+                    storage_range: ranges(610, 2),
+                },
+            ],
+        }
+    }
+
+    /// Walks every range independently of the implementation under test, so a
+    /// site the walk forgets shows up as a length mismatch, not a silent gap.
+    fn collect_ranges(f: &Function) -> Vec<Range> {
+        let mut out = Vec::new();
+        for decl in &f.decls {
+            match decl {
+                MirDecl::User {
+                    span,
+                    lives,
+                    shared_borrow,
+                    mutable_borrow,
+                    drop_range,
+                    definitely_live_at,
+                    maybe_init_at,
+                    deficit_at,
+                    storage_range,
+                    ..
+                } => {
+                    out.push(*span);
+                    for v in [
+                        lives,
+                        shared_borrow,
+                        mutable_borrow,
+                        drop_range,
+                        definitely_live_at,
+                        maybe_init_at,
+                        deficit_at,
+                        storage_range,
+                    ] {
+                        out.extend(v.iter().copied());
+                    }
+                }
+                MirDecl::Other {
+                    lives,
+                    shared_borrow,
+                    mutable_borrow,
+                    drop_range,
+                    definitely_live_at,
+                    maybe_init_at,
+                    deficit_at,
+                    storage_range,
+                    ..
+                } => {
+                    for v in [
+                        lives,
+                        shared_borrow,
+                        mutable_borrow,
+                        drop_range,
+                        definitely_live_at,
+                        maybe_init_at,
+                        deficit_at,
+                        storage_range,
+                    ] {
+                        out.extend(v.iter().copied());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn span_walk_covers_every_range_site() {
+        // User: span + 8 lists x 2 = 17. Other: 8 lists x 2 = 16.
+        assert_eq!(collect_ranges(&sample_function()).len(), 33);
+    }
+
+    #[test]
+    fn shift_moves_every_range_by_the_delta() {
+        let before = collect_ranges(&sample_function());
+        let mut moved = sample_function();
+        moved.shift(7);
+        let after = collect_ranges(&moved);
+
+        assert_eq!(before.len(), after.len());
+        for (b, a) in before.iter().zip(after.iter()) {
+            assert_eq!(a.from().0, b.from().0 + 7);
+            assert_eq!(a.until().0, b.until().0 + 7);
+        }
     }
 }
