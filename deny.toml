@@ -35,7 +35,6 @@ allow = [
 exceptions = [
   # rustowl is MPL-2.0 itself.
   { allow = ["MPL-2.0"], crate = "rustowl" },
-  { allow = ["MPL-2.0"], crate = "colored" },
   # Weak copyleft, but permissively dual-licensed, so MIT/Apache-2.0 is
   # always available as the chosen option.
   { allow = ["LGPL-2.1-or-later"], crate = "r-efi" },
