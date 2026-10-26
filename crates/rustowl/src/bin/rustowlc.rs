@@ -29,14 +29,5 @@ use tikv_jemalloc_sys as _;
 fn main() -> std::process::ExitCode {
     rustowl::initialize_logging(tracing_subscriber::filter::LevelFilter::INFO);
 
-    // rayon panics without this only on Windows
-    #[cfg(target_os = "windows")]
-    {
-        rayon::ThreadPoolBuilder::new()
-            .stack_size(4 * 1024 * 1024)
-            .build_global()
-            .unwrap();
-    }
-
     core::run_compiler()
 }
