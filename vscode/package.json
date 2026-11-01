@@ -45,7 +45,7 @@
     "build": "vsce package --no-dependencies"
   },
   "dependencies": {
-    "@types/vscode": "^1.138.0",
+    "@types/vscode": "^1.144.0",
     "semver-parser": "^4.2.2",
     "vscode-languageclient": "^11.0.0",
     "zod": "^4.6.7"
@@ -166,16 +166,16 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "^12.6.0",
+      "version": "^12.18.0",
       "onFail": "warn"
     },
     "runtime": {
       "name": "node",
-      "version": "^22.23.3",
+      "version": "^22.23.4",
       "onFail": "download"
     }
   },
   "engines": {
-    "vscode": "^1.138.0"
+    "vscode": "^1.144.0"
   }
 }
