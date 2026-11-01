@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use archery::{ArcK, SharedPointer};
 
 use rustowl::models::{Function, Loc};
 
@@ -14,11 +14,13 @@ pub struct FunctionKey {
 }
 
 /// A cached body with the spans it had when stored, plus the offset its
-/// function started at.
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+/// function started at. The pointer is what lets an unmoved body be shared.
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct CachedEntry {
     pub base: Loc,
-    pub function: Arc<Function>,
+    pub function: SharedPointer<Function, ArcK>,
+    /// The identity this body was stored under; a hit checks it.
+    pub key: String,
 }
 
 impl CachedEntry {
@@ -31,18 +33,18 @@ impl CachedEntry {
 ///
 /// Spans are cached absolute, so an unmoved body is shared as-is and a moved one
 /// is shifted here; the cached entry keeps its own `base` and never drifts.
-pub fn resolve(entry: &CachedEntry, current_base: Loc) -> Arc<Function> {
+pub fn resolve(entry: &CachedEntry, current_base: Loc) -> SharedPointer<Function, ArcK> {
     resolve_inner(entry, current_base)
 }
 
-fn resolve_inner(entry: &CachedEntry, current_base: Loc) -> Arc<Function> {
+fn resolve_inner(entry: &CachedEntry, current_base: Loc) -> SharedPointer<Function, ArcK> {
     let delta = i64::from(current_base.0) - i64::from(entry.base.0);
     if delta == 0 {
-        return Arc::clone(&entry.function);
+        return SharedPointer::clone(&entry.function);
     }
     let mut function = (*entry.function).clone();
     function.shift(delta);
-    Arc::new(function)
+    SharedPointer::new(function)
 }
 
 #[cfg(test)]
@@ -138,11 +140,12 @@ mod tests {
     fn an_unmoved_function_shares_its_allocation() {
         let entry = CachedEntry {
             base: Loc(100),
-            function: Arc::new(sample_function()),
+            function: SharedPointer::new(sample_function()),
+            key: String::new(),
         };
         let resolved = resolve(&entry, Loc(100));
         assert!(
-            Arc::ptr_eq(&resolved, &entry.function),
+            SharedPointer::ptr_eq(&resolved, &entry.function),
             "delta == 0 must share, not copy"
         );
     }
@@ -151,7 +154,8 @@ mod tests {
     fn a_moved_function_is_re_anchored_by_exactly_the_delta() {
         let entry = CachedEntry {
             base: Loc(100),
-            function: Arc::new(sample_function()),
+            function: SharedPointer::new(sample_function()),
+            key: String::new(),
         };
         let resolved = resolve(&entry, Loc(350));
 
@@ -162,7 +166,7 @@ mod tests {
             serde_json::to_string(&expected).unwrap()
         );
         assert!(
-            !Arc::ptr_eq(&resolved, &entry.function),
+            !SharedPointer::ptr_eq(&resolved, &entry.function),
             "a moved function must not alias the cache"
         );
     }
@@ -171,7 +175,8 @@ mod tests {
     fn re_anchoring_backwards_works_too() {
         let entry = CachedEntry {
             base: Loc(500),
-            function: Arc::new(sample_function()),
+            function: SharedPointer::new(sample_function()),
+            key: String::new(),
         };
         let resolved = resolve(&entry, Loc(400));
 
@@ -187,7 +192,8 @@ mod tests {
     fn a_cached_entry_survives_the_file_round_trip() {
         let entry = CachedEntry {
             base: Loc(7),
-            function: Arc::new(sample_function()),
+            function: SharedPointer::new(sample_function()),
+            key: String::new(),
         };
         let json = serde_json::to_string(&entry).expect("a cached entry must serialize");
         let back: CachedEntry = serde_json::from_str(&json).expect("a cached entry must decode");

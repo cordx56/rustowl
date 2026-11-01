@@ -3,19 +3,23 @@ pub mod cache;
 pub mod compiler;
 
 use analyze::{AnalyzeResult, MirAnalyzer, MirAnalyzerInitResult};
+use arc_swap::ArcSwap;
+use archery::{ArcK, SharedPointer};
 use compiler::AsRustc;
+use rpds::HashTrieMap;
 use rustc_hir::def_id::{LOCAL_CRATE, LocalDefId};
 use rustc_interface::interface;
 use rustc_middle::{ty::TyCtxt, util::Providers};
 use rustc_session::config;
 use rustowl::models::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::{Arc, LazyLock, Mutex, atomic::AtomicBool};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, LazyLock};
 use tokio::{
     runtime::{Builder, Runtime},
-    task::JoinHandle,
+    sync::Notify,
 };
 
 use rustc_middle::queries;
@@ -29,8 +33,60 @@ pub struct RustcCallback;
 impl rustc_driver::Callbacks for RustcCallback {}
 
 static ATOMIC_TRUE: AtomicBool = AtomicBool::new(true);
-static TASKS: LazyLock<Mutex<Vec<JoinHandle<AnalyzeResult>>>> =
-    LazyLock::new(|| Mutex::new(Vec::new()));
+
+/// The analysis tasks that are running.
+///
+/// The count is atomic and the wait is a notification, never a lock. A task
+/// that panics still gives its count back.
+static TASKS: LazyLock<TaskTracker> = LazyLock::new(TaskTracker::new);
+
+struct TaskTracker {
+    running: Arc<AtomicUsize>,
+    notify: Arc<Notify>,
+}
+
+struct TaskGuard {
+    tracker: &'static TaskTracker,
+}
+
+impl Drop for TaskGuard {
+    fn drop(&mut self) {
+        self.tracker.finish();
+    }
+}
+
+impl TaskTracker {
+    fn new() -> Self {
+        Self {
+            running: Arc::new(AtomicUsize::new(0)),
+            notify: Arc::new(Notify::new()),
+        }
+    }
+
+    fn start(&self) {
+        self.running.fetch_add(1, Ordering::AcqRel);
+    }
+
+    fn finish(&self) {
+        if self.running.fetch_sub(1, Ordering::AcqRel) == 1 {
+            self.notify.notify_waiters();
+        }
+    }
+
+    async fn wait_for_zero(&self) {
+        loop {
+            // The wait is registered before the count is read: a task that
+            // finishes in between must not be missed.
+            let notified = self.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.running.load(Ordering::Acquire) == 0 {
+                return;
+            }
+            notified.await;
+        }
+    }
+}
 // make tokio runtime
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
     let worker_threads = std::thread::available_parallelism()
@@ -66,15 +122,20 @@ fn open_files() -> Option<HashSet<PathBuf>> {
 /// this is a path comparison rather than a per-root recomputation.
 fn is_file_open(tcx: TyCtxt<'_>, def_id: LocalDefId) -> bool {
     /// crate name -> the open-file set resolved for it, shared by every root
-    type PerCrate = HashMap<String, Arc<Option<HashSet<PathBuf>>>>;
-    static CACHE: LazyLock<Mutex<PerCrate>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+    type PerCrate = rpds::HashTrieMap<String, SharedPointer<Option<HashSet<PathBuf>>, ArcK>, ArcK>;
+    static CACHE: LazyLock<ArcSwap<PerCrate>> =
+        LazyLock::new(|| ArcSwap::from_pointee(rpds::HashTrieMap::default()));
     let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
     let set = {
-        let mut cache = CACHE.lock().unwrap();
-        cache
-            .entry(crate_name)
-            .or_insert_with(|| Arc::new(open_files()))
-            .clone()
+        let current = CACHE.load();
+        match current.get(&crate_name) {
+            Some(set) => SharedPointer::clone(set),
+            None => {
+                let set = SharedPointer::new(open_files());
+                CACHE.rcu(|cache| cache.insert(crate_name.clone(), SharedPointer::clone(&set)));
+                set
+            }
+        }
     };
     let Some(set) = set.as_ref() else {
         return true;
@@ -130,36 +191,28 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
 
     let default_borrowck_result = DEFAULT_MIR_BORROWCK(tcx, def_id);
     {
-        let mut tasks = TASKS.lock().unwrap();
+        let mut spawned = 0;
         for analyzer in analyzers {
             match analyzer {
                 MirAnalyzerInitResult::Cached(cached) => {
                     handle_analyzed_result(Ok(cached));
                 }
                 MirAnalyzerInitResult::Analyzer(analyzer) => {
-                    tasks.push(
-                        RUNTIME
-                            .handle()
-                            .spawn(async move { analyzer.await.analyze() }),
-                    );
+                    // The task publishes its own result: nothing waits on a handle.
+                    TASKS.start();
+                    RUNTIME.handle().spawn(async move {
+                        // The guard lives in the task: the count comes back when
+                        // the task ends, not when it is spawned.
+                        let _guard = TaskGuard { tracker: &TASKS };
+                        let result = analyzer.await.analyze();
+                        handle_analyzed_result(Ok(result));
+                    });
+                    spawned += 1;
                 }
             }
         }
 
-        tracing::debug!("there are {} tasks", tasks.len());
-        let mut ready = Vec::new();
-        let mut i = 0;
-        while i < tasks.len() {
-            if tasks[i].is_finished() {
-                ready.push(tasks.swap_remove(i));
-            } else {
-                i += 1;
-            }
-        }
-        drop(tasks);
-        for handle in ready {
-            handle_analyzed_result(RUNTIME.block_on(handle).map_err(|e| e.to_string()));
-        }
+        tracing::debug!("there are {spawned} tasks");
     }
 
     default_borrowck_result
@@ -168,17 +221,24 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: LocalDefId) -> queries::mir_borrowck::P
 /// Results of one compilation, printed as one `Workspace` per crate: the
 /// receiver merges whole crates, so a crate costs one wrap, one parse and one
 /// write instead of one per function.
-#[derive(Default)]
 pub struct Batch {
-    results: Vec<AnalyzeResult>,
+    /// The buffered results. The vector is replaced, never edited, so a result
+    /// can be appended while another thread reads the batch.
+    results: ArcSwap<rpds::Vector<SharedPointer<AnalyzeResult, ArcK>, ArcK>>,
 }
 
-static BATCH: Mutex<Batch> = Mutex::new(Batch {
-    results: Vec::new(),
-});
+static BATCH: LazyLock<Batch> = LazyLock::new(Batch::default);
+
+impl Default for Batch {
+    fn default() -> Self {
+        Self {
+            results: ArcSwap::from_pointee(rpds::Vector::default()),
+        }
+    }
+}
 
 impl Batch {
-    fn push(&mut self, result: Result<AnalyzeResult, String>) {
+    fn push(&self, result: Result<AnalyzeResult, String>) {
         match result {
             Ok(result) => {
                 // The entry must stay in the cache: a later compile reads it to
@@ -188,34 +248,51 @@ impl Batch {
                     cache::put_entry(
                         &result.key,
                         result.base,
-                        std::sync::Arc::clone(&result.analyzed),
+                        SharedPointer::clone(&result.analyzed),
                     );
                 }
-                self.results.push(result);
+                let entry = SharedPointer::new(result);
+                self.results
+                    .rcu(|current| current.push_back(SharedPointer::clone(&entry)));
             }
             Err(e) => tracing::warn!("analysis task failed: {e}"),
         }
     }
 
     fn is_empty(&self) -> bool {
-        self.results.is_empty()
+        self.results.load().is_empty()
+    }
+
+    fn reset(&self) {
+        self.results.store(Arc::new(rpds::Vector::default()));
     }
 
     fn build_workspace(&self, crate_name: &str) -> Workspace {
-        let mut files: HashMap<String, File> = HashMap::new();
-        for result in &self.results {
-            files
-                .entry(result.file_path.to_string_lossy().into_owned())
-                .or_insert_with(|| File { items: Vec::new() })
-                .items
-                .push(std::sync::Arc::clone(&result.analyzed));
+        let mut files: Option<HashTrieMap<Arc<str>, SharedPointer<File, ArcK>, ArcK>> = None;
+        for result in self.results.load().iter() {
+            let path: Arc<str> = Arc::from(result.file_path.to_string_lossy().as_ref());
+            let file = match files.as_ref().and_then(|files| files.get(&path)) {
+                Some(file) => file.as_ref().push(SharedPointer::clone(&result.analyzed)),
+                None => File::new().push(SharedPointer::clone(&result.analyzed)),
+            };
+            files = Some(match files {
+                Some(files) => files.insert(path, SharedPointer::new(file)),
+                None => HashTrieMap::default().insert(path, SharedPointer::new(file)),
+            });
         }
-        Workspace(HashMap::from([(crate_name.to_string(), Crate(files))]))
+        let files = files.unwrap_or_default();
+        let mut crates: Option<HashTrieMap<Arc<str>, SharedPointer<Crate, ArcK>, ArcK>> = None;
+        crates = Some(
+            crates
+                .unwrap_or_default()
+                .insert(Arc::from(crate_name), SharedPointer::new(Crate(files))),
+        );
+        Workspace(crates.unwrap_or_default())
     }
 }
 
 fn handle_analyzed_result(result: Result<AnalyzeResult, String>) {
-    BATCH.lock().unwrap().push(result);
+    BATCH.push(result);
 }
 
 pub struct AnalyzerCallback;
@@ -234,20 +311,14 @@ impl rustc_driver::Callbacks for AnalyzerCallback {
         tcx: TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
         cache::init_cache(&tcx.crate_name(LOCAL_CRATE).to_string());
-        *BATCH.lock().unwrap() = Batch::default();
+        BATCH.reset();
         let result = rustc_driver::catch_fatal_errors(|| tcx.analysis(()));
 
-        // Join all tasks after all analysis finished.
-        loop {
-            // guard dropped at the end of this statement
-            let next = TASKS.lock().unwrap().pop();
-            let Some(handle) = next else {
-                break;
-            };
-            handle_analyzed_result(RUNTIME.block_on(handle).map_err(|e| e.to_string()));
-        }
+        // Wait for the analyses that are still running: they publish their own
+        // results.
+        RUNTIME.block_on(TASKS.wait_for_zero());
         {
-            let batch = BATCH.lock().unwrap();
+            let batch = &*BATCH;
             if !batch.is_empty() {
                 let ws = batch.build_workspace(&tcx.crate_name(LOCAL_CRATE).to_string());
                 println!("{}", serde_json::to_string(&ws).unwrap());
@@ -309,7 +380,7 @@ mod batch_tests {
             },
             base: Loc(0),
             from_cache: false,
-            analyzed: Arc::new(Function {
+            analyzed: SharedPointer::new(Function {
                 fn_id,
                 name: format!("f{fn_id}"),
                 basic_blocks: Vec::new(),
@@ -319,23 +390,57 @@ mod batch_tests {
     }
 
     #[test]
+    fn concurrent_pushes_keep_every_result() {
+        let batch = Batch::default();
+        let results: Vec<AnalyzeResult> = (0..8)
+            .map(|i| AnalyzeResult {
+                file_path: PathBuf::from(format!("/ws/src/lib{i}.rs")),
+                key: cache::key::FunctionKey {
+                    def_path: u64::from(i),
+                    fn_text_hash: 0,
+                    mir_hash: String::new(),
+                    analysis_version: 0,
+                    toolchain_hash: 0,
+                },
+                base: Loc(0),
+                from_cache: false,
+                analyzed: SharedPointer::new(Function {
+                    fn_id: i,
+                    name: format!("f{i}"),
+                    basic_blocks: Vec::new(),
+                    decls: Vec::new(),
+                }),
+            })
+            .collect();
+
+        std::thread::scope(|scope| {
+            for result in results {
+                let batch = &batch;
+                scope.spawn(move || batch.push(Ok(result)));
+            }
+        });
+
+        let workspace = batch.build_workspace("krate");
+        let krate = workspace.get("krate").expect("the crate must be there");
+        assert_eq!(krate.0.size(), 8, "every pushed result must survive");
+    }
+
+    #[test]
     fn a_batched_emission_survives_a_failed_result() {
-        let mut batch = Batch::default();
+        let batch = Batch::default();
         batch.push(Ok(result("lib.rs", 1)));
         batch.push(Err("analysis task failed".to_string()));
         batch.push(Ok(result("lib.rs", 2)));
 
-        assert_eq!(
-            batch.build_workspace("crate").0["crate"].0["lib.rs"]
-                .items
-                .len(),
-            2
-        );
+        let ws = batch.build_workspace("crate");
+        let krate = ws.get("crate").expect("the crate must be there");
+        let file = krate.file("lib.rs").expect("the file must be there");
+        assert_eq!(file.items.len(), 2);
     }
 
     #[test]
     fn an_empty_batch_prints_nothing() {
-        let mut batch = Batch::default();
+        let batch = Batch::default();
         batch.push(Err("analysis task failed".to_string()));
         assert!(batch.is_empty());
     }
@@ -343,13 +448,15 @@ mod batch_tests {
     #[test]
     fn the_batch_keeps_the_arc_it_was_given() {
         let entry = result("lib.rs", 1);
-        let shared = Arc::clone(&entry.analyzed);
-        let mut batch = Batch::default();
+        let shared = SharedPointer::clone(&entry.analyzed);
+        let batch = Batch::default();
         batch.push(Ok(entry));
 
         let ws = batch.build_workspace("crate");
+        let krate = ws.get("crate").expect("the crate must be there");
+        let file = krate.file("lib.rs").expect("the file must be there");
         assert!(
-            Arc::ptr_eq(&shared, &ws.0["crate"].0["lib.rs"].items[0]),
+            SharedPointer::ptr_eq(&shared, &file.items[0]),
             "the emitted body must be the same allocation the cache holds"
         );
     }
