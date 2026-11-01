@@ -66,7 +66,7 @@ clap_complete.workspace = true
 clap_complete_nushell.workspace = true
 clap-verbosity-flag.workspace = true
 jiff.workspace = true
-man.workspace = true
+maneuver.workspace = true
 regex.workspace = true
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]

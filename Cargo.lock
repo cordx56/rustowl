@@ -1373,10 +1373,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "man"
-version = "0.3.0"
+name = "maneuver"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebf5fa795187a80147b1ac10aaedcf5ffd3bbeb1838bda61801a1c9ad700a1c9"
+checksum = "c8148f5b05462ecad53c2908a9fd4b1a833c48037eda8a9ac8b943a31caf2182"
 dependencies = [
  "roff",
 ]
@@ -1853,9 +1853,9 @@ dependencies = [
 
 [[package]]
 name = "roff"
-version = "0.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e33e4fb37ba46888052c763e4ec2acfedd8f00f62897b630cadb6298b833675e"
+checksum = "323c417e1d9665a65b263ec744ba09030cfb277e9daa0b018a4ab62e57bc8189"
 
 [[package]]
 name = "rustc-hash"
@@ -1976,7 +1976,7 @@ dependencies = [
  "indicatif",
  "insta",
  "jiff",
- "man",
+ "maneuver",
  "process_alive",
  "rayon",
  "regex",
