@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim AS chef
 WORKDIR /app
 RUN apt-get update && \
-  apt-get install -y --no-install-recommends build-essential=12.9 ca-certificates=20250419+deb12u2 curl=7.88.1-10+deb12u15 && \
+  apt-get install -y --no-install-recommends build-essential=12.9 ca-certificates=20250419~deb12u2 curl=7.88.1-10+deb12u15 && \
   rm -rf /var/lib/apt/lists/*
 
 COPY scripts/ scripts/
@@ -21,7 +21,7 @@ RUN ./scripts/toolchain cargo build --release
 FROM debian:bookworm-slim
 WORKDIR /app
 RUN apt-get update && \
-  apt-get install -y --no-install-recommends build-essential=12.9 ca-certificates=20250419+deb12u2 && \
+  apt-get install -y --no-install-recommends build-essential=12.9 ca-certificates=20250419~deb12u2 && \
   rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/rustowl /usr/local/bin/
