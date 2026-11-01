@@ -6,6 +6,7 @@ use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 use rustowl::*;
 use std::env;
+use std::path::Path;
 use tower_lsp_server::{LspService, Server};
 use tracing_subscriber::filter::LevelFilter;
 
@@ -63,7 +64,8 @@ async fn handle_command(command: Commands) {
                         path,
                         skip_rustowl_toolchain,
                     } => {
-                        let path = path.unwrap_or(toolchain::FALLBACK_RUNTIME_DIR.clone());
+                        let path =
+                            path.unwrap_or_else(|| toolchain::fallback_runtime_dir().to_path_buf());
                         if toolchain::setup_toolchain(&path, skip_rustowl_toolchain)
                             .await
                             .is_err()
@@ -100,9 +102,10 @@ async fn handle_show_command(opts: cli::Show) {
     let file_path = opts.path.as_ref().and_then(|p| p.canonicalize().ok());
 
     // Determine the project path for analysis
-    let path = file_path
-        .clone()
-        .unwrap_or_else(|| env::current_dir().unwrap_or(".".into()));
+    let path: std::borrow::Cow<'_, Path> = match &file_path {
+        Some(path) => std::borrow::Cow::Borrowed(path.as_path()),
+        None => std::borrow::Cow::Owned(env::current_dir().unwrap_or(".".into())),
+    };
 
     tracing::info!("Analyzing project at {path:?}");
 
