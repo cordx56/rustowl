@@ -1,0 +1,29 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "places.rs", "assign_field_after_move", "p"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'p' (1/1) in function 'assign_field_after_move' ===
+
+  20 | // (does not compile).
+  21 | fn assign_field_after_move() {
+  22 |     let mut p = (String::new(), String::new());
+     |         -----   ------------------------------
+  23 |     let q = p;
+     |         -   -
+  24 |     p.0 = String::from("a");
+  25 |     println!("{} {q:?}", p.0);
+     |     -------------------------
+  26 | }
+  27 | 
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

@@ -1,0 +1,29 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "call_use", "m"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'm' (1/1) in function 'call_use' ===
+
+  65 |     let mut r = &n;
+  66 |     if c {
+  67 |         let m = String::from("m");
+     |             -   -----------------
+  68 |         r = &m;
+     |         --- --
+  69 |     }
+  70 |     takes(r);
+     |     ~~~~~~~~
+  71 | }
+  72 | 
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''
