@@ -29,11 +29,13 @@ jobs:
           echo "latest=$(jq -r '.[-1]' <<< "$TOOLCHAINS")" >> "$GITHUB_OUTPUT"
       - id: os
         run: |
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "${{ github.event.base_ref }}" ]; then
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "${GITHUB_EVENT_BASE_REF}" ]; then
             echo 'matrix=["ubuntu-latest", "ubuntu-24.04-arm"]' >> $GITHUB_OUTPUT
           else
             echo 'matrix=["windows-latest", "windows-11-arm", "macos-15-intel", "macos-latest", "ubuntu-latest", "ubuntu-24.04-arm"' >> $GITHUB_OUTPUT
           fi
+        env:
+          GITHUB_EVENT_BASE_REF: ${{ github.event.base_ref }}
 
   lint:
     name: Lint
