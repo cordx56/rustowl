@@ -73,7 +73,7 @@
     "eslint-plugin-promise": "^7.3.0",
     "eslint-plugin-security": "^4.2.0",
     "eslint-plugin-unicorn": "^79.0.0",
-    "glob": "^13.0.6",
+    "glob": "^14.0.3",
     "globals": "^17.13.0",
     "mocha": "^12.0.3",
     "npm-run-all2": "^9.0.4",
