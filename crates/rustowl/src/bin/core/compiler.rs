@@ -161,6 +161,17 @@ impl<'tcx> TyCtxt<'tcx> {
     pub fn def_name(&self, def_id: DefId) -> String {
         self.as_rustc().def_path_str(def_id.as_rustc().to_def_id())
     }
+
+    /// `DefPathHash`'s inner `Fingerprint` exposes no stable accessor across rustc
+    /// versions, so hash the value itself.
+    pub fn def_path_hash(&self, def_id: DefId) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.as_rustc()
+            .def_path_hash(def_id.as_rustc().to_def_id())
+            .hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
 impl_as_rustc!(
