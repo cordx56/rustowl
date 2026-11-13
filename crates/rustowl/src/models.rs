@@ -20,23 +20,17 @@ impl FnLocal {
 pub struct Loc(pub u32);
 impl Loc {
     pub fn new(source: &str, byte_pos: u32, offset: u32) -> Self {
-        let byte_pos = byte_pos.saturating_sub(offset);
-        // it seems that the compiler is ignoring CR
-        let source_clean = source.replace("\r", "");
-
-        // Convert byte position to character position safely
-        if source_clean.len() < byte_pos as usize {
-            return Self(source_clean.chars().count() as u32);
-        }
-
-        // Find the character index corresponding to the byte position
-        match source_clean
-            .char_indices()
-            .position(|(byte_idx, _)| (byte_pos as usize) <= byte_idx)
-        {
-            Some(char_idx) => Self(char_idx as u32),
-            None => Self(source_clean.chars().count() as u32),
-        }
+        let byte_pos = byte_pos.saturating_sub(offset) as usize;
+        let byte_pos = if byte_pos >= source.len() {
+            source.len()
+        } else {
+            let mut byte_pos = byte_pos;
+            while !source.is_char_boundary(byte_pos) {
+                byte_pos -= 1;
+            }
+            byte_pos
+        };
+        Self(source[..byte_pos].chars().filter(|&c| c != '\r').count() as u32)
     }
 }
 
@@ -382,4 +376,41 @@ pub struct Function {
     pub name: String,
     pub basic_blocks: Vec<MirBasicBlock>,
     pub decls: Vec<MirDecl>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Loc;
+
+    #[test]
+    fn loc_new_subtracts_offset() {
+        assert_eq!(Loc::new("hello", 3, 1), Loc(2));
+        assert_eq!(Loc::new("hello", 3, 0), Loc(3));
+    }
+
+    #[test]
+    fn loc_new_offset_subtraction_saturates_at_zero() {
+        assert_eq!(Loc::new("hello", 1, 5), Loc(0));
+        assert_eq!(Loc::new("hello", 0, 9), Loc(0));
+    }
+
+    #[test]
+    fn loc_new_clamps_past_end_to_char_count() {
+        assert_eq!(Loc::new("hello", 99, 0), Loc(5));
+        assert_eq!(Loc::new("hello", 5, 0), Loc(5));
+    }
+
+    #[test]
+    fn loc_new_counts_chars_not_bytes() {
+        // a=0, e-acute=1..2, kanji=3..5
+        assert_eq!(Loc::new("aé漢", 3, 0), Loc(2));
+        assert_eq!(Loc::new("aé漢", 6, 0), Loc(3));
+        assert_eq!(Loc::new("aé漢", 99, 0), Loc(3));
+    }
+
+    #[test]
+    fn loc_new_ignores_cr_ahead_of_the_position() {
+        assert_eq!(Loc::new("a\r\nb", 3, 0), Loc(2));
+        assert_eq!(Loc::new("a\nb", 2, 0), Loc(2));
+    }
 }
