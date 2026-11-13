@@ -1,0 +1,29 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "macro_use", "m"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'm' (1/1) in function 'macro_use' ===
+
+  43 |     let mut r = &n;
+  44 |     if c {
+  45 |         let m = Box::new(2);
+     |             -   -----------
+  46 |         r = &m;
+     |         --- --
+  47 |     }
+  48 |     println!("{r}");
+     |     ~~~~~~~~~~~~~~~
+  49 | }
+  50 | 
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

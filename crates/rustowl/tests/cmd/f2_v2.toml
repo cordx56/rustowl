@@ -1,0 +1,28 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "vec.rs", "f2", "v2"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'v2' (1/1) in function 'f2' ===
+
+  10 |     println!("{v1:?}");
+  11 |     drop(v1);
+  12 |     let v2: Vec<_> = (0..100).collect();
+     |         --  ------   -------- ---------
+  13 |     println!("{v2:?}");
+     |     ------------------
+  14 |     drop(v2);
+     |     ---- --
+  15 | }
+  16 | 
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

@@ -1,0 +1,44 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "vec.rs", "f4", "v1"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'v1' (1/1) in function 'f4' ===
+
+  26 | 
+  27 | fn f4() {
+  28 |     let v1: Vec<_> = (0..100).collect();
+     |         --  ------   -------- ---------
+  29 |     if 0 < v1.len() {
+     |        --- -- -----
+  30 |         println!("definitely live here");
+     |         --------------------------------
+  31 |         drop(v1);
+     |         ---- --
+  32 |         println!("definitely dropped here");
+  33 |     } else {
+  34 |         println!("definitely live here");
+     |         --------------------------------
+  35 |         println!("{v1:?}");
+     |         ------------------
+  36 |         println!("definitely live here");
+     |         --------------------------------
+  37 |     }
+     |     ~
+  38 |     println!("maybe live here...");
+     |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  39 |     println!("{v1:?}");
+     |     ------------------
+  40 | }
+  41 | 
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''
