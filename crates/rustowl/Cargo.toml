@@ -30,6 +30,8 @@ name = "rustowl_bench_simple"
 
 [dependencies]
 anstyle.workspace = true
+arc-swap = { workspace = true }
+archery = { workspace = true, features = ["serde"] }
 cargo_metadata.workspace = true
 clap = { workspace = true, features = ["cargo"] }
 clap_complete.workspace = true
@@ -40,6 +42,7 @@ indexmap.workspace = true
 indicatif.workspace = true
 process_alive.workspace = true
 reqwest.workspace = true
+rpds = { workspace = true, features = ["serde"] }
 rustc_version.workspace = true
 rustversion.workspace = true
 serde = { workspace = true, features = ["rc"] }
@@ -48,7 +51,6 @@ tar.workspace = true
 tempfile.workspace = true
 TinyUFO.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
 tower-lsp-server.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
