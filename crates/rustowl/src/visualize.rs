@@ -78,16 +78,16 @@ impl From<std::io::Error> for VisualizeError {
 #[derive(Debug, Clone)]
 pub struct VariableInfo {
     pub local: FnLocal,
-    pub name: String,
+    pub name: Arc<str>,
     pub span: Range,
-    pub function_name: String,
+    pub function_name: Arc<str>,
 }
 
 /// Find variables by name within a specific function.
 struct FindVariablesByName<'a> {
     function_path: &'a str,
     variable_name: &'a str,
-    current_function_name: String,
+    current_function_name: Arc<str>,
     found: Vec<VariableInfo>,
 }
 
@@ -96,7 +96,7 @@ impl<'a> FindVariablesByName<'a> {
         Self {
             function_path,
             variable_name,
-            current_function_name: String::new(),
+            current_function_name: Arc::from(""),
             found: Vec::new(),
         }
     }
@@ -189,7 +189,7 @@ impl<'a> FindVariablesByName<'a> {
 
 impl MirVisitor for FindVariablesByName<'_> {
     fn visit_func(&mut self, func: &Function) {
-        self.current_function_name = func.name.clone();
+        self.current_function_name = Arc::clone(&func.name);
     }
 
     fn visit_decl(&mut self, decl: &MirDecl) {
@@ -200,13 +200,13 @@ impl MirVisitor for FindVariablesByName<'_> {
         if let MirDecl::User {
             local, name, span, ..
         } = decl
-            && name == self.variable_name
+            && name.as_ref() == self.variable_name
         {
             self.found.push(VariableInfo {
                 local: *local,
-                name: name.clone(),
+                name: Arc::clone(name),
                 span: *span,
-                function_name: self.current_function_name.clone(),
+                function_name: Arc::clone(&self.current_function_name),
             });
         }
     }
@@ -284,7 +284,7 @@ impl<'a> CliRenderer<'a> {
         );
 
         // Group decorations by line
-        let mut line_decos: HashMap<u32, Vec<(u32, u32, Deco)>> = HashMap::new();
+        let mut line_decos: HashMap<u32, Vec<(u32, u32, &Deco)>> = HashMap::new();
 
         for deco in decos {
             let (range, overlapped) = match deco {
@@ -329,7 +329,7 @@ impl<'a> CliRenderer<'a> {
                 line_decos
                     .entry(start_line)
                     .or_default()
-                    .push((start_col, end_col, deco.clone()));
+                    .push((start_col, end_col, deco));
             } else {
                 // Handle multi-line decorations by adding to each line
                 for line in start_line..=end_line {
@@ -345,7 +345,7 @@ impl<'a> CliRenderer<'a> {
                     line_decos
                         .entry(line)
                         .or_default()
-                        .push((col_start, col_end, deco.clone()));
+                        .push((col_start, col_end, deco));
                 }
             }
         }
@@ -387,7 +387,7 @@ impl<'a> CliRenderer<'a> {
 
     /// Print decoration underlines for a single line.
     /// Groups decorations of the same type on the same output line.
-    fn print_decorations(&self, decos: &mut [(u32, u32, Deco)]) {
+    fn print_decorations(&self, decos: &mut [(u32, u32, &Deco)]) {
         decos.sort_by_key(|(start, _, _)| *start);
 
         // print header
@@ -616,7 +616,7 @@ mod tests {
         Deco::Lifetime {
             local: FnLocal::new(local, 1),
             range: range(from, until),
-            hover_text: "lifetime".to_string(),
+            hover_text: Arc::from("lifetime"),
             overlapped: false,
         }
     }
@@ -625,7 +625,7 @@ mod tests {
         Deco::ImmBorrow {
             local: FnLocal::new(local, 1),
             range: range(from, until),
-            hover_text: "borrow".to_string(),
+            hover_text: Arc::from("borrow"),
             overlapped: false,
         }
     }
@@ -678,7 +678,7 @@ mod tests {
         Deco::Call {
             local: FnLocal::new(local, 1),
             range: range(from, until),
-            hover_text: "function call".to_string(),
+            hover_text: Arc::from("function call"),
             overlapped: false,
         }
     }
@@ -692,7 +692,7 @@ mod tests {
         calc.calc_call(
             &MirPlace {
                 local: FnLocal::new(2, 1),
-                projection: vec![],
+                projection: Arc::from(Vec::new()),
             },
             range(0, 100),
         );
@@ -716,7 +716,7 @@ mod tests {
         calc.calc_call(
             &MirPlace {
                 local: FnLocal::new(2, 1),
-                projection: vec![],
+                projection: Arc::from(Vec::new()),
             },
             range(6, 9),
         );
