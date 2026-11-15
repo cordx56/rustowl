@@ -15,9 +15,15 @@ pub type MirAnalyzeFuture = Pin<Box<dyn Future<Output = MirAnalyzer> + Send + Sy
 #[derive(Clone, Debug)]
 pub struct AnalyzeResult {
     pub file_path: PathBuf,
-    pub file_hash: String,
-    pub mir_hash: String,
-    pub analyzed: Function,
+    pub key: cache::key::FunctionKey,
+    /// Where this body started when it was analysed.
+    pub base: Loc,
+    /// A body served from cache is already stored under its key and stays valid:
+    /// `base` is read at use time, so it never needs rewriting.
+    pub from_cache: bool,
+    /// Shared with the cache: an analysed body is stored and emitted from one
+    /// allocation instead of deep-cloned on the way out.
+    pub analyzed: std::sync::Arc<Function>,
 }
 
 pub enum MirAnalyzerInitResult {
@@ -33,8 +39,8 @@ pub struct MirAnalyzer {
     basic_blocks: IndexMap<BasicBlockId, MirBasicBlock>,
     fn_id: DefId,
     name: String,
-    file_hash: String,
-    mir_hash: String,
+    key: cache::key::FunctionKey,
+    base: Loc,
     accurate_live: HashMap<LocalId, Vec<Range>>,
     deficit: HashMap<LocalId, Vec<Range>>,
     shared_live: HashMap<LocalId, Vec<Range>>,
@@ -44,49 +50,31 @@ pub struct MirAnalyzer {
     definitely_live_range: HashMap<LocalId, Vec<Range>>,
     maybe_init_range: HashMap<LocalId, Vec<Range>>,
 }
+
+/// Content hash of source text.
+///
+/// `tcx.get_hash` cannot be used: rustc's stable hashing interns string symbols,
+/// so it returns the same value for different text.
+fn text_hash(text: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Cheap: the source index is memoised and this needs no borrow check, so it is
+/// available on the cache-hit path too.
+fn body_anchor(source_info: &SourceInfo, span: Span) -> Loc {
+    let offset = source_info.offset();
+    source_info
+        .index()
+        .loc_at(span.lo().saturating_sub(offset) as usize)
+}
+
 impl MirAnalyzer {
     /// initialize analyzer
     pub fn init(tcx: TyCtxt<'_>, fn_id: DefId) -> Vec<MirAnalyzerInitResult> {
         let mut result = Vec::new();
-
-        {
-            let mut cache = cache::CACHE.lock().unwrap();
-            if cache.is_none() {
-                *cache = cache::get_cache(&tcx.crate_name());
-            }
-            let resolved = cache.as_ref().and_then(|cache| {
-                // Only hash MIR when there is a non-empty index to consult; a
-                // cold cache pays nothing for this lookup.
-                if cache.by_built.is_empty() {
-                    return None;
-                }
-                let built_hash = tcx.mir_built_hash(fn_id)?;
-                cache.bodies_for(&built_hash).and_then(|bodies| {
-                    bodies
-                        .iter()
-                        .map(|body| {
-                            cache
-                                .get_cache(&body.file_hash, &body.mir_hash)
-                                .map(|analyzed| {
-                                    MirAnalyzerInitResult::Cached(AnalyzeResult {
-                                        file_path: body.file_path.clone(),
-                                        file_hash: body.file_hash.clone(),
-                                        mir_hash: body.mir_hash.clone(),
-                                        analyzed,
-                                    })
-                                })
-                        })
-                        .collect::<Option<Vec<_>>>()
-                })
-            });
-            if let Some(hits) = resolved {
-                tracing::debug!("all bodies of {fn_id:?} served from the mir_built index");
-                result.extend(hits);
-                return result;
-            }
-        }
-
-        let built_hash = tcx.mir_built_hash(fn_id);
 
         let facts = tcx.get_borrowck_facts(fn_id);
         for (fn_id, mut facts) in facts {
@@ -105,40 +93,40 @@ impl MirAnalyzer {
             // region variables should not be hashed (it results an error)
             // so we erase region variables and set 'static as new region
             let mir_hash = tcx.get_hash(body.clone().erase_region_variables(tcx).as_rustc());
-            let file_hash = tcx.get_hash(source_info.source());
 
-            let mut cache = cache::CACHE.lock().unwrap();
+            let base = body_anchor(&source_info, body.span());
+            // The function's own text: a comment inside the body leaves MIR unchanged,
+            // so mir_hash alone would serve stale spans.
+            let span = body.span();
+            let offset = source_info.offset();
+            let own_text = source_info
+                .source()
+                .get(
+                    span.lo().saturating_sub(offset) as usize
+                        ..span.hi().saturating_sub(offset) as usize,
+                )
+                .unwrap_or_default();
+            let fn_text_hash = text_hash(own_text);
+            let key = cache::key::FunctionKey {
+                def_path: tcx.def_path_hash(fn_id),
+                fn_text_hash,
+                mir_hash: mir_hash.clone(),
+                analysis_version: cache::ANALYSIS_VERSION,
+                toolchain_hash: cache::toolchain_hash(),
+            };
 
-            // setup cache
-            if cache.is_none() {
-                *cache = cache::get_cache(&tcx.crate_name());
-            }
-            if let Some(cache) = cache.as_mut()
-                && let Some(analyzed) = cache.take_cache(&file_hash, &mir_hash)
-            {
+            if let Some(entry) = cache::get_entry(&key) {
                 tracing::debug!("MIR cache hit: {fn_id:?}");
+                let analyzed = cache::key::resolve(&entry, base);
                 result.push(MirAnalyzerInitResult::Cached(AnalyzeResult {
                     file_path: source_info.path().to_path_buf(),
-                    file_hash: file_hash.clone(),
-                    mir_hash: mir_hash.clone(),
+                    key,
+                    base,
+                    from_cache: true,
                     analyzed,
                 }));
-                // record that this body is still cached, so a later compile that
-                // rebuilds MIR can tell which roots were reused
-                if let Some(built_hash) = built_hash.as_deref().map(str::to_owned) {
-                    cache.index_built(
-                        built_hash,
-                        cache::CachedBody {
-                            def_id: fn_id.as_u32(),
-                            file_hash,
-                            mir_hash,
-                            file_path,
-                        },
-                    );
-                }
                 continue;
             }
-            drop(cache);
 
             // these are only needed to build the analyzer, so they stay behind the
             // cache check: get_local_decls pretty-prints a type per local
@@ -239,8 +227,8 @@ impl MirAnalyzer {
                     basic_blocks,
                     fn_id,
                     name,
-                    file_hash,
-                    mir_hash,
+                    key,
+                    base,
                     accurate_live,
                     deficit,
                     shared_live,
@@ -337,14 +325,33 @@ impl MirAnalyzer {
 
         AnalyzeResult {
             file_path: self.file_path,
-            file_hash: self.file_hash,
-            mir_hash: self.mir_hash,
-            analyzed: Function {
+            key: self.key,
+            base: self.base,
+            from_cache: false,
+            analyzed: std::sync::Arc::new(Function {
                 fn_id: self.fn_id.as_u32(),
                 name: self.name,
                 basic_blocks,
                 decls,
-            },
+            }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::text_hash;
+
+    #[test]
+    fn fn_text_hash_reacts_to_the_functions_own_text() {
+        let before = text_hash("fn f() {\n    let a = 1;\n}\n");
+        let comment = text_hash("fn f() {\n    // a comment\n    let a = 1;\n}\n");
+        let changed = text_hash("fn f() {\n    let a = 2;\n}\n");
+        let other = text_hash("fn g() {\n    let a = 1;\n}\n");
+
+        assert_ne!(before, comment, "a comment must invalidate the key");
+        assert_ne!(before, changed);
+        assert_ne!(before, other);
+        assert_eq!(before, text_hash("fn f() {\n    let a = 1;\n}\n"));
     }
 }

@@ -40,11 +40,13 @@ indexmap.workspace = true
 indicatif.workspace = true
 process_alive.workspace = true
 reqwest.workspace = true
+rustc_version.workspace = true
 rustversion.workspace = true
-serde.workspace = true
+serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
 tar.workspace = true
 tempfile.workspace = true
+TinyUFO.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tower-lsp-server.workspace = true
