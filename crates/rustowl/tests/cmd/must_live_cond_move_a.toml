@@ -1,0 +1,36 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "cond_move", "a"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'a' (1/1) in function 'cond_move' ===
+
+ 165 | // `a` is moved on only one branch while borrowed (does not compile).
+ 166 | fn cond_move(c: bool) {
+ 167 |     let a = String::from("a");
+     |         -   -----------------
+ 168 |     let r = &a;
+     |         -   --
+ 169 |     if c {
+     |        -
+ 170 |         drop(a);
+     |         ---- -
+ 171 |     }
+     |     ~
+ 172 |     println!("{r}");
+     |     ~~~~~~~~~~~~~~~
+ 173 | }
+     | ~
+ 174 | 
+ 175 | // `a` is moved while borrowed and then reassigned (does not compile).
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

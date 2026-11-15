@@ -17,6 +17,7 @@ mod syntax;
 /// Styles for different decoration types and syntax highlighting.
 pub(crate) mod colors {
     use anstyle::{AnsiColor, Color, Effects, Style};
+    use std::sync::LazyLock;
 
     pub const GREEN: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightGreen)));
     pub const CYAN: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightCyan)));
@@ -37,6 +38,13 @@ pub(crate) mod colors {
     pub const LIFETIME: Style = YELLOW;
     pub const MACRO: Style = CYAN;
     pub const ATTRIBUTE: Style = MAGENTA;
+
+    static NO_COLOR: LazyLock<bool> = LazyLock::new(|| std::env::var_os("NO_COLOR").is_some());
+
+    /// An empty style writes nothing, not even the reset that follows it.
+    pub fn plain(style: Style) -> Style {
+        if *NO_COLOR { Style::new() } else { style }
+    }
 }
 
 /// Error types for visualization operations.
@@ -222,7 +230,7 @@ impl Deco {
     const COLOR_OUTLIVE: anstyle::Style = colors::RED;
 
     fn color(&self) -> anstyle::Style {
-        match self {
+        let style = match self {
             Deco::Lifetime { .. } => Self::COLOR_LIFETIME,
             Deco::DefinitelyLive { .. } => Self::COLOR_LIFETIME,
             Deco::MaybeInitialized { .. } => Self::COLOR_LIFETIME,
@@ -232,7 +240,8 @@ impl Deco {
             Deco::Call { .. } => Self::COLOR_CALL,
             Deco::SharedMut { .. } => Self::COLOR_SHARED,
             Deco::Outlive { .. } => Self::COLOR_OUTLIVE,
-        }
+        };
+        colors::plain(style)
     }
 
     const LINE_SOLID: char = '-';
@@ -274,7 +283,7 @@ impl<'a> CliRenderer<'a> {
         decos: &[Deco],
     ) {
         // Print header
-        let style = colors::CYAN;
+        let style = colors::plain(colors::CYAN);
         println!(
             "\n{style}=== Variable '{}' ({}/{}) in function '{}' ==={style:#}\n",
             var_info.name,
@@ -368,7 +377,7 @@ impl<'a> CliRenderer<'a> {
         for line_num in display_start..=display_end {
             if let Some(line_content) = self.lines.get(line_num as usize) {
                 // Print line number and syntax-highlighted content
-                let dim = colors::DIM;
+                let dim = colors::plain(colors::DIM);
                 println!(
                     "{dim}{:4} |{dim:#} {}",
                     line_num + 1,
@@ -391,7 +400,7 @@ impl<'a> CliRenderer<'a> {
         decos.sort_by_key(|(start, _, _)| *start);
 
         // print header
-        let dim = colors::DIM;
+        let dim = colors::plain(colors::DIM);
         print!("{dim}     |{dim:#} ");
 
         let mut printed = 0;
@@ -532,12 +541,12 @@ pub fn show_variable(
 
 /// Print a color legend for the different decoration types.
 fn print_legend() {
-    let cyan = Deco::COLOR_IMMUTABLE;
-    let lifetime = Deco::COLOR_LIFETIME;
-    let immutable = Deco::COLOR_IMMUTABLE;
-    let mutable = Deco::COLOR_MUTABLE;
-    let mov = Deco::COLOR_MOVE;
-    let red = Deco::COLOR_OUTLIVE;
+    let cyan = colors::plain(Deco::COLOR_IMMUTABLE);
+    let lifetime = colors::plain(Deco::COLOR_LIFETIME);
+    let immutable = colors::plain(Deco::COLOR_IMMUTABLE);
+    let mutable = colors::plain(Deco::COLOR_MUTABLE);
+    let mov = colors::plain(Deco::COLOR_MOVE);
+    let red = colors::plain(Deco::COLOR_OUTLIVE);
 
     println!("{cyan}Legend:{cyan:#}");
     println!(
@@ -589,22 +598,22 @@ mod tests {
 
     #[test]
     fn find_file_matches_relative_suffix() {
-        let path: Arc<str> = Arc::from("algo-tests/src/vec.rs");
+        let path: Arc<str> = Arc::from("tests/fixtures/vec.rs");
         let file: SharedPointer<File, ArcK> = SharedPointer::new(File::new());
         let crate_data: Crate = Crate([(path, file)].into_iter().collect());
 
-        let file = find_file(&crate_data, Path::new("./algo-tests/src/vec.rs"));
+        let file = find_file(&crate_data, Path::new("./tests/fixtures/vec.rs"));
         assert!(file.is_some());
     }
 
     #[cfg(windows)]
     #[test]
     fn find_file_matches_windows_verbatim_path() {
-        let path: Arc<str> = Arc::from("C:/repo/algo-tests/src/vec.rs");
+        let path: Arc<str> = Arc::from("C:/repo/tests/fixtures/vec.rs");
         let file: SharedPointer<File, ArcK> = SharedPointer::new(File::new());
         let crate_data: Crate = Crate([(path, file)].into_iter().collect());
 
-        let file = find_file(&crate_data, Path::new(r"\\?\C:\repo\algo-tests\src\vec.rs"));
+        let file = find_file(&crate_data, Path::new(r"\\?\C:\repo\tests\fixtures\vec.rs"));
         assert!(file.is_some());
     }
 

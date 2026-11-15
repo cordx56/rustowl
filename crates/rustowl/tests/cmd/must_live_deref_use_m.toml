@@ -1,0 +1,29 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "deref_use", "m"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'm' (1/1) in function 'deref_use' ===
+
+  54 |     let mut r = &n;
+  55 |     if c {
+  56 |         let m = Box::new(2);
+     |             -   -----------
+  57 |         r = &m;
+     |         --- --
+  58 |     }
+  59 |     **r + 1
+     |     ~~~
+  60 | }
+  61 | 
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''
