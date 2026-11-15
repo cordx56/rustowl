@@ -46,7 +46,7 @@ jobs:
         uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7 # v1.6.1
         with:
           neovim: true
-          version: v0.11.2
+          version: v0.12.6
 
       - name: Setup RustOwl
         run: |
