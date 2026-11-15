@@ -1,7 +1,11 @@
 FROM debian:bookworm-slim AS chef
 WORKDIR /app
 RUN apt-get update && \
-  apt-get install -y --no-install-recommends build-essential=12.9 ca-certificates=20230311+deb12u1 curl=7.88.1-10+deb12u15 && \
+  apt-get install -y --no-install-recommends \
+  build-essential=12.9 \
+  ca-certificates=20230311+deb12u1 \
+  curl=7.88.1-10+deb12u15 && \
+  zlib1g=1.2.13.dfsg-1 \
   rm -rf /var/lib/apt/lists/*
 
 COPY scripts/ scripts/
