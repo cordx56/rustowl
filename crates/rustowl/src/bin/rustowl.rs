@@ -125,16 +125,19 @@ async fn handle_show_command(opts: cli::Show) {
     };
 
     // Collect analysis results
-    let mut crate_data: Option<rustowl::models::Crate> = None;
+    let mut crate_data: Option<archery::SharedPointer<rustowl::models::Crate, archery::ArcK>> =
+        None;
     while let Some(event) = iter.next_event().await {
         match event {
             rustowl::lsp::analyze::AnalyzerEvent::Analyzed(ws) => {
-                for krate in ws.0.into_values() {
-                    if let Some(existing) = &mut crate_data {
-                        existing.merge(krate);
-                    } else {
-                        crate_data = Some(krate);
-                    }
+                for (_, krate) in ws.0.iter() {
+                    crate_data = Some(match crate_data {
+                        Some(existing) => match existing.as_ref().merged(krate.as_ref()) {
+                            Some(merged) => archery::SharedPointer::new(merged),
+                            None => existing,
+                        },
+                        None => archery::SharedPointer::clone(krate),
+                    });
                 }
             }
             rustowl::lsp::analyze::AnalyzerEvent::CrateChecked { package, .. } => {
@@ -153,7 +156,7 @@ async fn handle_show_command(opts: cli::Show) {
 
     // Run visualization
     if let Err(e) = rustowl::visualize::show_variable(
-        &crate_data,
+        crate_data.as_ref(),
         file_path.as_deref(),
         &opts.function_path,
         &opts.variable,

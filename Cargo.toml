@@ -14,6 +14,8 @@ license = "MPL-2.0"
 
 [workspace.dependencies]
 anstyle = "1"
+archery = "1.2.3"
+arc-swap = "1.9.3"
 cargo_metadata = "0.23"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
@@ -31,6 +33,7 @@ man = "0.3"
 process_alive = "0.2"
 regex = "1"
 reqwest = { version = "0.13.4", features = ["socks"] }
+rpds = "1.2.1"
 rustc_version = "0.4"
 rustversion = "1"
 serde = { version = "1", features = ["derive"] }
@@ -50,7 +53,6 @@ tokio = { version = "1", features = [
   "sync",
   "time",
 ] }
-tokio-util = "0.7"
 tower-lsp-server = { version = "0.24.0-rc.1", features = [
   "url-fluent-uri",
 ] }

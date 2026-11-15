@@ -51,7 +51,9 @@
 #[cfg(test)]
 mod miri_memory_safety_tests {
     use crate::models::*;
+    use archery::{ArcK, SharedPointer};
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     #[test]
     fn test_loc_arithmetic_memory_safety() {
@@ -120,55 +122,72 @@ mod miri_memory_safety_tests {
     #[test]
     fn test_file_model_operations() {
         // Test File model with various operations
-        let mut file = File { items: Vec::new() };
+        let file: File = File::new();
 
         // Test vector operations
         assert_eq!(file.items.len(), 0);
         assert!(file.items.is_empty());
 
-        // Test vector capacity and memory management
-        file.items.reserve(1000);
-        assert!(file.items.capacity() >= 1000);
-
-        // Test cloning (deep copy)
-        let file_clone = file.clone();
-        assert_eq!(file.items.len(), file_clone.items.len());
+        // The file is rebuilt, never copied: the earlier file keeps its bodies.
+        let body: SharedPointer<Function, ArcK> = SharedPointer::new(Function {
+            fn_id: 1,
+            name: "f".into(),
+            basic_blocks: vec![],
+            decls: vec![],
+        });
+        let grown = file.push(body);
+        assert_eq!(grown.items.len(), 1);
+        assert_eq!(file.items.len(), 0);
     }
 
     #[test]
     fn test_workspace_operations() {
         // Test Workspace and Crate models
-        let mut workspace = Workspace(HashMap::new());
-        let mut crate1 = Crate(HashMap::new());
-        let mut crate2 = Crate(HashMap::new());
+        let mut workspace: Workspace = Workspace(Default::default());
+        let mut crate1: Crate = Crate(Default::default());
+        let mut crate2: Crate = Crate(Default::default());
 
         // Add some files to crates
-        crate1
-            .0
-            .insert("lib.rs".to_string(), File { items: Vec::new() });
-        crate1
-            .0
-            .insert("main.rs".to_string(), File { items: Vec::new() });
-
-        crate2
-            .0
-            .insert("helper.rs".to_string(), File { items: Vec::new() });
+        let file: SharedPointer<File, ArcK> = SharedPointer::new(File::new());
+        crate1 = Crate(
+            crate1
+                .0
+                .insert(Arc::from("lib.rs"), SharedPointer::clone(&file)),
+        );
+        crate1 = Crate(crate1.0.insert(Arc::from("main.rs"), file));
+        crate2 = Crate(
+            crate2
+                .0
+                .insert(Arc::from("helper.rs"), SharedPointer::new(File::new())),
+        );
 
         // Add crates to workspace
-        workspace.0.insert("crate1".to_string(), crate1);
-        workspace.0.insert("crate2".to_string(), crate2);
+        workspace = Workspace(
+            workspace
+                .0
+                .insert(Arc::from("crate1"), SharedPointer::new(crate1)),
+        );
+        workspace = Workspace(
+            workspace
+                .0
+                .insert(Arc::from("crate2"), SharedPointer::new(crate2)),
+        );
 
-        assert_eq!(workspace.0.len(), 2);
+        assert_eq!(workspace.0.size(), 2);
         assert!(workspace.0.contains_key("crate1"));
         assert!(workspace.0.contains_key("crate2"));
 
         // Test workspace merging
-        let mut other_workspace = Workspace(HashMap::new());
-        let crate3 = Crate(HashMap::new());
-        other_workspace.0.insert("crate3".to_string(), crate3);
+        let mut other_workspace: Workspace = Workspace(Default::default());
+        let crate3: Crate = Crate(Default::default());
+        other_workspace = Workspace(
+            other_workspace
+                .0
+                .insert(Arc::from("crate3"), SharedPointer::new(crate3)),
+        );
 
         workspace.merge(other_workspace);
-        assert_eq!(workspace.0.len(), 3);
+        assert_eq!(workspace.0.size(), 3);
         assert!(workspace.0.contains_key("crate3"));
     }
 
@@ -286,7 +305,7 @@ mod miri_memory_safety_tests {
 
         // Test unicode handling
         let unicode_string = "🦀 Rust 🔥 Memory Safety 🛡️".to_string();
-        let _file = File { items: Vec::new() };
+        let _file: File = File::new();
 
         // Ensure unicode doesn't cause memory issues
         assert!(unicode_string.len() > unicode_string.chars().count());

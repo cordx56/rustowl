@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use archery::{ArcK, SharedPointer, SharedPointerKind};
+use rpds::{HashTrieMap, Vector};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -272,51 +274,151 @@ pub enum Item {
     Function { span: Range, mir: Function },
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct File {
-    pub items: Vec<Arc<Function>>,
+/// A file's analysed bodies, shared by pointer: one analysed body reaches the
+/// cache, the wire and the renderer without a copy.
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(bound = "")]
+pub struct File<P: SharedPointerKind = ArcK> {
+    pub items: Vector<SharedPointer<Function, P>, P>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(transparent)]
-pub struct Workspace(pub HashMap<String, Crate>);
-
-impl Workspace {
-    pub fn merge(&mut self, other: Self) {
-        let Workspace(crates) = other;
-        for (name, krate) in crates {
-            if let Some(insert) = self.0.get_mut(&name) {
-                insert.merge(krate);
-            } else {
-                self.0.insert(name, krate);
-            }
-        }
+impl<P: SharedPointerKind> Default for File<P> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(transparent)]
-pub struct Crate(pub HashMap<String, File>);
-
-impl Crate {
-    pub fn merge(&mut self, other: Self) {
-        let Crate(files) = other;
-        for (file, mir) in files {
-            if let Some(insert) = self.0.get_mut(&file) {
-                for item in mir.items {
-                    match insert
-                        .items
-                        .iter_mut()
-                        .find(|existing| existing.fn_id == item.fn_id)
-                    {
-                        Some(existing) => *existing = item,
-                        None => insert.items.push(item),
-                    }
-                }
-            } else {
-                self.0.insert(file, mir);
-            }
+impl<P: SharedPointerKind> File<P> {
+    pub fn new() -> Self {
+        Self {
+            items: Vector::default(),
         }
+    }
+
+    pub fn push(&self, function: SharedPointer<Function, P>) -> Self {
+        Self {
+            items: self.items.push_back(function),
+        }
+    }
+
+    /// A new file with the body of this `fn_id` replaced, or appended when
+    /// the file has no such body.
+    pub fn replace(&self, fn_id: u32, function: SharedPointer<Function, P>) -> Self {
+        let index = self.items.iter().position(|item| item.fn_id == fn_id);
+        let items = match index {
+            // The index came from this very vector, so `set` cannot fail.
+            Some(index) => self
+                .items
+                .set(index, function)
+                .expect("the index came from this vector"),
+            None => self.items.push_back(function),
+        };
+        Self { items }
+    }
+
+    /// A new file with `other`'s bodies merged in: a body with the same
+    /// `fn_id` replaces the one here, the rest are appended. `None` when
+    /// `other` is empty.
+    pub fn merged(&self, other: &Self) -> Option<Self> {
+        if other.items.is_empty() {
+            return None;
+        }
+        let mut merged: Option<Self> = None;
+        for item in other.items.iter() {
+            let next = match &merged {
+                Some(file) => file.replace(item.fn_id, SharedPointer::clone(item)),
+                None => self.replace(item.fn_id, SharedPointer::clone(item)),
+            };
+            merged = Some(next);
+        }
+        merged
+    }
+}
+
+pub type CrateFiles<P> = HashTrieMap<Arc<str>, SharedPointer<File<P>, P>, P>;
+
+/// The analysed files of one crate, keyed by path.
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(transparent, bound = "")]
+pub struct Crate<P: SharedPointerKind = ArcK>(pub CrateFiles<P>);
+
+impl<P: SharedPointerKind> Crate<P> {
+    /// A crate with `other`'s files merged in: a body with the same `fn_id`
+    /// replaces the one here, the rest are appended. `None` when `other` has
+    /// no files.
+    pub fn merged(&self, other: &Self) -> Option<Self> {
+        if other.0.is_empty() {
+            return None;
+        }
+        let mut files: Option<CrateFiles<P>> = None;
+        for (file, incoming) in other.0.iter() {
+            // The file as it stands now: the one already merged in, or the
+            // one this crate already had.
+            let current = match &files {
+                Some(files) => files.get(file),
+                None => self.0.get(file),
+            };
+            let merged = match current {
+                Some(current) => match current.as_ref().merged(incoming.as_ref()) {
+                    Some(merged) => SharedPointer::new(merged),
+                    None => SharedPointer::clone(current),
+                },
+                None => SharedPointer::clone(incoming),
+            };
+            files = Some(match files {
+                Some(files) => files.insert(Arc::clone(file), merged),
+                None => self.0.insert(Arc::clone(file), merged),
+            });
+        }
+        Some(Crate(files.unwrap_or_default()))
+    }
+
+    pub fn merge(&mut self, other: Self) {
+        if other.0.is_empty() {
+            return;
+        }
+        let merged = self
+            .merged(&other)
+            .expect("a crate with files has something to merge");
+        *self = merged;
+    }
+
+    pub fn file(&self, path: &str) -> Option<&File<P>> {
+        self.0.get(path).map(|file| file.as_ref())
+    }
+
+    pub fn without(&self, path: &str) -> Option<Self> {
+        if !self.0.contains_key(path) {
+            return None;
+        }
+        Some(Crate(self.0.remove(path)))
+    }
+}
+
+/// The analysed crates of one workspace, keyed by crate name.
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(transparent, bound = "")]
+pub struct Workspace<P: SharedPointerKind = ArcK>(
+    pub HashTrieMap<Arc<str>, SharedPointer<Crate<P>, P>, P>,
+);
+
+impl<P: SharedPointerKind> Workspace<P> {
+    pub fn merge(&mut self, other: Self) {
+        for (name, incoming) in other.0.iter() {
+            let merged = match self.0.get(name) {
+                Some(existing) => match existing.as_ref().merged(incoming.as_ref()) {
+                    Some(merged) => SharedPointer::new(merged),
+                    None => SharedPointer::clone(existing),
+                },
+                None => SharedPointer::clone(incoming),
+            };
+            let next = self.0.insert(Arc::clone(name), merged);
+            self.0 = next;
+        }
+    }
+
+    pub fn get(&self, name: &str) -> Option<&Crate<P>> {
+        self.0.get(name).map(|krate| krate.as_ref())
     }
 }
 
@@ -592,7 +694,69 @@ fn translate_all_ranges(delta: i64, sets: &mut [&mut Vec<Range>]) {
 
 #[cfg(test)]
 mod tests {
+    use super::{Crate, File, Workspace};
     use super::{FnLocal, Function, Loc, MirDecl, MirType, Range, SourceIndex};
+    use archery::{ArcK, SharedPointer};
+    use std::sync::Arc;
+
+    /// The file is rebuilt, not copied: the other bodies keep their allocation.
+    #[test]
+    fn replacing_a_function_shares_the_rest() {
+        let shared: SharedPointer<Function, ArcK> = SharedPointer::new(sample_function());
+        let other = {
+            let mut f = sample_function();
+            f.fn_id = 8;
+            SharedPointer::new(f)
+        };
+        let file: File = File::new()
+            .push(SharedPointer::clone(&shared))
+            .push(SharedPointer::clone(&other));
+
+        let replaced = file.replace(7, SharedPointer::new(sample_function()));
+
+        assert_eq!(replaced.items.len(), 2);
+        assert!(
+            SharedPointer::ptr_eq(&replaced.items[1], &other),
+            "the untouched function must keep its allocation"
+        );
+    }
+
+    /// Only the delivered file is rebuilt; the others keep their allocation.
+    #[test]
+    fn merging_a_crate_shares_the_untouched_file() {
+        let kept: SharedPointer<File, ArcK> =
+            SharedPointer::new(File::new().push(SharedPointer::new(sample_function())));
+        let key: Arc<str> = Arc::from("a.rs");
+        let mut krate: Crate = Crate([(key, SharedPointer::clone(&kept))].into_iter().collect());
+
+        let mut incoming: Crate = Crate(Default::default());
+        let other: Arc<str> = Arc::from("b.rs");
+        incoming.0 = incoming.0.insert(other, SharedPointer::new(File::new()));
+        krate.merge(incoming);
+
+        assert!(
+            SharedPointer::ptr_eq(krate.0.get("a.rs").expect("a.rs must survive"), &kept),
+            "merging must not rebuild the file it did not deliver"
+        );
+    }
+
+    /// The wire shape is what the receiver parses: it must not change.
+    #[test]
+    fn the_workspace_wire_shape_is_unchanged() {
+        let file: SharedPointer<File, ArcK> = SharedPointer::new(File {
+            items: rpds::Vector::default(),
+        });
+        let path: Arc<str> = Arc::from("lib.rs");
+        let krate: SharedPointer<Crate, ArcK> =
+            SharedPointer::new(Crate([(path, file)].into_iter().collect()));
+        let name: Arc<str> = Arc::from("krate");
+        let workspace: Workspace = Workspace([(name, krate)].into_iter().collect());
+
+        assert_eq!(
+            serde_json::to_string(&workspace).unwrap(),
+            r#"{"krate":{"lib.rs":{"items":[]}}}"#
+        );
+    }
 
     #[test]
     fn loc_new_subtracts_offset() {
@@ -842,40 +1006,56 @@ mod tests {
     #[test]
     fn a_second_delivery_of_a_function_replaces_it() {
         use super::{Crate, File, Workspace};
-        use std::collections::HashMap;
+        use archery::{ArcK, SharedPointer};
         use std::sync::Arc;
 
-        let sibling = {
+        let sibling: SharedPointer<Function, ArcK> = {
             let mut f = sample_function();
             f.fn_id = 8;
             f.name = "g".into();
-            Arc::new(f)
+            SharedPointer::new(f)
         };
-        let stale = Arc::new(sample_function());
-        let fresh = {
+        let stale: SharedPointer<Function, ArcK> = SharedPointer::new(sample_function());
+        let fresh: SharedPointer<Function, ArcK> = {
             // the same function after an edit above it: every span moved
             let mut f = sample_function();
             f.shift(25);
-            Arc::new(f)
+            SharedPointer::new(f)
         };
-        let deliver = |items: Vec<Arc<Function>>| {
-            Workspace(HashMap::from([(
-                "krate".to_string(),
-                Crate(HashMap::from([("lib.rs".to_string(), File { items })])),
-            )]))
+        let deliver = |items: Vec<SharedPointer<Function, ArcK>>| {
+            let file: SharedPointer<File, ArcK> = SharedPointer::new(
+                File::new()
+                    .push(SharedPointer::clone(&items[0]))
+                    .push(SharedPointer::clone(&items[1])),
+            );
+            let path: Arc<str> = Arc::from("lib.rs");
+            let krate: SharedPointer<Crate, ArcK> =
+                SharedPointer::new(Crate([(path, file)].into_iter().collect()));
+            let name: Arc<str> = Arc::from("krate");
+            Workspace([(name, krate)].into_iter().collect())
         };
 
-        let mut published = deliver(vec![Arc::clone(&stale), Arc::clone(&sibling)]);
-        published.merge(deliver(vec![Arc::clone(&fresh), Arc::clone(&sibling)]));
+        let mut published = deliver(vec![
+            SharedPointer::clone(&stale),
+            SharedPointer::clone(&sibling),
+        ]);
+        published.merge(deliver(vec![
+            SharedPointer::clone(&fresh),
+            SharedPointer::clone(&sibling),
+        ]));
 
-        let Crate(files) = &published.0["krate"];
-        let items = &files["lib.rs"].items;
+        let krate = published.get("krate").expect("the crate must be there");
+        let file = krate.file("lib.rs").expect("the file must be there");
+        let items = &file.items;
         assert_eq!(
             items.len(),
             2,
             "a re-delivered function must replace, not duplicate"
         );
         let found = items.iter().find(|f| f.fn_id == 7).unwrap();
-        assert!(Arc::ptr_eq(found, &fresh), "the newer delivery must win");
+        assert!(
+            SharedPointer::ptr_eq(found, &fresh),
+            "the newer delivery must win"
+        );
     }
 }

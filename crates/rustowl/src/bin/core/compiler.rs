@@ -1,9 +1,11 @@
+use arc_swap::ArcSwap;
+use archery::{ArcK, SharedPointer};
 use indexmap::IndexMap;
 use rustowl::{models::*, utils};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock, Mutex, OnceLock};
+use std::sync::{LazyLock, OnceLock};
 
 macro_rules! impl_as_rustc {
     (
@@ -43,10 +45,13 @@ pub use hash::Hasher;
 pub use transform::*;
 
 /// Sources are read from disk once per file, not once per body.
-pub fn source_info_from_span(tcx: TyCtxt<'_>, span: Span) -> Option<Arc<SourceInfo>> {
-    static MEMO: LazyLock<Mutex<HashMap<PathBuf, Arc<SourceInfo>>>> =
-        LazyLock::new(|| Mutex::new(HashMap::new()));
-    let mut memo = MEMO.lock().unwrap();
+pub fn source_info_from_span(
+    tcx: TyCtxt<'_>,
+    span: Span,
+) -> Option<SharedPointer<SourceInfo, ArcK>> {
+    type Memo = rpds::HashTrieMap<PathBuf, SharedPointer<SourceInfo, ArcK>, ArcK>;
+    static MEMO: LazyLock<ArcSwap<Memo>> =
+        LazyLock::new(|| ArcSwap::from_pointee(rpds::HashTrieMap::default()));
     let span = *span.as_rustc();
     let source_map = tcx.as_rustc().sess.source_map();
     let file_name = source_map.span_to_filename(span);
@@ -57,20 +62,21 @@ pub fn source_info_from_span(tcx: TyCtxt<'_>, span: Span) -> Option<Arc<SourceIn
         .to_real_filename(source_map.working_dir(), file_name.into_local_path()?);
     let (_work_dir, path) = path.embeddable_name(rustc_span::RemapPathScopeComponents::DIAGNOSTICS);
     let path = path.to_path_buf();
+    let memo = MEMO.load();
     if let Some(info) = memo.get(&path) {
-        return Some(info.clone());
+        return Some(SharedPointer::clone(info));
     }
     let source = std::fs::read_to_string(&path).unwrap();
     let cleaned_source = utils::clean_source(&source);
-    let info = Arc::new(SourceInfo {
+    let info = SharedPointer::new(SourceInfo {
         offset,
         path,
         source,
         cleaned_source,
         index: OnceLock::new(),
     });
-    memo.insert(info.path.clone(), info.clone());
-    Some(info)
+    MEMO.rcu(|memo| memo.insert(info.path.clone(), SharedPointer::clone(&info)));
+    Some(SharedPointer::clone(&info))
 }
 
 fn range_from_span(source_info: &SourceInfo, span: Span) -> Option<Range> {
