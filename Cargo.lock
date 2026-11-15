@@ -1942,7 +1942,6 @@ dependencies = [
  "jiff",
  "man",
  "process_alive",
- "rayon",
  "regex",
  "reqwest",
  "rustversion",
