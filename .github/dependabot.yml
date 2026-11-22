@@ -16,6 +16,12 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      version:
+        applies-to: version-updates
+        update-types:
+          - patch
+          - minor
     cooldown:
       default-days: 7
   - package-ecosystem: npm
