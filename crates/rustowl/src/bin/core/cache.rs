@@ -2,32 +2,59 @@ use rustowl::models::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 
 pub static CACHE: LazyLock<Mutex<Option<CacheData>>> = LazyLock::new(|| Mutex::new(None));
 
-/// Single file cache body
+/// One body as recorded in the `by_built` index.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CachedBody {
+    pub def_id: u32,
+    pub file_hash: String,
+    pub mir_hash: String,
+    pub file_path: PathBuf,
+}
+
+/// Incremental analysis cache.
 ///
-/// this is a map: file hash -> (MIR body hash -> analyze result)
-///
-/// Note: Cache can be utilized when neither
-/// the MIR body nor the entire file is modified.
+/// `by_file` holds the payloads, keyed file hash then MIR body hash. `by_built`
+/// indexes them by the hash of `tcx.mir_built`, which is available *without*
+/// running borrow check, so a warm root can be answered without paying for a
+/// second `get_borrowck_facts`.
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
-#[serde(transparent)]
-pub struct CacheData(HashMap<String, HashMap<String, Function>>);
+pub struct CacheData {
+    pub by_file: HashMap<String, HashMap<String, Function>>,
+    #[serde(default)]
+    pub by_built: HashMap<String, Vec<CachedBody>>,
+}
 impl CacheData {
     pub fn get_cache(&self, file_hash: &str, mir_hash: &str) -> Option<Function> {
-        self.0.get(file_hash).and_then(|v| v.get(mir_hash)).cloned()
+        self.by_file
+            .get(file_hash)
+            .and_then(|v| v.get(mir_hash))
+            .cloned()
     }
     /// Remove and return the entry, so the caller moves it instead of cloning.
     pub fn take_cache(&mut self, file_hash: &str, mir_hash: &str) -> Option<Function> {
-        self.0.get_mut(file_hash).and_then(|v| v.remove(mir_hash))
+        self.by_file
+            .get_mut(file_hash)
+            .and_then(|v| v.remove(mir_hash))
     }
     pub fn insert_cache(&mut self, file_hash: String, mir_hash: String, analyzed: Function) {
-        self.0
+        self.by_file
             .entry(file_hash)
             .or_default()
             .insert(mir_hash, analyzed);
+    }
+    pub fn index_built(&mut self, built_hash: String, body: CachedBody) {
+        let entry = self.by_built.entry(built_hash).or_default();
+        if !entry.iter().any(|b| b.def_id == body.def_id) {
+            entry.push(body);
+        }
+    }
+    pub fn bodies_for(&self, built_hash: &str) -> Option<&Vec<CachedBody>> {
+        self.by_built.get(built_hash)
     }
 }
 
