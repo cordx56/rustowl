@@ -29,11 +29,13 @@ jobs:
           echo "latest=$(jq -r '.[-1]' <<< "$TOOLCHAINS")" >> "$GITHUB_OUTPUT"
       - id: os
         run: |
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "${{ github.event.base_ref }}" ]; then
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "${GITHUB_EVENT_BASE_REF}" ]; then
             echo 'matrix=["ubuntu-latest", "ubuntu-24.04-arm"]' >> $GITHUB_OUTPUT
           else
-            echo 'matrix=["windows-latest", "windows-11-arm", "macos-15-intel", "macos-latest", "ubuntu-latest", "ubuntu-24.04-arm"' >> $GITHUB_OUTPUT
+            echo 'matrix=["windows-latest", "windows-11-arm", "macos-15-intel", "macos-latest", "ubuntu-latest", "ubuntu-24.04-arm"]' >> $GITHUB_OUTPUT
           fi
+        env:
+          GITHUB_EVENT_BASE_REF: ${{ github.event.base_ref }}
 
   lint:
     name: Lint
@@ -127,7 +129,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install nextest
-        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
         with:
           tool: cargo-nextest
 
@@ -163,7 +165,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PNPM And Install dependencies
-        uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
           cache: true
           working-directory: ./vscode
