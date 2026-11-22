@@ -122,19 +122,20 @@ pub type CfgAnalysisOutput = IndexMap<Location, IndexMap<LocalId, StateBitSet>>;
 pub fn walk_cfg(basic_blocks: &BasicBlocks) -> CfgAnalysisOutput {
     let (places, effects) = collect_places_effects(basic_blocks);
 
-    let empty = places.states(StateBitSet::new());
+    // The empty state is built once and shared by every statement that does not change it.
+    let shared_empty = std::rc::Rc::new(places.states(StateBitSet::new()));
     let mut states: IndexMap<Location, std::rc::Rc<States>> = IndexMap::new();
     for (block, effects) in &effects {
         for statement_index in 0..effects.len() {
             states.insert(
                 Location::from((*block, statement_index)),
-                std::rc::Rc::new(empty.clone()),
+                std::rc::Rc::clone(&shared_empty),
             );
         }
     }
     let mut entries: HashMap<BasicBlockId, States> = effects
         .keys()
-        .map(|block| (*block, empty.clone()))
+        .map(|block| (*block, places.states(StateBitSet::new())))
         .collect();
 
     let mut queued = VecDeque::new();
@@ -158,19 +159,26 @@ pub fn walk_cfg(basic_blocks: &BasicBlocks) -> CfgAnalysisOutput {
         let mut shared = std::rc::Rc::new(current.clone());
         for (statement_index, effects) in effects.iter().enumerate() {
             if effects.is_empty() {
-                states.insert(Location::from((block, statement_index)), shared.clone());
+                states.insert(
+                    Location::from((block, statement_index)),
+                    std::rc::Rc::clone(&shared),
+                );
                 continue;
             }
             current.apply(effects);
             shared = std::rc::Rc::new(current.clone());
-            states.insert(Location::from((block, statement_index)), shared.clone());
+            states.insert(
+                Location::from((block, statement_index)),
+                std::rc::Rc::clone(&shared),
+            );
         }
-        for successor in bb_data.terminator.successors() {
-            if let Some(entry) = entries.get_mut(&successor)
+        let successors = bb_data.terminator.successors();
+        for successor in successors.iter() {
+            if let Some(entry) = entries.get_mut(successor)
                 && entry.join(&current)
-                && queued.iter().all(|v| *v != successor)
+                && queued.iter().all(|v| *v != *successor)
             {
-                queued.push_back(successor);
+                queued.push_back(*successor);
             }
         }
     }
@@ -189,7 +197,7 @@ pub fn walk_cfg(basic_blocks: &BasicBlocks) -> CfgAnalysisOutput {
 pub fn get_definitely_lives(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,
-) -> HashMap<LocalId, Vec<Range>> {
+) -> HashMap<LocalId, Arc<[Range]>> {
     check_cfg_analysis_result(cfg_analysis_output, location_ranges, |state| {
         state.len() == 1 && state.contains(LocalStateVariant::Initialized)
     })
@@ -205,7 +213,7 @@ pub fn get_definitely_lives(
 pub fn get_maybe_initialized(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,
-) -> HashMap<LocalId, Vec<Range>> {
+) -> HashMap<LocalId, Arc<[Range]>> {
     check_cfg_analysis_result(cfg_analysis_output, location_ranges, |state| {
         state.contains(LocalStateVariant::Initialized)
     })
@@ -215,7 +223,7 @@ fn check_cfg_analysis_result(
     cfg_analysis_output: &CfgAnalysisOutput,
     location_ranges: &LocationRanges,
     eval: impl Fn(&StateBitSet) -> bool,
-) -> HashMap<LocalId, Vec<Range>> {
+) -> HashMap<LocalId, Arc<[Range]>> {
     let mut var_initialized: HashMap<LocalId, Vec<Range>> = HashMap::new();
     for (location, states) in cfg_analysis_output {
         for (local, state) in states.iter() {
@@ -228,6 +236,6 @@ fn check_cfg_analysis_result(
     }
     var_initialized
         .into_iter()
-        .map(|(var, ranges)| (var, utils::eliminated_ranges(ranges)))
+        .map(|(var, ranges)| (var, Arc::from(utils::eliminated_ranges(ranges))))
         .collect()
 }

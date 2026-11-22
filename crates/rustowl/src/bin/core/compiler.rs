@@ -5,7 +5,7 @@ use rustowl::{models::*, utils};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock, OnceLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 
 macro_rules! impl_as_rustc {
     (
@@ -49,7 +49,7 @@ pub fn source_info_from_span(
     tcx: TyCtxt<'_>,
     span: Span,
 ) -> Option<SharedPointer<SourceInfo, ArcK>> {
-    type Memo = rpds::HashTrieMap<PathBuf, SharedPointer<SourceInfo, ArcK>, ArcK>;
+    type Memo = rpds::HashTrieMap<Arc<PathBuf>, SharedPointer<SourceInfo, ArcK>, ArcK>;
     static MEMO: LazyLock<ArcSwap<Memo>> =
         LazyLock::new(|| ArcSwap::from_pointee(rpds::HashTrieMap::default()));
     let span = *span.as_rustc();
@@ -61,21 +61,21 @@ pub fn source_info_from_span(
         .path_mapping()
         .to_real_filename(source_map.working_dir(), file_name.into_local_path()?);
     let (_work_dir, path) = path.embeddable_name(rustc_span::RemapPathScopeComponents::DIAGNOSTICS);
-    let path = path.to_path_buf();
+    let path: Arc<PathBuf> = Arc::new(path.to_path_buf());
     let memo = MEMO.load();
     if let Some(info) = memo.get(&path) {
         return Some(SharedPointer::clone(info));
     }
-    let source = std::fs::read_to_string(&path).unwrap();
+    let source = std::fs::read_to_string(path.as_path()).unwrap();
     let cleaned_source = utils::clean_source(&source);
     let info = SharedPointer::new(SourceInfo {
         offset,
-        path,
+        path: Arc::clone(&path),
         source,
         cleaned_source,
         index: OnceLock::new(),
     });
-    MEMO.rcu(|memo| memo.insert(info.path.clone(), SharedPointer::clone(&info)));
+    MEMO.rcu(|memo| memo.insert(Arc::clone(&path), SharedPointer::clone(&info)));
     Some(SharedPointer::clone(&info))
 }
 
@@ -89,7 +89,7 @@ fn range_from_span(source_info: &SourceInfo, span: Span) -> Option<Range> {
 
 pub struct SourceInfo {
     offset: u32,
-    path: PathBuf,
+    path: Arc<PathBuf>,
     source: String,
     cleaned_source: String,
     index: OnceLock<SourceIndex>,
@@ -339,7 +339,10 @@ impl Ty<'_> {
         } else {
             None
         };
-        MirType { name, reference }
+        MirType {
+            name: Arc::from(name),
+            reference,
+        }
     }
     pub fn get_region_vid(&self) -> Option<RegionVid> {
         if let rustc_middle::ty::TyKind::Ref(r, _, _) = self.as_rustc().kind() {

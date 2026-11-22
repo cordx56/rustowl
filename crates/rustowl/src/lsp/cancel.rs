@@ -50,7 +50,7 @@ mod tests {
         assert!(!cancel.is_cancelled());
 
         let waiter = tokio::spawn({
-            let cancel = cancel.clone();
+            let cancel = Cancel::clone(&cancel);
             async move {
                 cancel.cancelled().await;
             }
