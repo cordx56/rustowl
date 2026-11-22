@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Once;
+use std::sync::{Arc, Once};
 
 static BUILD_ONCE: Once = Once::new();
 
@@ -248,6 +248,9 @@ fn test_places_move_out_of_box_b() {
 /// features: the `rustowl_perf_test_dummy` lib plus the `dummy-app` bin.
 const REFERENCE_FUNCTION_COUNT: usize = 74;
 
+/// The perf fixture's `[lib]` and `[[bin]]`: a check compiles no example or bench.
+const REFERENCE_CRATES: usize = 2;
+
 /// What the reference output records for one function.
 #[derive(Serialize)]
 struct ReferenceFunction {
@@ -257,7 +260,7 @@ struct ReferenceFunction {
 }
 
 /// Everything rustowlc printed, keyed crate -> file, before any collapsing.
-type RawWorkspace = BTreeMap<String, BTreeMap<String, Vec<Function>>>;
+type RawWorkspace = BTreeMap<String, BTreeMap<String, Vec<Arc<Function>>>>;
 
 /// Canonical form of a [`RawWorkspace`]: crate -> file -> functions.
 type ReferenceWorkspace = BTreeMap<String, BTreeMap<String, Vec<ReferenceFunction>>>;
@@ -344,13 +347,13 @@ fn canonical_json(function: &Function) -> Result<String, String> {
 }
 
 /// Collapse repeated deliveries of one function, refusing to do so silently.
-fn normalize_items(mut items: Vec<Function>) -> Vec<ReferenceFunction> {
+fn normalize_items(mut items: Vec<Arc<Function>>) -> Vec<ReferenceFunction> {
     items.sort_by_key(|item| item.fn_id);
     for item in &mut items {
-        normalize_function(item);
+        normalize_function(Arc::make_mut(item));
     }
 
-    let mut deduped: Vec<Function> = Vec::with_capacity(items.len());
+    let mut deduped: Vec<Arc<Function>> = Vec::with_capacity(items.len());
     for item in items {
         if let Some(previous) = deduped.last()
             && previous.fn_id == item.fn_id
@@ -369,10 +372,13 @@ fn normalize_items(mut items: Vec<Function>) -> Vec<ReferenceFunction> {
 
     deduped
         .into_iter()
-        .map(|function| ReferenceFunction {
-            fn_id: function.fn_id,
-            name: function.name,
-            decls: function.decls,
+        .map(|function| {
+            let function = Arc::try_unwrap(function).unwrap_or_else(|arc| (*arc).clone());
+            ReferenceFunction {
+                fn_id: function.fn_id,
+                name: function.name,
+                decls: function.decls,
+            }
         })
         .collect()
 }
@@ -467,9 +473,9 @@ async fn clean_workspace_packages(cargo: &str, fixture: &Path, target_dir: &Path
 }
 
 /// Analyse the perf fixture, returning every `Workspace` document rustowlc printed,
-/// accumulated raw. Not via `Workspace::merge`: merging dedups by `fn_id` before
-/// `normalize_items` can assert on a repeated delivery.
-async fn analyze_perf_fixture(fixture: &Path) -> RawWorkspace {
+/// accumulated raw, plus the document count. Not via `Workspace::merge`:
+/// merging dedups by `fn_id` before `normalize_items` can assert on a repeated delivery.
+async fn analyze_perf_fixture(fixture: &Path) -> (RawWorkspace, usize) {
     let rustowlc = env!("CARGO_BIN_EXE_rustowlc");
     let cargo = toolchain::get_executable_path("cargo").await;
     let target_dir = fixture.join("target").join("owl-reference");
@@ -515,7 +521,31 @@ async fn analyze_perf_fixture(fixture: &Path) -> RawWorkspace {
         documents > 0,
         "rustowlc printed no Workspace documents\nstdout:\n{stdout}"
     );
-    raw
+    (raw, documents)
+}
+
+/// One Workspace document per crate, not one per analysed function.
+#[tokio::test]
+async fn workspace_message_count_matches_packages() {
+    require_toolchain_sysroot();
+
+    let fixture: PathBuf = [env!("CARGO_MANIFEST_DIR"), "perf-tests", "dummy-package"]
+        .iter()
+        .collect();
+    let fixture = fixture.canonicalize().expect("the perf fixture must exist");
+
+    let (raw, documents) = analyze_perf_fixture(&fixture).await;
+    let analysed: usize = raw
+        .values()
+        .flat_map(|files| files.values())
+        .map(Vec::len)
+        .sum();
+
+    assert_eq!(
+        documents, REFERENCE_CRATES,
+        "rustowlc must emit one Workspace line per crate ({REFERENCE_CRATES}), got {documents}"
+    );
+    assert_eq!(analysed, REFERENCE_FUNCTION_COUNT);
 }
 
 /// The reference output: everything `rustowl check` computes for the perf
@@ -534,7 +564,7 @@ async fn test_workspace_reference() {
         .collect();
     let fixture = fixture.canonicalize().expect("the perf fixture must exist");
 
-    let reference = normalize_workspace(analyze_perf_fixture(&fixture).await, &fixture);
+    let reference = normalize_workspace(analyze_perf_fixture(&fixture).await.0, &fixture);
 
     let counted = reference
         .values()
