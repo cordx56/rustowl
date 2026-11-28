@@ -1,0 +1,28 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "reassign_block", "a"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'a' (1/1) in function 'reassign_block' ===
+
+   7 |     let mut r;
+   8 |     {
+   9 |         let a = String::from("a");
+     |             -   -----------------
+  10 |         r = &a;
+     |         --- --
+  11 |         println!("{r}");
+     |         ---------------
+  12 |     }
+  13 |     let b = String::from("b");
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

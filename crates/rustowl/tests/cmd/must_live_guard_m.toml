@@ -1,0 +1,30 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "guard", "m"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 'm' (1/1) in function 'guard' ===
+
+ 130 | // A guard borrows the mutex until the end of the block (compiles).
+ 131 | fn guard() {
+ 132 |     let m = std::sync::Mutex::new(0);
+     |         -   ------------------------
+ 133 |     let g = m.lock().unwrap();
+     |         -   - ---------------
+ 134 |     println!("{}", *g);
+     |     ------------------
+ 135 | }
+     | -
+ 136 | 
+ 137 | // A borrow of `s` from one iteration is used in the next iteration, where `s`
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''

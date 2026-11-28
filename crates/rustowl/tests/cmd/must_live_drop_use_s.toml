@@ -1,0 +1,29 @@
+bin = { name = "rustowl" }
+args = ["show", "--path", "must_live.rs", "drop_use", "s"]
+env = { inherit = true, add = { NO_COLOR = "1" } }
+fs = { base = "../fixtures", sandbox = true }
+status = "success"
+stdout = '''
+
+=== Variable 's' (1/1) in function 'drop_use' ===
+
+ 107 |     let _h;
+ 108 |     {
+ 109 |         let s = String::from("s");
+     |             -   -----------------
+ 110 |         _h = Holder(&s);
+     |         --   ------ -- -
+ 111 |     }
+ 112 | }
+     | ~
+ 113 | 
+ 114 | // NLL accepts this because `first` is dead before the mutable borrow (compiles).
+
+Legend:
+  --- definitely live (lifetime)
+  ~~~ maybe live
+  --- immutable borrow
+  --- mutable borrow
+  --- move / call
+  ~~~ outlive / shared mutable
+'''
