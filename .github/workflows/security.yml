@@ -28,7 +28,7 @@ jobs:
           persist-credentials: false
 
       - name: Check advisories, licenses, bans and sources
-        uses: EmbarkStudios/cargo-deny-action@17aeb3c839e42274e2b8adf721c8c65edfdc74dd # v2.1.3
+        uses: EmbarkStudios/cargo-deny-action@bb119f768ea239e765aeaef5769558d4f21213aa # v2.1.5
         with:
           manifest-path: ./Cargo.toml
           command: check
@@ -93,11 +93,11 @@ jobs:
     name: Security & Memory Safety Analysis
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, ubuntu-24.04-arm]
+        os: [ubuntu-latest, macos-latest, ubuntu-26.04-arm]
         include:
           - os: ubuntu-latest
             runner_os: Linux
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-26.04-arm
             runner_os: Linux
           - os: macos-latest
             runner_os: macOS
