@@ -30,9 +30,9 @@ jobs:
       - id: os
         run: |
           if [ "${{ github.event_name }}" = "push" ] && [ -n "${GITHUB_EVENT_BASE_REF}" ]; then
-            echo 'matrix=["ubuntu-latest", "ubuntu-24.04-arm"]' >> $GITHUB_OUTPUT
+            echo 'matrix=["ubuntu-latest", "ubuntu-26.04-arm"]' >> $GITHUB_OUTPUT
           else
-            echo 'matrix=["windows-latest", "windows-11-arm", "macos-15-intel", "macos-latest", "ubuntu-latest", "ubuntu-24.04-arm"]' >> $GITHUB_OUTPUT
+            echo 'matrix=["windows-latest", "windows-11-arm", "macos-26-intel", "macos-latest", "ubuntu-latest", "ubuntu-26.04-arm"]' >> $GITHUB_OUTPUT
           fi
         env:
           GITHUB_EVENT_BASE_REF: ${{ github.event.base_ref }}
@@ -100,10 +100,10 @@ jobs:
         os:
           - windows-latest
           - windows-11-arm
-          - macos-15-intel
+          - macos-26-intel
           - macos-latest
           - ubuntu-latest
-          - ubuntu-24.04-arm
+          - ubuntu-26.04-arm
 
     env:
       TOOLCHAIN_CHANNEL: ${{ matrix.toolchain }}
@@ -129,7 +129,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install nextest
-        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
+        uses: taiki-e/install-action@073e1fd0bc889c9aee68dbaaa927cde1b5653a83 # v2.90.11
         with:
           tool: cargo-nextest
 
