@@ -197,7 +197,7 @@ export default tseslint.config(
       "import-x/no-extraneous-dependencies": [
         "error",
         {
-          whitelist: ["vscode"],
+          whitelist: ["vscode", "tsdown"],
           devDependencies: [
             "**/*.test.ts",
             "**/*.spec.ts",
